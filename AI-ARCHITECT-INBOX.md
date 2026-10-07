@@ -158467,3 +158467,207 @@ P2_G
 
 以及原有 SECOND_* = FORBIDDEN、L5_RELAXATION = FORBIDDEN 全部不变。
 ```
+
+### [MSG-20261007-02] AEL FINAL2 复审裁决 = PASS / CLOSED（C1 GOAL_RUNTIME_SINGLE_ENTRY / C2 OAUTH_SUCCESS_STATE_MACHINE / C3 NON_BYPASSABLE_GATE_FAIL_CLOSED = PASS；AGENT_EXPERIENCE_LAYER = PASS / CLOSED、FINAL3_REQUIRED = NO、CAPABILITY_LOSS = 0、SECOND_RUNTIME / SECOND_SCHEDULER / SECOND_GUARD = 0），reviewed code HEAD 78eeb2cc（LAST_CODE_CHANGE_HEAD 3c426361；C1 25bf985b · C2 9d2d7c6b · C3 3c426361）；PRODUCTION_READY = NO，全部 HOLD / FORBIDDEN 不变；非阻断建议（不要求修订）：static scan 可扩到 apps/api/src/**
+
+```text
+VERDICT: PASS
+
+REVIEWED_CODE_HEAD: 78eeb2cc78f194f1c299fb7d15f98c69cadb0c8e
+LAST_CODE_CHANGE_HEAD: 3c426361
+C1: 25bf985b · C2: 9d2d7c6b · C3: 3c426361
+
+三条上一轮 CHANGE 均可记 CLOSED。
+
+DECISION
+纯文本
+GOAL_RUNTIME_SINGLE_ENTRY            = PASS / CLOSED
+OAUTH_SUCCESS_STATE_MACHINE          = PASS / CLOSED
+NON_BYPASSABLE_GATE_FAIL_CLOSED      = PASS / CLOSED
+
+AGENT_EXPERIENCE_LAYER               = PASS / CLOSED
+STANDING_AUTHORIZATION_DURABLE       = PASS
+GOAL_COMPILER                        = PASS
+GOAL_RUNTIME_WIRING                  = PASS
+OAUTH_AUTHORIZATION_SESSION          = PASS
+CONNECTION_SYNC_STATE                = PASS
+ACTION_GUARD_SINGLE_CATALOG          = PASS
+
+CAPABILITY_LOSS                      = 0
+ONE_SI_RUNTIME                       = YES
+SECOND_RUNTIME                       = 0
+SECOND_SCHEDULER                     = 0
+SECOND_GUARD                         = 0
+
+FINAL_AUDIT                          = PASS / CLOSED
+FINAL3_REQUIRED                      = NO
+C1 — Goal direct-runner 旁路：PASS
+
+确认实际代码：
+
+agent-goal/index.ts 已不再 export goal-runtime-adapter；
+产品出口保留 goal-runtime-binding；
+direct-runner adapter 已明确标为 INTERNAL / TEST-ONLY；
+assertRecoveryNamespaceOnly 等边界移到正式 binding；
+正式 binding 仍只做：
+纯文本
+Goal
+→ existing task queue
+→ claim / lease
+→ ONE SI Runtime
+→ recovery-si
+
+不会直接 runner.run()。
+
+architecture contract 也新增了 barrel / direct runner 静态断言。
+
+因此上一轮：
+
+GOAL_RUNTIME_SINGLE_ENTRY = REVISE
+
+现可改为：
+
+PASS / CLOSED
+
+C2 — OAuth durable 状态机：PASS
+
+这一项已经真正修到了执行语义，不只是测试。
+
+现在成功链要求：
+
+纯文本
+PENDING
+→ take(state)
+→ CONSUMED
+→ atomic CAS
+→ SUCCEEDED
+
+确认：
+
+PENDING → SUCCEEDED 应用层拒绝；
+DB trigger 也拒绝；
+CAS 条件明确包含：
+纯文本
+id
+organizationId
+status = CONSUMED
+SUCCEEDED 重入：
+同 connectionId + credentialRef → 幂等；
+不同 binding → OAUTH_SESSION_BINDING_CONFLICT；
+DB 层成功终态 binding 不可改写；
+connectionId 必须属于同 tenant SourceConnection；
+resumeGoalId 发起时必须属于同 tenant AgentGoal；
+跨租户连接 fail-closed；
+原始 OAuth state 仍不落库；
+state 仍是 single-use CAS。
+
+PG-P9-7～11 与 DB trigger 对应上了。
+
+因此：
+
+OAUTH_SUCCESS_STATE_MACHINE = PASS / CLOSED
+
+C3 — Non-bypassable gates：PASS
+
+这轮修订也符合上一轮要求。
+
+核心三项现在任何自动授权判定都要求显式 server-owned proof：
+
+纯文本
+productionGate
+killSwitch
+tenantAccountIsolation
+
+缺失或者 UNKNOWN：
+
+纯文本
+→ DENY
+
+并且 action 自己要求的 non-bypassable gate 也会进入 required set。
+
+例如 claim.submit 要求 platformEnablement：
+
+纯文本
+platformEnablement missing
+→ NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE
+→ DENY
+
+不再出现：
+
+纯文本
+undefined
+→ 没 blocker
+→ 继续自动执行
+
+所以：
+
+NON_BYPASSABLE_GATE_FAIL_CLOSED = PASS / CLOSED
+
+CHANGES
+
+无阻断性 CHANGE。
+
+这次无需 FINAL3 功能修订。
+
+有一个非阻断 hardening 建议：未来可以把“禁止 product import goal-runtime-adapter”的静态扫描扩大到整个 apps/api/src/**，而不仅仅依赖 barrel + 当前目录约定。当前树没有证据显示产品主路径仍在使用 direct adapter，因此不阻断 PASS。
+
+RISKS
+
+剩余风险主要不属于 AEL 代码闭环：
+
+GitHub Actions = NOT_OBSERVED
+
+78eeb2cc exact SHA 没有观察到 GitHub Actions runs。
+
+因此：
+
+4550/4551
+OAuth 11/11
+SA 308/308
+architecture 170/170
+
+应继续记为 local/Codex regression evidence，不能写成“GitHub CI green”。
+
+已知 P2E-DB5 并行隔离 flake 仍存在，但属于已有测试隔离债，当前没有证据显示由 FINAL2 引入。
+
+AEL 已形成“目标表达 → 持久授权 → 按需授权 → ONE SI Runtime”的产品/架构层闭环，但真实外部能力仍未打开。
+
+PRODUCTION
+
+确认：
+
+PRODUCTION_READY = NO
+
+没有因为本次 FINAL2 PASS 而改变。
+
+继续 HOLD：
+
+纯文本
+REAL_PROVIDER_WRITE
+CUSTOMS_FILING
+PAYMENT
+AUTO_COMMISSION_CHARGE
+PRODUCTION_CREDENTIALS
+PRODUCTION_ENABLEMENT
+REAL_MODEL_NETWORK
+PAID_MODEL_CALLS
+EXTERNAL_WRITE
+TRANSPORT
+P2_F
+P2_G
+
+继续 FORBIDDEN：
+
+纯文本
+SECOND_RUNTIME
+SECOND_SCHEDULER
+SECOND_GUARD
+SECOND_POLICY_ENGINE
+SECOND_CONTROL_PLANE
+SECOND_MODEL_GATEWAY
+SECOND_COST_LEDGER
+SECOND_META_EVIDENCE_STORE
+L5_RELAXATION
+
+最终裁决：AEL FINAL2 = PASS / CLOSED。三条上一轮 CHANGE 已全部闭合；可以停止继续修 AEL 本身。下一步若要接真实 provider、外部写、支付或 production enablement，必须进入新的独立授权/审计单元。
+```
