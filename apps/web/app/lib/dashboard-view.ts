@@ -378,3 +378,81 @@ export function buildOpportunityView(item: OpportunityApiItem, t: Messages): Opp
     opportunityType: item.opportunityType,
   };
 }
+
+// ============================================================
+// AGENT EXPERIENCE LAYER / P4（HOST 2026-10-07）：首页核心结果收敛
+// 四张卡：Recoverable / In recovery / Recovered / Needs your attention。
+// 金额**逐币种原样展示**（后端持久化字符串），**不做任何跨币种求和或前端推导**；
+// Needs your attention 展示的是**计数**（来自既有 recovery-states），不是金额。
+// ============================================================
+
+export type HeadlineCardKey = 'recoverable' | 'inRecovery' | 'recovered' | 'needsAttention';
+
+export interface HeadlineCardValue {
+  currency: string;
+  /** 后端返回的金额字符串，前端原样展示，不解析、不换算、不求和 */
+  amount: string;
+}
+
+export interface HeadlineCard {
+  key: HeadlineCardKey;
+  label: string;
+  values: HeadlineCardValue[];
+  count: number | null;
+  emptyLabel: string;
+  href: string | null;
+  linkLabel: string | null;
+  hint: string | null;
+}
+
+export function buildHeadlineCards(
+  buckets: MoneyBucket[] | null | undefined,
+  needAttentionCount: number,
+  t: Messages,
+): HeadlineCard[] {
+  const rows = buckets ?? [];
+  const perCurrency = (pick: (bucket: MoneyBucket) => string): HeadlineCardValue[] =>
+    rows.map((bucket) => ({ currency: bucket.currency, amount: pick(bucket) }));
+  return [
+    {
+      key: 'recoverable',
+      label: t.goalConsole.recoverable,
+      values: perCurrency((bucket) => bucket.discovered),
+      count: null,
+      emptyLabel: t.goalConsole.amountUnknown,
+      href: '/money',
+      linkLabel: t.dashboardPage.moneyLink,
+      hint: null,
+    },
+    {
+      key: 'inRecovery',
+      label: t.goalConsole.inRecovery,
+      values: perCurrency((bucket) => bucket.expected),
+      count: null,
+      emptyLabel: t.goalConsole.amountUnknown,
+      href: '/money',
+      linkLabel: t.dashboardPage.moneyLink,
+      hint: null,
+    },
+    {
+      key: 'recovered',
+      label: t.goalConsole.recovered,
+      values: perCurrency((bucket) => bucket.recovered),
+      count: null,
+      emptyLabel: t.goalConsole.amountUnknown,
+      href: '/money',
+      linkLabel: t.dashboardPage.moneyLink,
+      hint: null,
+    },
+    {
+      key: 'needsAttention',
+      label: t.goalConsole.needsAttention,
+      values: [],
+      count: needAttentionCount,
+      emptyLabel: t.goalConsole.amountUnknown,
+      href: '#customer-tasks',
+      linkLabel: t.dashboardPage.ctaHandleTasks,
+      hint: t.goalConsole.attentionHint,
+    },
+  ];
+}

@@ -6,6 +6,8 @@ import { getServerLocale, getServerMessages } from '../i18n/server';
 import OpportunityActions from './components/opportunity-actions';
 import OpportunityCard from './components/opportunity-card';
 import InlineNotice from './components/ui/inline-notice';
+import GoalConsole from './components/ui/goal-console';
+import RecoveryHeadlineCards from './components/ui/recovery-headline-cards';
 import PlatformCard from './components/ui/platform-card';
 import SecurityStrip from './components/ui/security-strip';
 import SectionCard from './components/ui/section-card';
@@ -13,7 +15,7 @@ import StatusBadge from './components/ui/status-badge';
 import SummaryCards from './components/ui/summary-cards';
 import TaskCenter from './components/ui/task-center';
 import {
-  buildCurrencySummaries,
+  buildCurrencySummaries,  buildHeadlineCards,
   buildOpportunityView,
   buildPlatformCards,
   buildTasks,
@@ -91,6 +93,9 @@ export default async function DashboardPage() {
   const platforms = buildPlatformCards(accounts.body, t);
   const opportunityViews = (opportunities.body?.items ?? []).map((item) => buildOpportunityView(item, t));
 
+  // P4 headline cards: amounts come verbatim from /recovery-money per currency (no client-side math)
+  const headlineCards = buildHeadlineCards(money.body?.organization.byCurrency, tasks.length, t);
+
   const connectedAccounts = (accounts.body?.platforms ?? []).reduce(
     (total, group) =>
       total +
@@ -109,6 +114,10 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <GoalConsole labels={t.goalConsole} />
+
+      <RecoveryHeadlineCards cards={headlineCards} note={t.goalConsole.perCurrencyNote} />
+
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t.customerShell.brandNote}</p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900 sm:text-3xl">{t.dashboardPage.heroTitle}</h1>

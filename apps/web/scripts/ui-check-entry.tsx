@@ -23,6 +23,7 @@ import {
   buildCurrencySummaries,
   buildOpportunityView,
   buildPlatformCards,
+  buildHeadlineCards,
   buildTasks,
   selectPrimaryCta,
   type AccountsResponse,
@@ -30,7 +31,8 @@ import {
   type OpportunityApiItem,
   type RecoveryStateItem,
 } from '../app/lib/dashboard-view';
-import enUS from '../i18n/dictionaries/en-US';
+import enUS from '../i18n/dictionaries/en-US';import GoalConsole from '../app/components/ui/goal-console';
+import RecoveryHeadlineCards from '../app/components/ui/recovery-headline-cards';
 import zhCN from '../i18n/dictionaries/zh-CN';
 
 const failures: string[] = [];
@@ -438,6 +440,25 @@ const statusHtml = render(
 );
 check('a11y.info.role.status', statusHtml.includes('role="status"'));
 check('a11y.notice.tone.classes', alertHtml.includes('border-red-200') && statusHtml.includes('border-sky-200'));
+// AGENT EXPERIENCE LAYER / P4：Goal Console + 四张核心结果卡
+const goalConsoleHtml = render(<GoalConsole labels={zhCN.goalConsole} />);
+check('goal.console.title', goalConsoleHtml.includes(zhCN.goalConsole.title));
+check('goal.console.suggestions', goalConsoleHtml.includes(zhCN.goalConsole.suggestion1) && goalConsoleHtml.includes(zhCN.goalConsole.suggestion5));
+check('goal.console.submit', goalConsoleHtml.includes(zhCN.goalConsole.submit));
+check('goal.console.no.fake.execution', !goalConsoleHtml.includes('已提交') && !goalConsoleHtml.includes('执行完成'));
+check('goal.console.en.parity', render(<GoalConsole labels={enUS.goalConsole} />).includes(enUS.goalConsole.title));
+
+const headlineCards = buildHeadlineCards([bucket], 3, zhCN);
+const headlineHtml = render(<RecoveryHeadlineCards cards={headlineCards} note={zhCN.goalConsole.perCurrencyNote} />);
+check('headline.cards.count', headlineCards.length === 4);
+check('headline.recoverable', headlineHtml.includes(zhCN.goalConsole.recoverable));
+check('headline.in.recovery', headlineHtml.includes(zhCN.goalConsole.inRecovery));
+check('headline.recovered', headlineHtml.includes(zhCN.goalConsole.recovered));
+check('headline.needs.attention', headlineHtml.includes(zhCN.goalConsole.needsAttention));
+check('headline.per.currency.raw', headlineHtml.includes('USD') && headlineHtml.includes(bucket.discovered));
+check('headline.needs.attention.count', headlineHtml.includes('>3<'));
+check('headline.no.cross.currency.sum', !headlineHtml.includes('8760.00') && !headlineCards.some((card) => card.values.length > 1));
+check('headline.per.currency.note', headlineHtml.includes(zhCN.goalConsole.perCurrencyNote));
 
 console.log(results.join('\n'));
 if (failures.length > 0) {
