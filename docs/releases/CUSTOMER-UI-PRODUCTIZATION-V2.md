@@ -20,7 +20,7 @@
 | P3 Active Recovery | DONE | 新增「CrossClaim 正在帮你做什么」，3–5 条，只消费已有后端事实 |
 | P4 Needs Attention | DONE | 仅当存在真实人工待办时渲染；每条含发生什么 / 影响 / 为什么需要你 / 下一步 |
 | P5 Navigation simplification | DONE | 一级 5 项客户语言对齐 + `/recoveries` 真实路由 + 更多/高级顺序按 HOST 指令 |
-| P6 Opportunity / Case 客户语言 | QUEUED | Opportunity→追回机会 / Case→追回任务 / Claim Package→提交材料 / Evidence→支持材料 |
+| P6 Opportunity / Case 客户语言 | DONE | 追回机会 / 追回任务 / 提交材料 / 支持材料；案件详情按 HOST 顺序重排，raw 字段折叠进「处理详情」 |
 | P7 Authorization UX | QUEUED | 「CrossClaim 可以替你做什么」+「以下情况仍会先问你」+ 撤销入口显性化 |
 | P8 工程字段隔离 | QUEUED | 主 UI 去除「工程字段 / 技术字段」措辞，技术标识移入 Support/Admin diagnostics |
 | P9 Connections 简化 | QUEUED | 客户主视图只答：连了什么 / 是否正常 / 最近同步 / 是否要重新授权 |
@@ -99,6 +99,47 @@
 | 浏览器客户旅程（真实 Edge + HTTP + PostgreSQL；desktop 1440×900 + mobile 390×844） | **65/65 PASS**（新增：hero-first、Hero 在金额之前、Active Recovery 可见、无「工程字段/技术字段」、首页无内部角色码、目标结果区无 raw code / 任务计数） |
 | 浏览器证据目录 | `reports/acceptance/2026-10-07T15-52-05-717Z/` |
 | api tsc | 0（本轮未改 `apps/api`） |
+
+### 批次 3（P6）
+
+**客户语言（5 语言，全部走字典）**
+
+| 内部概念 | 客户语言（zh-CN） |
+| --- | --- |
+| Opportunity | 可追回机会 / 关联的追回机会 |
+| Case | 追回任务 |
+| Claim package / claim text | 提交材料 |
+| Evidence | 支持材料 |
+| Create case | 开始追回 |
+| Advanced filters (engineering fields) | 更多筛选条件 |
+
+同时清掉客户文案里的内部角色码：`caseDetail.claimText` / `claimDenied` 不再出现 OWNER / ADMIN / OPS，
+改为「仅组织管理员可查看」；`claimRounds` 由「报销/索赔轮次」改为「处理轮次」（仅出现在详情折叠内）。
+
+**案件详情主顺序（HOST §十二）**
+
+```text
+1. 追回什么（标题 + 任务编号 + 客户语言状态）
+2. 金额（索赔金额 / 已回收，逐币种原样展示）
+3. 当前进度（既有 RecoveryPipeline）
+4. CrossClaim 正在做什么（当前阶段 + 材料状态）
+5. 是否需要你操作（未提交 → 人工提交说明；否则「现在不需要你操作」）
+6. 提交材料（claim 正文；round / version / status / isFinal 只在最深层「处理详情」折叠内）
+7. 支持材料（evidence 列表；原始 kind / role 折叠进「处理详情」）
+8. 最近动态（最近一次材料时间）
+```
+
+案件列表：去掉「Claim 轮次」列；状态列由 raw 状态码改为 `caseStatusLabel()` 客户语言；
+表头改为「任务编号 / 追回内容 / 状态 / 索赔金额 / 已回收」。
+
+| 项 | 结果 |
+| --- | --- |
+| web tsc | 0 |
+| i18n | OK：5 语言 / 858 键 parity / 客户硬编码 **0** |
+| UI render check | **163/163 OK**（新增 10 项 P6 字典/客户语言断言，含 no internal role codes） |
+| 浏览器客户旅程 | **72/72 PASS**（新增：`/cases` 客户语言与无工程列、`/opportunities` 客户语言与无「工程字段」） |
+| 浏览器证据目录 | `reports/acceptance/2026-10-07T16-07-44-182Z/` |
+| 可靠性记录 | 本批次首次与第二次浏览器运行分别遇到 `net::ERR_INSUFFICIENT_RESOURCES` 与 signup 等待超时（本机 headless Edge 资源紧张，非代码问题）；清理未完成运行目录后第三次运行全绿，失败目录未入库 |
 
 ### 批次 2（P5）
 

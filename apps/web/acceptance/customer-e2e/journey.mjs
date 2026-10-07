@@ -140,6 +140,21 @@ export async function runJourney(input) {
   await open(page, webBase + '/');
   await shot(page, '03-home-first-run');
 
+  /* ---------------- 4c. 追回任务 / 追回机会（P6 客户语言） ---------------- */
+  await open(page, webBase + '/cases');
+  const casesBody = await text(page);
+  check('cases.page.customer.language', casesBody.includes('追回任务'), casesBody.slice(0, 120));
+  check(
+    'cases.page.no.engineering.columns',
+    !/Claim 轮次|OWNER|ADMIN|OPS/.test(casesBody),
+    casesBody.slice(0, 160),
+  );
+  await open(page, webBase + '/opportunities');
+  const opportunitiesBody = await text(page);
+  check('opportunities.page.customer.language', opportunitiesBody.includes('可追回机会'), '');
+  check('opportunities.page.no.engineering.wording', !/工程字段|技术字段/.test(opportunitiesBody), '');
+  await open(page, webBase + '/');
+
   /* ---------------- 5. 自然语言目标（真实提交） ---------------- */
   const goalInput = page.getByLabel('今天想让 CrossClaim 帮你追回什么？');
   await goalInput.fill('帮我把 Amazon 上可以追回的钱找回来');

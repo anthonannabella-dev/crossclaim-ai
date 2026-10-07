@@ -697,6 +697,32 @@ check('nav.v2.more.order', navModel[1]!.items.map((item) => item.href).join(',')
 check('nav.v2.advanced.order', navModel[2]!.items.map((item) => item.href).join(',') === '/authorizations,/billing,/plan');
 check('nav.v2.no.admin.entries', !navModel.some((group) => group.items.some((item) => item.href.startsWith('/admin') || item.href.startsWith('/operations'))));
 check('nav.v2.recoveries.route.page', zhCN.recoveriesPage.pageTitle.length > 0);
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P6：Opportunity / Case 客户语言降级（内部模型不变）
+check('p6.cases.title', zhCN.casesPage.title === '追回任务');
+check('p6.cases.description.mentions.materials', zhCN.casesPage.description.includes('支持材料'));
+check('p6.caseDetail.evidence.customer.language', zhCN.caseDetail.evidence === '支持材料');
+check('p6.caseDetail.claim.customer.language', zhCN.caseDetail.claimText.includes('提交材料'));
+check(
+  'p6.caseDetail.no.internal.role.codes',
+  !/OWNER|ADMIN|OPS/.test(zhCN.caseDetail.claimText + zhCN.caseDetail.claimDenied),
+);
+check(
+  'p6.caseDetail.need.action.copy',
+  zhCN.caseDetail.needActionTitle.length > 0 && zhCN.caseDetail.needActionNone.length > 0,
+);
+check('p6.caseDetail.details.label', zhCN.caseDetail.detailsTitle === '处理详情');
+check('p6.opportunities.customer.verb', zhCN.opportunitiesPage.createCase === '开始追回');
+check(
+  'p6.opportunities.no.engineering.wording',
+  !/工程字段|技术字段/.test(zhCN.opportunitiesPage.advancedFilters + zhCN.opportunitiesPage.advancedHint),
+);
+check(
+  'p6.en.parity',
+  enUS.casesPage.title === 'Recovery tasks' &&
+    enUS.caseDetail.evidence === 'Supporting materials' &&
+    enUS.caseDetail.claimText.includes('Submission materials'),
+);
 check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
 
 // AGENT EXPERIENCE LAYER / P9：按需授权（目标等待授权 → Needs Your Attention → 去授权后继续原目标）
