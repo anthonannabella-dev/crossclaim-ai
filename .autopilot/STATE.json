@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "999998b1",
+  "head": "7a0149d9",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-07T04:49:25.219Z",
+  "updated_at": "2026-10-07T04:52:54.200Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "IN_PROGRESS（P0 CLOSED / P1–P9 排队）",
-  "next_execution_unit": "P5 — TaskCenter 升级 Needs Your Attention（复用 apps/web/app/components/ui/task-center.tsx；覆盖 AUTHORIZATION/APPROVAL/CUSTOMS_POA/CUSTOMS_SIGNER/PROVIDER_AUTHORIZATION/CONNECTION_REAUTH/EVIDENCE_CONFLICT/ACCOUNT_RECONNECT/PAYMENT_ACTION(仅状态)/CASE）",
+  "next_execution_unit": "P6 — Agent Run 页面 /recoveries/runs/:id（业务语言；不暴露 runner internals / judge / task namespace / policy engine / raw blocker code / model router）",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T09:55:01.250Z",
   "state": "AGENT_EXPERIENCE_LAYER_IN_PROGRESS",
-  "last_action": "P4 CLOSED（P4a ba3e8cb0 / P4b 999998b1）：首页 Goal Console + 四张核心结果卡落地 —— 客户端 Console 提交到 POST /agent-goals（服务端编译/落库/预览，恒零执行），四张卡金额逐币种原样展示（禁跨币种求和，前端零算术），既有 Dashboard 区块全部保留；i18n 5 语言 671 键硬编码 0、UI render 95/95、web tsc 0、next build 0、API 定向 57/57。",
-  "last_action_at": "2026-10-07T04:49:25.219Z",
-  "next_action": "按队列推进 P5 → P9（每单元独立 commit/push/checkpoint）。",
-  "current_head": "999998b1",
-  "last_completed_head": "999998b1",
+  "last_action": "P5 CLOSED（7a0149d9）：TaskCenter 升级为 Needs Your Attention —— 复用同一组件（不建第二套待办中心），任务模型扩展为 12 类（HOST 10 类 + 既有 CONNECTION/IMPORT），从既有 /accounts 事实派生 CONNECTION_REAUTH / ACCOUNT_RECONNECT 并与 /recovery-states 合并去重；技术 code 不上主文案；未伪造无事实支撑的类别。i18n 692 键硬编码 0、UI render 103/103、web tsc 0、next build 0。",
+  "last_action_at": "2026-10-07T04:52:54.200Z",
+  "next_action": "按队列推进 P6 → P9（每单元独立 commit/push/checkpoint）。",
+  "current_head": "7a0149d9",
+  "last_completed_head": "7a0149d9",
   "reviewed_head": "42161550",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -12225,7 +12225,7 @@
   "agent_experience_layer": {
     "authorization": "HOST 2026-10-07 AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION",
     "baseline_head": "96a26c29",
-    "program_head": "999998b1",
+    "program_head": "7a0149d9",
     "branch": "gate/7-commercial-validation",
     "units": {
       "P0": {
@@ -12360,10 +12360,44 @@
           "P4a": "ba3e8cb0",
           "P4b": "999998b1"
         }
+      },
+      "P5": {
+        "name": "NEEDS YOUR ATTENTION（复用既有 TaskCenter，单一待办中心）",
+        "status": "CLOSED / PUSHED",
+        "head": "7a0149d9",
+        "report": "docs/releases/AGENT-EXPERIENCE-P5-NEEDS-ATTENTION-REPORT.md",
+        "files": [
+          "apps/web/app/lib/dashboard-view.ts",
+          "apps/web/app/components/ui/task-center.tsx",
+          "apps/web/app/page.tsx",
+          "apps/web/i18n/dictionaries/*.ts (needsAttention ×5)",
+          "apps/web/scripts/ui-check-entry.tsx"
+        ],
+        "tests": "i18n OK（5 语言 / 692 键 / 硬编码 0）；UI render 103/103；web tsc 0；next build 0",
+        "returns": {
+          "NEEDS_ATTENTION": "PASS（单一待办中心，未建第二套）",
+          "TASK_KINDS_COVERED": "12（HOST 10 类 + 既有 CONNECTION / IMPORT）",
+          "POPULATED_FROM_REAL_TRUTH": [
+            "CONNECTION_REAUTH",
+            "ACCOUNT_RECONNECT",
+            "CASE",
+            "CONNECTION",
+            "IMPORT"
+          ],
+          "NOT_FABRICATED": [
+            "AUTHORIZATION",
+            "APPROVAL",
+            "CUSTOMS_POA",
+            "CUSTOMS_SIGNER",
+            "PROVIDER_AUTHORIZATION",
+            "EVIDENCE_CONFLICT",
+            "PAYMENT_ACTION"
+          ],
+          "RAW_CODES_IN_CUSTOMER_COPY": "NONE"
+        }
       }
     },
     "safe_continuation_queue": [
-      "P5 — TaskCenter 升级 Needs Your Attention（复用 apps/web/app/components/ui/task-center.tsx）",
       "P6 — Agent Run 页面 /recoveries/runs/:id（业务语言，不暴露 runner/judge/namespace 内部）",
       "P7 — Authorization 管理 UI（/authorizations，状态全部来自后端 Standing Authorization）",
       "P8 — Navigation Progressive Disclosure（不删 route、不破坏 API contract）",

@@ -1,7 +1,7 @@
 # NEEDS YOUR ATTENTION —— 单一待办中心升级（P5）—— 交付与证据
 
 授权：HOST 2026-10-07「AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION」P5。
-`EXACT_HEAD = AGENT-EXPERIENCE-P5-HEAD`（基线 `caf35cba`）
+`EXACT_HEAD = 7a0149d9`（基线 `caf35cba`）
 
 结论：**P5 = CLOSED**。**复用**既有 `task-center.tsx` 升级为 Needs Your Attention，
 未新建第二套待办中心；类别模型可承载 HOST 要求的 10 类，且既有 2 个 scope 能力不丢失。
