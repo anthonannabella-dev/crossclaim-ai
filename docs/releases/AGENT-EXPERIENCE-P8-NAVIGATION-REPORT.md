@@ -1,7 +1,7 @@
 # NAVIGATION PROGRESSIVE DISCLOSURE（P8）—— 交付与证据
 
 授权：HOST 2026-10-07「AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION」P8。
-`EXACT_HEAD = AGENT-EXPERIENCE-P8-HEAD`（基线 `ce26644e`）
+`EXACT_HEAD = e9ce6731`（基线 `ce26644e`）
 
 结论：**P8 = CLOSED**。客户导航改为分层信息架构：一级 5 项，其余进 More / Advanced；
 **未删除任何 route**，所有既有入口仍可达（有断言逐一核对 href）。
