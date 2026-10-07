@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "e9ce6731",
+  "head": "a316749a",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-07T05:06:30.032Z",
+  "updated_at": "2026-10-07T05:59:33.067Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "IN_PROGRESS（P0 CLOSED / P1–P9 排队）",
-  "next_execution_unit": "P9 — OAuthAuthorizationSession / ConnectionSyncState 最小补强（B2 PARTIAL 真实缺口；复用 SourceConnection / PlatformAccount / lineage，不新增第二连接事实源）",
+  "next_execution_unit": "FINAL — 读取 ChatGPT 裁决：PASS → 写最终 closure；REVISE / PASS WITH REVISE → 自动实施修订并重新送审；FAIL → 修复后重新送审",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T09:55:01.250Z",
-  "state": "AGENT_EXPERIENCE_LAYER_IN_PROGRESS",
-  "last_action": "P8 CLOSED（e9ce6731）：Navigation Progressive Disclosure —— 一级 Home/Recoveries/Money/Needs Attention/Connections，More 与 Advanced 收纳其余入口，新增 /recoveries 索引页（目标列表 → 执行详情）；零 route 删除（断言核对 12 个 href）。i18n 798 键硬编码 0、UI render 133/133、web tsc 0、next build 0（30/30）。",
-  "last_action_at": "2026-10-07T05:06:30.032Z",
-  "next_action": "按队列推进 P9 → FINAL（每单元独立 commit/push/checkpoint）。",
-  "current_head": "e9ce6731",
-  "last_completed_head": "e9ce6731",
+  "state": "AGENT_EXPERIENCE_LAYER_AWAITING_EXTERNAL_AUDIT",
+  "last_action": "FINAL 回归完成（a316749a）：P0–P9 全部 CLOSED/PUSHED；全量回归 4540/4541（唯一失败为既有 recovery-si-phase2-e-db P2E-DB5 并行隔离债，单独运行 20/20 PASS）；api tsc 0 / prisma validate valid / 91 migrations / 触发器清单 118·95·72 OK / architecture-contract 167 / i18n 803 键硬编码 0 / UI render 138 / web tsc 0 / next build 30/30。自包含 FINAL AUDIT PACKAGE 已生成，现送 ChatGPT 独立审计。**未声明 PROGRAM COMPLETE**。",
+  "last_action_at": "2026-10-07T05:59:33.067Z",
+  "next_action": "等待外部审计裁决；期间不得声称任务完成。",
+  "current_head": "a316749a",
+  "last_completed_head": "a316749a",
   "reviewed_head": "42161550",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -12225,7 +12225,7 @@
   "agent_experience_layer": {
     "authorization": "HOST 2026-10-07 AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION",
     "baseline_head": "96a26c29",
-    "program_head": "e9ce6731",
+    "program_head": "a316749a",
     "branch": "gate/7-commercial-validation",
     "units": {
       "P0": {
@@ -12456,11 +12456,26 @@
           "API_CONTRACT": "UNCHANGED",
           "CAPABILITY_LOSS": "0"
         }
+      },
+      "FINAL": {
+        "name": "FINAL —— 全量回归 + 自包含 FINAL AUDIT PACKAGE + 独立审计",
+        "status": "REGRESSION_DONE / AWAITING_EXTERNAL_AUDIT",
+        "head": "a316749a",
+        "package": "docs/releases/FINAL-AUDIT-PACKAGE.md",
+        "tests": "full regression 4540/4541（唯一失败为既有 P2E-DB5 隔离债，单独 20/20）；api tsc 0；prisma validate valid；91 migrations；触发器清单 118/95/72 OK；architecture-contract 167/167；i18n 5 语言 803 键硬编码 0；UI render 138/138；web tsc 0；next build 30/30",
+        "returns": {
+          "AGENT_EXPERIENCE_LAYER": "PASS（P0–P9 CLOSED / PUSHED）",
+          "FULL_REGRESSION": "4540/4541（1 = 既有 P2E-DB5 隔离 flake）",
+          "CAPABILITY_LOSS": "0",
+          "SECOND_RUNTIME": "0",
+          "SECOND_GUARD": "0",
+          "PRODUCTION_READY": "NO",
+          "FINAL_AUDIT": "PENDING（ChatGPT 独立审计）"
+        }
       }
     },
     "safe_continuation_queue": [
-      "P9 — OAuthAuthorizationSession / ConnectionSyncState 最小补强（B2 PARTIAL 的真实缺口）",
-      "FINAL — 全量回归 + 验收报告（exact HEAD / test counts / CAPABILITY_LOSS = 0 / PRODUCTION_READY = NO）"
+      "FINAL — 等待 ChatGPT 独立审计裁决（PASS → CLOSED；PASS WITH REVISE / REVISE → 立即最小修订并重新送审；FAIL → 修复后重新送审）"
     ],
     "hard_boundaries": [
       "REAL_PROVIDER_WRITE",

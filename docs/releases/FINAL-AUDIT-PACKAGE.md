@@ -1,7 +1,7 @@
 # FINAL AUDIT PACKAGE —— AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION
 
 被审对象：分支 `gate/7-commercial-validation`
-`EXACT_HEAD = FINAL-HEAD-PLACEHOLDER`（本文件与最终收口同一提交；基线 `299b008a`）
+`EXACT_HEAD = a316749a`（本文件与最终收口同一提交；基线 `299b008a`）
 审计请求：**独立架构 / 安全 / 产品验收**。请只依据本文件与仓库实际内容判定。
 
 ---
@@ -47,7 +47,7 @@ ONE_SI_RUNTIME                  = PASS（未改动其语义；goal 只作为入�
 SECOND_RUNTIME                  = 0
 SECOND_SCHEDULER                = 0（新模块内无 setInterval/setTimeout/cron/Worker）
 SECOND_GUARD                    = 0（复用既有 Action Guard；静态约定检查 7/7 通过）
-FULL_REGRESSION                 = FULL_REGRESSION_PLACEHOLDER
+FULL_REGRESSION                 = 450 files / **4541 tests → 4540 passed + 1 failed**（唯一失败为既有 `recovery-si-phase2-e-db` P2E-DB5 并行隔离债；单独运行 **20/20 PASS**，非本程序引入）
 FINAL_AUDIT                     = PENDING（本包等待独立审计）
 PRODUCTION_READY                = NO（外部能力全部 HOLD，见 §5）
 ```
@@ -97,15 +97,15 @@ PRODUCTION_READY                = NO（外部能力全部 HOLD，见 §5）
 
 | 门禁 | 结果 |
 |---|---|
-| FULL_REGRESSION（`npx vitest run`，真实 PostgreSQL） | `FULL_REGRESSION_PLACEHOLDER` |
+| FULL_REGRESSION（`npx vitest run`，真实 PostgreSQL） | `450 files / **4541 tests → 4540 passed + 1 failed**（唯一失败为既有 `recovery-si-phase2-e-db` P2E-DB5 并行隔离债；单独运行 **20/20 PASS**，非本程序引入）` |
 | 已知既有 flake | `recovery-si-phase2-e-db` P2E-DB5（并行隔离债）：**单独运行 20/20 PASS**，非本程序引入 |
 | `api tsc --noEmit` | exit 0 |
-| `prisma validate` / `migrate deploy` | valid / `MIGRATIONS_PLACEHOLDER` migrations 全部成功 |
-| 租户触发器清单（对照真实库） | required `TRIG_REQ_PLACEHOLDER`；append-only `TRIG_APP_PLACEHOLDER` 全 OK |
-| `architecture-contract` | `ARCH_PLACEHOLDER` |
-| i18n（5 语言 parity + 硬编码守卫） | `I18N_PLACEHOLDER` |
-| UI render check | `UI_RENDER_PLACEHOLDER` |
-| `web tsc --noEmit` / `next build` | exit 0 / exit 0（`WEB_PAGES_PLACEHOLDER`） |
+| `prisma validate` / `migrate deploy` | valid / `91` migrations 全部成功 |
+| 租户触发器清单（对照真实库） | required `118 baseline / 95 immutable / 2 scoped`；append-only `72` 全 OK |
+| `architecture-contract` | `167/167 PASS（模型总数 113）` |
+| i18n（5 语言 parity + 硬编码守卫） | `OK — locales=5 / keys=803 / statusCodes=13 / customerHardcodes=0` |
+| UI render check | `OK checks=138` |
+| `web tsc --noEmit` / `next build` | exit 0 / exit 0（`30/30 static pages`） |
 
 本轮新增/扩展的测试套件（全部真实 PostgreSQL）：`standing-authorization-persistence-db` 10 ·
 `standing-authorization-http-db` 4 · `agent-goal` 29 · `agent-goal-runtime-wiring` 7 ·
