@@ -471,6 +471,41 @@ export async function runJourney(input) {
   check('mobile.authorizations.visible', mAuth.includes('自动追回授权'), mAuth.slice(0, 140));
   await mPage.screenshot({ path: path.join(outDir, 'm3-mobile-authorizations.png'), fullPage: true });
 
+  /* P10：移动端新增页面（390×844） */
+  await open(mPage, webBase + '/recoveries');
+  const mRecoveries = await mPage.innerText('body');
+  check('mobile.recoveries.visible', mRecoveries.includes('追回进度'), mRecoveries.slice(0, 120));
+  await open(mPage, webBase + '/cases');
+  const mCases = await mPage.innerText('body');
+  check('mobile.cases.visible', mCases.includes('追回任务'), mCases.slice(0, 120));
+  const mobileCaseGeometry = await mPage.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  check(
+    'mobile.cases.no.horizontal.overflow',
+    mobileCaseGeometry.scrollWidth <= mobileCaseGeometry.clientWidth + 1,
+    mobileCaseGeometry.scrollWidth + '/' + mobileCaseGeometry.clientWidth,
+  );
+
+  /* ---------------- 8b. Desktop a11y / 页面健康（P10，1440×900） ---------------- */
+  for (const route of ['/', '/recoveries', '/cases', '/opportunities', '/authorizations', '/connections', '/money']) {
+    await open(page, webBase + route);
+    const health = await page.evaluate(() => ({
+      h1: document.querySelectorAll('h1').length,
+      labelled: document.querySelectorAll('[aria-label], [aria-labelledby], nav, form input').length,
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    check('a11y.' + route + '.single.h1', health.h1 === 1, 'h1=' + health.h1);
+    check('a11y.' + route + '.no.horizontal.overflow', health.scrollWidth <= health.clientWidth + 1, health.scrollWidth + '/' + health.clientWidth);
+    check('a11y.' + route + '.labels.present', health.labelled > 0, String(health.labelled));
+  }
+  await open(page, webBase + '/');
+  await page.keyboard.press('Tab');
+  const focusMoved = await page.evaluate(() => document.activeElement !== null && document.activeElement.tagName !== 'BODY');
+  check('a11y.keyboard.focus.moves', focusMoved, '');
+
   /* ---------------- 9. 页面健康 ---------------- */
   const benign = [/favicon/i, /Download the React DevTools/i, /404 \(Not Found\)/i];
   const realConsoleErrors = consoleErrors.filter((line) => !benign.some((re) => re.test(line)));

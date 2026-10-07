@@ -24,7 +24,7 @@
 | P7 Authorization UX | DONE | 「CrossClaim 可以替你做什么」+「以下情况仍会先问你」+ 撤销入口保留；账户引用 / 版本折叠进「授权详情」 |
 | P8 工程字段隔离 | DONE | 5 语言「工程/技术字段」措辞清零（字典级 guard）；深层详情统一为「详细信息 / 授权详情」 |
 | P9 Connections 简化 | DONE | 卡片主视图回答五问（含「CrossClaim 能否继续工作」与「最近同步」）；credentialRef / raw 字段与原始错误下沉到「详细信息」 |
-| P10 Mobile / a11y | QUEUED | 390×844 首屏 Goal + Money + Needs Attention 优先 |
+| P10 Mobile / a11y | DONE | 7 条关键路由的 h1/溢出/aria 健康检查 + 键盘焦点 + 移动端新增页面验证 |
 | P11 i18n parity + hardcode scan | 持续 | 每个单元都跑；P1–P4 已加入 5 语言并 0 硬编码 |
 | P12 全客户旅程回归 | QUEUED | 每批次跑真实浏览器旅程 |
 | CUSTOMER-UI-PRODUCTIZATION-V2-FINAL | QUEUED | 独立审计单元（不复用上一轮 CLOSED 状态） |
@@ -99,6 +99,24 @@
 | 浏览器客户旅程（真实 Edge + HTTP + PostgreSQL；desktop 1440×900 + mobile 390×844） | **65/65 PASS**（新增：hero-first、Hero 在金额之前、Active Recovery 可见、无「工程字段/技术字段」、首页无内部角色码、目标结果区无 raw code / 任务计数） |
 | 浏览器证据目录 | `reports/acceptance/2026-10-07T15-52-05-717Z/` |
 | api tsc | 0（本轮未改 `apps/api`） |
+
+### 批次 7（P10）
+
+**桌面 1440×900 / 移动 390×844 / 可访问性**
+
+* 桌面逐页健康检查（7 条关键路由 `/ /recoveries /cases /opportunities /authorizations /connections /money`）：
+  每页恰好 1 个 `h1`、无横向溢出（scrollWidth ≤ clientWidth+1）、存在 aria 标签（`[aria-label]` / `[aria-labelledby]` / `nav` / 表单输入）。
+* 键盘可达性：`Tab` 后焦点离开 `body`（`a11y.keyboard.focus.moves`）。
+* 移动端新增页面：`/recoveries` 客户语言可见、`/cases` 客户语言可见且无横向溢出（沿用既有 390×844 移动上下文与真实会话）。
+* 既有移动检查（首页 Goal Hero 优先、无横向溢出、连接向导、授权页）保持通过。
+
+| 项 | 结果 |
+| --- | --- |
+| web tsc | 0 |
+| i18n | OK：5 语言 / 880 键 parity / 客户硬编码 **0** |
+| UI render check | **179/179 OK** |
+| 浏览器客户旅程（desktop + mobile） | **103/103 PASS**（新增 25 项：21 项逐页 a11y/溢出/标签 + 键盘焦点 + 3 项移动端新页面） |
+| 浏览器证据目录 | `reports/acceptance/2026-10-07T16-25-07-262Z/` |
 
 ### 批次 6（P9）
 
