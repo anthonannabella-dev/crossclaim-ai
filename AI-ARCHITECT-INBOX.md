@@ -159802,3 +159802,432 @@ FINAL4_REQUIRED = NO
 
 目前仍是 PASS WITH REVISE / NOT CLOSED。
 ```
+
+### [MSG-20261007-06] CUSTOMER-UX FINAL4 复审裁决 = PASS WITH REVISE / NOT CLOSED（FINAL4 的 provider-specific goal scope 目标已 PASS —— Amazon Goal + Walmart account fail-closed 成立；CUSTOMER_USABILITY / SANDBOX_END_TO_END / AUTHORIZATION_RESUME / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED / EXTERNAL_BOUNDARY_HONESTY / PRODUCTION_GATE = PASS；SECURITY_BOUNDARY = REVISE），reviewed HEAD 4443d3d4；FINAL5 只做三项极窄收口：①runtime→goal lineage 必须回到 **exact deterministic task membership**（`expectedTasks.has(key)`，digest token 不能替代 exact membership）②完整重建 durable goal identity（使 exact membership 可判定）③统一 canonical provider→domain 映射（如 Shopify 等）；并在新 exact HEAD 重跑完整 API regression；非阻断项：createJsonTaskQueuePort 跨 worker 原子性（production enablement 前必须解决）、GitHub Actions = NOT_OBSERVED；PRODUCTION_READY = NO、全部 HOLD/FORBIDDEN 不变
+
+```text
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 4443d3d4a47d1de4a1f7ab62a3178fb6b40600e4
+
+逐项重裁：
+
+纯文本
+CUSTOMER_USABILITY          = PASS
+SANDBOX_END_TO_END          = PASS
+AUTHORIZATION_RESUME        = PASS
+FIRST_RUN_GUIDANCE          = PASS
+NO_API_FAIL_CLOSED          = PASS
+EXTERNAL_BOUNDARY_HONESTY   = PASS
+SECURITY_BOUNDARY           = REVISE
+PRODUCTION_GATE             = PASS
+
+CUSTOMER-UX-SANDBOX-E2E
+FINAL ACCEPTANCE            = PASS WITH REVISE / NOT CLOSED
+
+FINAL4 要解决的 Amazon Goal + Walmart Account 问题本身已经修对了；但复核 actual code 时发现 runtime lineage 在 FINAL4 又被放宽了一层，因此还不能正式 CLOSED。
+
+已确认：provider-specific Goal scope = PASS
+
+这一轮核心修订是真的落到了 identity，不只是 admission 临时判断。
+
+现在：
+
+纯文本
+Amazon intent
+→ providers = ["AMAZON"]
+
+Walmart intent
+→ providers = ["WALMART"]
+
+providers 已进入：
+
+纯文本
+draft
+→ schema
+→ validator whitelist
+→ sort/dedupe
+→ goalDigest
+→ normalizedGoal
+→ customer interpretation
+
+GA-12 也验证：
+
+纯文本
+Amazon goalDigest ≠ Walmart goalDigest
+
+Admission 使用：
+
+纯文本
+PlatformAccount.platform
+
+作为 server-owned provider，并且：
+
+纯文本
+goal.providers.length > 0
+→ serverProvider 必须命中 goal.providers
+
+所以现在：
+
+纯文本
+Amazon Goal + Walmart account
+→ GOAL_SCOPE_MISMATCH
+→ DENIED
+→ zero admission
+
+GA-11 与浏览器 security.provider.mismatch.denied 都覆盖到了。
+
+因此上一轮那个 provider-specific blocker：
+
+PASS / CLOSED。
+
+唯一主要 blocker：runtime→goal lineage 被 FINAL4 弱化
+
+FINAL3 的正确语义是：
+
+纯文本
+runtime task
+必须属于 deterministic Goal plan 的 expected task set
+
+但 FINAL4 当前代码变成了：
+
+TypeScript
+if (goalScopeToken !== null)
+  return !key.includes(goalScopeToken);
+
+也就是说，只要：
+
+以 task:recovery: 开头；
+字符串里包含该 Goal digest 前 24 位；
+
+就被认为属于这个 Goal。
+
+这不等价于：
+
+纯文本
+expectedTasks.has(key)
+
+例如理论上这样的 task：
+
+纯文本
+task:recovery:CUSTOMS:not-real-task:<GOAL_DIGEST_PREFIX>
+
+对一个 PLATFORM Goal 来说并不是它的 deterministic plan task，但当前检查可能通过。
+
+所以当前约束实际是：
+
+纯文本
+“包含 Goal token”
+
+而不是：
+
+纯文本
+“这个 task 就是该 Goal planner 生成的任务”
+
+这是 lineage fail-closed 的下降。
+
+更具体的问题
+
+代码其实已经重建了：
+
+TypeScript
+const expectedTasks = new Set(
+  lineagePlan.tasks.map(task => task.dedupeKey)
+);
+
+但只要 storedDigest 存在，就不使用这个 exact set。
+
+这是没有必要的放宽。
+
+CHANGE 1 — 恢复 exact task membership
+
+建议最小修改：
+
+TypeScript
+const alien = claimedKeys.filter(
+  key => !expectedTasks.has(key)
+);
+
+如果还想保留 digest check，可以作为额外检查：
+
+纯文本
+startsWith(task:recovery:)
+AND
+contains/has expected goal scope token
+AND
+expectedTasks.has(key)
+
+但绝不能用 digest substring 替代 exact plan membership。
+
+必须覆盖：
+
+纯文本
+正确 Goal task
+→ PASS
+
+另一 Goal task
+→ GOAL_RUNTIME_LINEAGE_MISMATCH
+
+错误 domain + 正确 digest token
+→ GOAL_RUNTIME_LINEAGE_MISMATCH
+
+任意伪造 suffix + 正确 digest token
+→ GOAL_RUNTIME_LINEAGE_MISMATCH
+
+且全部零 projection。
+
+CHANGE 2 — durable Goal 重建还漏了 approvalThreshold
+
+这里也是 lineage 收紧时顺手必须修的小问题。
+
+FINAL4 从 durable normalizedGoal 重建时写的是：
+
+TypeScript
+approvalThreshold: null
+
+但原始 durable record 实际已经保存：
+
+纯文本
+approvalThreshold
+
+而 approvalThreshold 又参与 goalDigest。
+
+因此有金额偏好的 Goal，例如：
+
+纯文本
+“Amazon 超过 $1000 的每次问我”
+
+原始 digest 可能包含 threshold，但 runtime lineage 重建时人为丢成 null。
+
+这也是为什么现在很难安全使用 expectedTasks。
+
+应该直接使用：
+
+TypeScript
+approvalThreshold:
+  stored.approvalThreshold ?? null
+
+然后增加：
+
+纯文本
+reconstructed goalDigest
+===
+stored goalDigest
+
+不一致：
+
+纯文本
+GOAL_RUNTIME_LINEAGE_MISMATCH
+→ zero projection
+
+这样 runtime lineage 才真正以 durable Goal identity 为 SSOT。
+
+另一个需要同步修正的小映射问题
+
+不属于越权漏洞，但建议跟 FINAL5 一次收口。
+
+现在 provider/domain 映射有不一致：
+
+Compiler：
+
+纯文本
+SHOPIFY → PLATFORM
+
+Admission：
+
+纯文本
+SHOPIFY → INDEPENDENT_SITE
+
+于是：
+
+纯文本
+“帮我追回 Shopify 的钱”
+→ Goal domain PLATFORM
+→ provider SHOPIFY
+
+正确 Shopify account
+→ accountDomain INDEPENDENT_SITE
+→ GOAL_SCOPE_MISMATCH
+
+会把合法客户请求错误拒绝。
+
+类似需要检查：
+
+纯文本
+STRIPE / PAYPAL → INDEPENDENT_SITE
+INSURANCE       → LOGISTICS
+CBP / ABI       → CUSTOMS
+TIKTOK / TIKTOK_SHOP alias
+
+建议不要继续维护两张独立映射表。
+
+做一个唯一 canonical map：
+
+纯文本
+provider
+→ canonicalProvider
+→ recoveryDomain
+
+Compiler 和 admission 共同复用。
+
+例如：
+
+纯文本
+SHOPIFY → INDEPENDENT_SITE
+STRIPE  → INDEPENDENT_SITE
+PAYPAL  → INDEPENDENT_SITE
+
+UPS / FEDEX / DHL / INSURANCE
+→ LOGISTICS
+
+CBP / ABI
+→ CUSTOMS
+
+AMAZON / WALMART / TIKTOK / EBAY
+→ PLATFORM
+
+这属于 correctness hardening；由于已经影响正确 Shopify Goal 的准入，我建议本次一起修掉，不留到 production。
+
+已确认继续 PASS 的项目
+SANDBOX_END_TO_END = PASS
+
+现在确实是：
+
+纯文本
+Goal
+→ durable authorization
+→ product admission
+→ existing queue
+→ runtime.controller.tick()
+→ actual outcome.claimed
+→ honest BLOCK proposal
+→ BLOCKED run projection
+
+不再使用 queue 内容伪造 claim。
+
+AUTHORIZATION_RESUME = PASS
+
+同一个 Goal A：
+
+纯文本
+PROPOSED
+→ authorization
+→ ADMITTED
+→ actual runtime claim
+→ AgentGoalRun(A)
+
+重复 admission/runtime 不创建第二次执行。
+
+CUSTOMER_USABILITY = PASS
+
+创建后技术字段清理、角色客户化、credentialRef 高级折叠、mobile overflow 等保持成立。
+
+PRODUCTION_GATE = PASS
+
+没有 production writer 或真实外部执行被打开。
+
+TEST
+
+FINAL5 最少补：
+
+纯文本
+1. exact planned dedupeKey
+   → run projection allowed
+
+2. wrong-domain task + correct goalDigest prefix
+   → GOAL_RUNTIME_LINEAGE_MISMATCH
+
+3. arbitrary fake task + correct goalDigest prefix
+   → GOAL_RUNTIME_LINEAGE_MISMATCH
+
+4. another Goal 的真实 task
+   → GOAL_RUNTIME_LINEAGE_MISMATCH
+
+5. Goal 带 approvalThreshold
+   → durable reconstruction digest === stored digest
+   → 自己的 task 正常通过
+
+6. Shopify Goal + Shopify account
+   → 不因 domain mapping 冲突被拒绝
+
+7. Amazon Goal + Walmart account
+   → 继续 DENIED
+RISKS
+
+一个证据口径需要修正：
+
+你报告中的 API 全量：
+
+纯文本
+4560 / 4561
+
+标明运行在 HEAD 020ff317。
+
+但 FINAL4 exact HEAD 是：
+
+纯文本
+4443d3d4
+
+因此它不能作为 FINAL4 exact-head 全量回归证据。
+
+当前：
+
+纯文本
+FINAL4 targeted 305 tests
+api tsc = 0
+browser 59/59
+goal admission 12/12
+
+可以记 local evidence。
+
+GitHub Actions 对 4443d3d4 仍然：
+
+NOT_OBSERVED
+
+建议 FINAL5 修完后，在新的 exact HEAD 再跑一次完整 API regression，避免继续引用旧 HEAD。
+
+另外已有非阻断 production debt 继续成立：
+
+纯文本
+createJsonTaskQueuePort
+= JSON read-modify-write
+= no cross-worker CAS/lock
+
+production enablement 前必须解决。
+
+PRODUCTION
+
+继续确认：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+
+全部 HOLD / FORBIDDEN 不变。
+
+SECOND_RUNTIME / SECOND_SCHEDULER / SECOND_GUARD / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = 0
+
+L5_RELAXATION = FORBIDDEN
+
+最终裁决
+
+Amazon → Walmart 这个 FINAL4 目标已经 PASS。
+
+现在只剩很窄的收口：
+
+CUSTOMER-UX FINAL5 — exact runtime task membership + complete durable goal reconstruction + canonical provider-domain mapping
+
+其中真正的安全 blocker 是第一项：
+
+Goal digest token 不能替代 exact deterministic task membership。
+
+把 exact expectedTasks.has(key) 恢复、完整重建 durable identity，并把 Shopify 等 provider-domain 映射统一后，我预计即可正式给：
+
+纯文本
+SECURITY_BOUNDARY = PASS
+VERDICT = PASS / CLOSED
+FINAL6_REQUIRED = NO
+
+目前仍是 PASS WITH REVISE / NOT CLOSED。
+```
