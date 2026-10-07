@@ -158171,3 +158171,299 @@ NOT AUTHORIZED
 这次可以停在这里。耐久底座已经封板；下一步真正写生产配置属于新的风险层级，必须再次单独授权。
 ```
 
+### [MSG-20261007-01] AEL FINAL AUDIT 裁决 = PASS WITH REVISE / NOT CLOSED（GOAL_RUNTIME_SINGLE_ENTRY / OAUTH_SUCCESS_STATE_MACHINE / NON_BYPASSABLE_GATE_FAIL_CLOSED = REVISE；STANDING_AUTHORIZATION_DURABLE / GOAL_COMPILER / GOAL_RUNTIME_MAIN_WIRING / OAUTH_STATE_SINGLE_USE / CONNECTION_SYNC_STATE / ACTION_GUARD_SINGLE_CATALOG = PASS；SECOND_RUNTIME / SECOND_SCHEDULER / SECOND_GUARD = 0、CAPABILITY_LOSS = 0），reviewed code HEAD 299b008a；NEXT 只授权一个窄 FINAL2（single runtime admission surface + durable OAuth transition CAS + complete non-bypassable gate proof）
+
+```text
+VERDICT: PASS WITH REVISE
+
+REVIEWED_CODE_HEAD: 299b008a64cefafa561b56a07d619276c2157912
+P9 implementation anchor: e9cc7dc91d227dc1fbc1832b5f7a8911835e6c57
+Audit/package head: e5eaab012c7e44dc9c9a18900deb1b1d46b577b4
+
+整体判断：Agent Experience Layer 的产品方向、持久化授权、Goal→ONE SI Runtime 主路径、UI/导航/连接投影都成立；没有发现第二 Runtime / Scheduler / Guard，也没有 production enablement。 但当前还不适合记作 FINAL PASS，存在 3 个需要最小修订的边界。
+
+CHANGES
+
+1. 关闭 Goal direct-runner 旁路。
+
+当前正式主路径 goal-runtime-binding.ts 是正确的：
+
+纯文本
+Goal
+→ existing task queue
+→ claim / lease
+→ ONE SI Runtime
+→ recovery-si reserved pack
+
+但 agent-goal/index.ts 仍公开：
+
+TypeScript
+export * from './goal-runtime-adapter';
+
+而 createGoalRuntimeAdapter().dispatch() 会直接：
+
+TypeScript
+input.runtime.run(...)
+
+这正是 goal-runtime-binding.ts 自己声明“不允许”的路径，因为它可能绕过：
+
+纯文本
+queue admission
+claim / lease
+park-for-judge
+reserved recovery routing
+
+最小修订：
+
+从正式 agent-goal/index.ts 移除 goal-runtime-adapter export；
+最好删除/废弃该 direct-runner adapter，或明确降为 test/internal-only；
+architecture contract 增加：
+Agent Goal 产品代码不得调用 runner.run / RsiEvidenceRunner.run；
+P2 测试以后只认可 createGoalRuntimeBinding() 为 product execution admission surface。
+
+修完可记：
+
+GOAL_RUNTIME_SINGLE_ENTRY = PASS
+
+2. OAuthAuthorizationSession 状态机需要真正 durable fail-closed。
+
+当前有明确问题：
+
+纯文本
+PENDING
+→ succeedOAuthAuthorizationSession()
+→ SUCCEEDED
+
+是允许的。
+
+因为 succeedOAuthAuthorizationSession() 只拒绝 FAILED，甚至会自行补：
+
+TypeScript
+consumedAt: row.consumedAt ?? input.now
+
+所以它可以绕过：
+
+纯文本
+PENDING → CONSUMED
+
+的一次性 state consumption。
+
+而现有 PG-P9-3 测试本身就直接：
+
+纯文本
+initiate
+→ succeed
+
+没有先 take(state)，所以测试实际上把这个旁路固定下来了。
+
+另外两个并发 succeed() 若都读到 CONSUMED，目前不是 CAS，存在后写者覆盖 connectionId / credentialRef 的窗口。
+
+最小修订：
+
+纯文本
+PENDING
+→ CONSUMED
+→ SUCCEEDED
+
+成功必须要求：
+
+纯文本
+current.status === CONSUMED
+
+并使用原子 CAS：
+
+纯文本
+WHERE
+  id = sessionId
+  AND organizationId = org
+  AND status = CONSUMED
+
+同时：
+
+SUCCEEDED 再调用只有 connectionId + credentialRef 完全相同才幂等；
+不同 binding → OAUTH_SESSION_BINDING_CONFLICT；
+terminal success 不允许被改写；
+DB trigger 最好直接约束状态迁移。
+
+还应补：
+
+纯文本
+connectionId
+→ 必须存在于同 organizationId 的 SourceConnection
+
+现在 ConnectionSyncState 有这种 tenant-reference DB 保护，但 OAuthAuthorizationSession.connectionId 没有等价关系约束。
+
+resumeGoalId 若非 null，也建议在 initiate 时验证：
+
+纯文本
+AgentGoal.organizationId === session.organizationId
+
+否则“绑定原目标”目前只是一个字符串引用，不是被证明过的 durable lineage。
+
+修完可记：
+
+OAUTH_DURABLE_STATE_MACHINE = PASS
+
+3. Standing Authorization 的 non-bypassable gate 对 UNKNOWN 当前仍偏 fail-open。
+
+这个问题比较隐蔽。
+
+collectBlockingGates() 当前类似：
+
+TypeScript
+if (gates.platformEnablement === false) block
+if (gates.providerCapabilityReady === false) block
+if (gates.credentialReady === false) block
+if (gates.tenantAccountIsolationOk === false) block
+
+意味着：
+
+纯文本
+undefined
+
+不会阻断。
+
+甚至 productionGate 也是“只有字段存在时才检查”。
+
+而 resolver 的类型又明确允许这些字段 optional。
+
+所以当前语义是：
+
+gate 没有提供 ≠ gate 未通过。
+
+这与 FINAL 包中的：
+
+“所有失败/未知一律 fail-closed”
+
+不完全一致。
+
+特别是 Standing Authorization 是为了自动执行而存在，这里不能把“没有证据”当成“可以继续”。
+
+最小修订不是简单把所有字段都 mandatory，而是：
+
+纯文本
+auto execution
+→ 根据 action + guard.requiredGates
+→ 计算 required non-bypassable gates
+→ 每一个都必须有 server-owned explicit SATISFIED proof
+
+缺失 / UNKNOWN：
+
+纯文本
+→ DENY
+
+至少以下基础控制不应因 undefined 自动通过：
+
+纯文本
+production gate
+kill switch state
+tenant/account isolation
+
+provider / credential / platform / customs POA 再根据动作要求决定是否必须显式提供。
+
+建议增加：
+
+NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE
+
+并补 missing-field 测试。
+
+KEEP
+
+以下我认为可以保持，不需要重做：
+
+ACTION_DOMAIN_MEMBERSHIP 已收归 action-guard.ts，P9 收口正确；
+Goal Compiler deterministic-first、未知意图 fail safely、modelCallCount=0；
+/agent-goals HTTP 只接受 intent，tenant/actor server-derived；
+AgentGoal / AgentGoalRun 仍然只是 intent + projection，不是业务 SSOT；
+Standing Authorization 的：
+append-version
+scope immutable
+revoke trace
+tenant/account scoped
+revoked latest version fail-closed
+都成立；
+Standing Authorization 只允许满足 humanApproval 的设计正确；
+高金额 HITL 保留；
+Standing Authorization ≠ Broker POA；
+ConnectionSyncState 作为 SourceConnection checkpoint projection 的架构成立；
+OAuth state 只持久化 digest、take() 一次性 CAS 的方向正确；
+Navigation progressive disclosure 没删除 route；
+本轮没有建立第二 Runtime / Scheduler / Guard / Policy Engine。
+RISKS
+
+代码风险：中等，且都可以窄修。
+
+最大三个风险就是：
+
+Goal direct-runner API surface；
+OAuth session success 可以绕过 CONSUMED 状态；
+Standing Authorization 的未知 gate snapshot 可能被当成“没有 blocker”。
+
+它们目前都属于控制面/编排层潜在旁路。
+
+由于：
+
+纯文本
+REAL_PROVIDER_WRITE = HOLD
+EXTERNAL_WRITE = HOLD
+TRANSPORT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+所以我没有证据表明这些缺口已经造成真实生产外写。
+
+GitHub Actions 对 exact 299b008a：
+
+NOT_OBSERVED
+
+验收包中的 4540 passed + 1 existing isolation debt 应记作 Codex/local regression evidence，不要写成 GitHub CI green。
+
+FINAL STATUS
+纯文本
+AGENT_EXPERIENCE_LAYER              = PASS WITH REVISE
+STANDING_AUTHORIZATION_DURABLE      = PASS
+GOAL_COMPILER                       = PASS
+GOAL_RUNTIME_MAIN_WIRING            = PASS
+GOAL_RUNTIME_SINGLE_ENTRY           = REVISE
+OAUTH_SESSION_DURABILITY            = PASS WITH REVISE
+OAUTH_STATE_SINGLE_USE              = PASS
+OAUTH_SUCCESS_STATE_MACHINE         = REVISE
+CONNECTION_SYNC_STATE               = PASS
+ACTION_GUARD_SINGLE_CATALOG         = PASS
+NON_BYPASSABLE_GATE_FAIL_CLOSED     = REVISE
+SECOND_RUNTIME                      = 0
+SECOND_SCHEDULER                    = 0
+SECOND_GUARD                        = 0
+CAPABILITY_LOSS                     = 0
+
+因此：
+
+FINAL_AUDIT = PASS WITH REVISE / NOT YET CLOSED
+
+只需要一个窄的：
+
+AEL FINAL2 — single runtime admission surface + durable OAuth transition CAS + complete non-bypassable gate proof
+
+完成并复核通过后，我预计可以给正式 PASS / CLOSED。
+
+并确认：
+
+PRODUCTION_READY = NO
+
+全部继续 HOLD / FORBIDDEN：
+
+纯文本
+REAL_PROVIDER_WRITE
+CUSTOMS_FILING
+PAYMENT
+AUTO_COMMISSION_CHARGE
+PRODUCTION_CREDENTIALS
+PRODUCTION_ENABLEMENT
+REAL_MODEL_NETWORK
+PAID_MODEL_CALLS
+EXTERNAL_WRITE
+TRANSPORT
+P2_F
+P2_G
+
+以及原有 SECOND_* = FORBIDDEN、L5_RELAXATION = FORBIDDEN 全部不变。
+```

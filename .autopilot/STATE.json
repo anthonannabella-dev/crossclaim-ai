@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-07T05:59:33.067Z",
+  "updated_at": "2026-10-07T06:18:47.978Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "IN_PROGRESS（P0 CLOSED / P1–P9 排队）",
-  "next_execution_unit": "FINAL — 读取 ChatGPT 裁决：PASS → 写最终 closure；REVISE / PASS WITH REVISE → 自动实施修订并重新送审；FAIL → 修复后重新送审",
+  "next_execution_unit": "AEL FINAL2 — single runtime admission surface + durable OAuth transition CAS + complete non-bypassable gate proof",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T09:55:01.250Z",
-  "state": "AGENT_EXPERIENCE_LAYER_AWAITING_EXTERNAL_AUDIT",
-  "last_action": "FINAL 回归完成（a316749a）：P0–P9 全部 CLOSED/PUSHED；全量回归 4540/4541（唯一失败为既有 recovery-si-phase2-e-db P2E-DB5 并行隔离债，单独运行 20/20 PASS）；api tsc 0 / prisma validate valid / 91 migrations / 触发器清单 118·95·72 OK / architecture-contract 167 / i18n 803 键硬编码 0 / UI render 138 / web tsc 0 / next build 30/30。自包含 FINAL AUDIT PACKAGE 已生成，现送 ChatGPT 独立审计。**未声明 PROGRAM COMPLETE**。",
-  "last_action_at": "2026-10-07T05:59:33.067Z",
-  "next_action": "等待外部审计裁决；期间不得声称任务完成。",
+  "state": "AGENT_EXPERIENCE_LAYER_FINAL2_REQUIRED",
+  "last_action": "FINAL AUDIT 裁决已收到并逐字归档（MSG-20261007-01 = PASS WITH REVISE / NOT CLOSED；FULL_COPY_OK 198 行；reviewed code HEAD 299b008a）。三条窄修：C1 关闭 Goal direct-runner 旁路（移除 goal-runtime-adapter 导出 + 架构契约断言）；C2 OAuth 成功必须经 CONSUMED 的原子 CAS + binding 冲突检测 + connectionId/resumeGoalId 血缘校验；C3 non-bypassable gate 对 UNKNOWN/缺失一律 DENY（不得因 undefined 通过）。KEEP 项全部 PASS，无第二 Runtime/Scheduler/Guard，CAPABILITY_LOSS=0，PRODUCTION_READY=NO。",
+  "last_action_at": "2026-10-07T06:18:47.978Z",
+  "next_action": "立即实施三条 CHANGE（最小修订）→ 定向测试 + api tsc + 相关回归 → commit/push → 向同一会话发简短复审请求。",
   "current_head": "a316749a",
   "last_completed_head": "a316749a",
   "reviewed_head": "42161550",
@@ -12459,7 +12459,7 @@
       },
       "FINAL": {
         "name": "FINAL —— 全量回归 + 自包含 FINAL AUDIT PACKAGE + 独立审计",
-        "status": "REGRESSION_DONE / AWAITING_EXTERNAL_AUDIT",
+        "status": "AUDIT_VERDICT_RECEIVED / PASS WITH REVISE / NOT CLOSED",
         "head": "a316749a",
         "package": "docs/releases/FINAL-AUDIT-PACKAGE.md",
         "tests": "full regression 4540/4541（唯一失败为既有 P2E-DB5 隔离债，单独 20/20）；api tsc 0；prisma validate valid；91 migrations；触发器清单 118/95/72 OK；architecture-contract 167/167；i18n 5 语言 803 键硬编码 0；UI render 138/138；web tsc 0；next build 30/30",
@@ -12471,11 +12471,45 @@
           "SECOND_GUARD": "0",
           "PRODUCTION_READY": "NO",
           "FINAL_AUDIT": "PENDING（ChatGPT 独立审计）"
-        }
+        },
+        "verdict": {
+          "messageId": "MSG-20261007-01",
+          "archive": "AI-ARCHITECT-INBOX.md### [MSG-20261007-01]",
+          "archiveVerified": "FULL_COPY_OK（198 行逐行一致）",
+          "decision": "PASS WITH REVISE",
+          "reviewedCodeHead": "299b008a64cefafa561b56a07d619276c2157912",
+          "p9Anchor": "e9cc7dc91d227dc1fbc1832b5f7a8911835e6c57",
+          "auditPackageHead": "e5eaab012c7e44dc9c9a18900deb1b1d46b577b4"
+        },
+        "verdictReturns": {
+          "AGENT_EXPERIENCE_LAYER": "PASS WITH REVISE",
+          "STANDING_AUTHORIZATION_DURABLE": "PASS",
+          "GOAL_COMPILER": "PASS",
+          "GOAL_RUNTIME_MAIN_WIRING": "PASS",
+          "GOAL_RUNTIME_SINGLE_ENTRY": "REVISE",
+          "OAUTH_SESSION_DURABILITY": "PASS WITH REVISE",
+          "OAUTH_STATE_SINGLE_USE": "PASS",
+          "OAUTH_SUCCESS_STATE_MACHINE": "REVISE",
+          "CONNECTION_SYNC_STATE": "PASS",
+          "ACTION_GUARD_SINGLE_CATALOG": "PASS",
+          "NON_BYPASSABLE_GATE_FAIL_CLOSED": "REVISE",
+          "SECOND_RUNTIME": "0",
+          "SECOND_SCHEDULER": "0",
+          "SECOND_GUARD": "0",
+          "CAPABILITY_LOSS": "0",
+          "FINAL_AUDIT": "PASS WITH REVISE / NOT YET CLOSED",
+          "PRODUCTION_READY": "NO"
+        },
+        "requiredChanges": [
+          "C1 single runtime admission surface：从 agent-goal/index.ts 移除 goal-runtime-adapter 导出；direct-runner adapter 降为 internal/test-only 或删除；architecture contract 增加「Agent Goal 产品代码不得调用 runner.run / RsiEvidenceRunner.run」；P2 测试只认可 createGoalRuntimeBinding() 为 product execution admission surface",
+          "C2 durable OAuth transition CAS：succeedOAuthAuthorizationSession 必须要求 current.status === CONSUMED 并用原子 CAS(WHERE id AND organizationId AND status=CONSUMED)；SUCCEEDED 重入仅当 connectionId+credentialRef 完全相同才幂等，不同 binding → OAUTH_SESSION_BINDING_CONFLICT；terminal success 不可改写；补 connectionId 必须存在于同 organizationId 的 SourceConnection；resumeGoalId 非空时校验 AgentGoal.organizationId === session.organizationId；修正把旁路固定下来的 PG-P9-3 测试",
+          "C3 complete non-bypassable gate proof：按 action + guard.requiredGates 计算 required non-bypassable gates，每个都必须有 server-owned explicit SATISFIED proof；缺失/UNKNOWN → DENY（至少 production gate / kill switch / tenant-account isolation 不得因 undefined 通过）；新增 NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE 与 missing-field 测试"
+        ]
       }
     },
     "safe_continuation_queue": [
-      "FINAL — 等待 ChatGPT 独立审计裁决（PASS → CLOSED；PASS WITH REVISE / REVISE → 立即最小修订并重新送审；FAIL → 修复后重新送审）"
+      "AEL FINAL2 — single runtime admission surface + durable OAuth transition CAS + complete non-bypassable gate proof（按 MSG-20261007-01 的三条 CHANGE 最小修订；修完跑定向测试 + api tsc + 相关回归，commit/push 后向同一会话发简短复审请求）",
+      "FINAL — 等待 AEL FINAL2 复审裁决（PASS → 最终 closure 并删除 watchdog；REVISE/FAIL → 继续最小修订）"
     ],
     "hard_boundaries": [
       "REAL_PROVIDER_WRITE",
