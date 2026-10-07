@@ -8,3 +8,4 @@ export * from './goal-validator';
 export * from './goal-capability-resolver';
 export * from './goal-task-planner';
 export * from './goal-runtime-adapter';
+export * from './goal-runtime-binding';
