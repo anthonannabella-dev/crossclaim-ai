@@ -6,6 +6,8 @@ import { getServerLocale, getServerMessages } from '../i18n/server';
 import OpportunityActions from './components/opportunity-actions';
 import OpportunityCard from './components/opportunity-card';
 import InlineNotice from './components/ui/inline-notice';
+import GoalConsole from './components/ui/goal-console';
+import RecoveryHeadlineCards from './components/ui/recovery-headline-cards';
 import PlatformCard from './components/ui/platform-card';
 import SecurityStrip from './components/ui/security-strip';
 import SectionCard from './components/ui/section-card';
@@ -13,10 +15,14 @@ import StatusBadge from './components/ui/status-badge';
 import SummaryCards from './components/ui/summary-cards';
 import TaskCenter from './components/ui/task-center';
 import {
-  buildCurrencySummaries,
+  buildCurrencySummaries,  buildHeadlineCards,
   buildOpportunityView,
   buildPlatformCards,
   buildTasks,
+  buildConnectionTasks,
+  buildAuthorizationTasks,
+  buildTaskKindLabels,
+  mergeNeedsAttention,
   selectPrimaryCta,
   type AccountsResponse,
   type MoneyBucket,
@@ -78,18 +84,28 @@ export default async function DashboardPage() {
   const me = await apiGet<Me>('/auth/me');
   if (!me.ok || !me.body) return <LoginPrompt t={t} />;
 
-  const [money, accounts, recoveryStates, opportunities, imports] = await Promise.all([
+  const [money, accounts, recoveryStates, opportunities, imports, goals] = await Promise.all([
     apiGet<MoneyResponse>('/recovery-money'),
     apiGet<AccountsResponse>('/accounts'),
     apiGet<{ items: RecoveryStateItem[] }>('/recovery-states'),
     apiGet<{ items: OpportunityApiItem[]; hasMore: boolean }>('/opportunities?limit=5'),
     apiGet<{ items: ImportBatchItem[] }>('/imports'),
+    apiGet<{ items: Array<{ goalId: string; status: string; intent: string }> }>('/agent-goals'),
   ]);
 
   const summaries = buildCurrencySummaries(money.body?.organization.byCurrency, t);
-  const tasks = buildTasks(recoveryStates.body?.items, t);
+  const recoveryTasks = buildTasks(recoveryStates.body?.items, t);
+  // P5 / P9: one merged Needs Your Attention list (recovery states + account tasks + goals awaiting authorization)
+  const tasks = mergeNeedsAttention(
+    recoveryTasks,
+    buildConnectionTasks(accounts.body, t),
+    buildAuthorizationTasks(goals.body?.items, t),
+  );
   const platforms = buildPlatformCards(accounts.body, t);
   const opportunityViews = (opportunities.body?.items ?? []).map((item) => buildOpportunityView(item, t));
+
+  // P4 headline cards: amounts come verbatim from /recovery-money per currency (no client-side math)
+  const headlineCards = buildHeadlineCards(money.body?.organization.byCurrency, tasks.length, t);
 
   const connectedAccounts = (accounts.body?.platforms ?? []).reduce(
     (total, group) =>
@@ -109,6 +125,10 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <GoalConsole labels={t.goalConsole} />
+
+      <RecoveryHeadlineCards cards={headlineCards} note={t.goalConsole.perCurrencyNote} />
+
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t.customerShell.brandNote}</p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900 sm:text-3xl">{t.dashboardPage.heroTitle}</h1>
@@ -165,7 +185,13 @@ export default async function DashboardPage() {
         {recoveryStates.ok ? (
           <TaskCenter
             tasks={tasks}
-            labels={{ impact: t.dashboardPage.taskImpact, why: t.dashboardPage.taskWhyUser, empty: t.dashboardPage.tasksEmpty }}
+            labels={{
+              title: t.dashboardPage.tasksTitle,
+              impact: t.dashboardPage.taskImpact,
+              why: t.dashboardPage.taskWhyUser,
+              empty: t.dashboardPage.tasksEmpty,
+              kindLabels: buildTaskKindLabels(t),
+            }}
           />
         ) : (
           <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>

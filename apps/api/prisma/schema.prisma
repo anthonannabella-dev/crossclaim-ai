@@ -3836,3 +3836,132 @@ model ProviderCaseResponseInterpretation {
   @@unique([organizationId, id])
   @@index([organizationId, platformAccountId, providerCaseId, recordedAt])
 }
+
+// ============================================================
+// AGENT EXPERIENCE LAYER / P0（HOST 2026-10-07 授权）
+// Standing Authorization 耐久承载：追加式版本 + 撤销留痕 + tenant/account scoped
+// 最小 Delta 见 docs/releases/STANDING-AUTHORIZATION-PERSISTENCE-DELTA-REQUEST.md
+// ============================================================
+
+/// 长期授权（standing authorization）的耐久记录。只由 server-side 流程写入；
+/// 追加式版本（修改 = 新 authorizationVersion 行）；撤销留痕；不授予任何 external write。
+model StandingAuthorization {
+  id                   String    @id @default(uuid())
+  organizationId       String
+  platformAccountId    String
+  provider             String
+  allowedActionTypes   Json
+  monetaryLimitUsd     Decimal   @db.Decimal(18, 4)
+  currency             String
+  domain               String
+  jurisdiction         String
+  effectiveAt          DateTime
+  expiresAt            DateTime
+  authorizationVersion Int
+  termsPolicyVersion   String
+  consentEvidenceRef   String
+  revocationState      String    @default("ACTIVE")
+  revokedAt            DateTime?
+  revokedBy            String?
+  revocationReason     String?
+  scopeDigest          String
+  createdAt            DateTime
+
+  @@unique([organizationId, platformAccountId, provider, authorizationVersion])
+  @@unique([organizationId, id])
+  @@index([organizationId, platformAccountId, provider, revocationState, expiresAt])
+}
+
+// ============================================================
+// AGENT EXPERIENCE LAYER / P3（HOST 2026-10-07 授权）
+// 最小 Goal 持久化：客户意图（AgentGoal）+ 执行投影（AgentGoalRun）
+// **不是** Opportunity / Case / Claim / Evidence / Money / Settlement 的 SSOT
+// ============================================================
+
+/// 客户目标（Customer Intent）。只表达「想得到什么结果」；不携带权限、不决定金额与资格。
+model AgentGoal {
+  id             String   @id @default(uuid())
+  organizationId String
+  createdBy      String
+  rawUserIntent  String
+  normalizedGoal Json
+  status         String   @default("PROPOSED")
+  createdAt      DateTime
+  updatedAt      DateTime
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status, createdAt])
+}
+
+/// 目标的一次执行投影（Execution Projection）。只引用既有 task / opportunity / case lineage，
+/// 不复制任何业务事实，也不构成第二事实源。
+model AgentGoalRun {
+  id             String    @id @default(uuid())
+  organizationId String
+  goalId         String
+  status         String    @default("QUEUED")
+  startedAt      DateTime
+  completedAt    DateTime?
+  summary        Json?
+  createdAt      DateTime
+  updatedAt      DateTime
+
+  @@unique([organizationId, id])
+  @@index([organizationId, goalId, startedAt])
+}
+
+// ============================================================
+// AGENT EXPERIENCE LAYER / P9（HOST 2026-10-07 授权）
+// B2 缺口最小补强：durable OAuth 授权会话 + 连接同步检查点
+//   * 不建第二连接事实源：ConnectionSyncState 是 SourceConnection 的检查点投影
+//   * 原始 OAuth state 永不落库（只存 sha256 摘要）
+// ============================================================
+
+/// OAuth 授权会话（redirect → callback → verified connection → resume goal 的 durable 承载）
+model OAuthAuthorizationSession {
+  id             String    @id @default(uuid())
+  organizationId String
+  userId         String
+  provider       String
+  callbackPath   String
+  /// state 的 sha256（原始 state 不落库）
+  stateDigest    String
+  /// PKCE verifier：仅服务端使用，绝不出现在响应 / 日志 / 前端
+  codeVerifier   String?
+  redirectTarget String
+  /// callback 成功后需要恢复的原始目标（可为空）
+  resumeGoalId   String?
+  status         String    @default("PENDING")
+  failureReason  String?
+  connectionId   String?
+  credentialRef  String?
+  initiatedAt    DateTime
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime
+  updatedAt      DateTime
+
+  @@unique([organizationId, stateDigest])
+  @@unique([organizationId, id])
+  @@index([organizationId, provider, status, expiresAt])
+}
+
+/// 连接同步检查点（每个连接恰好一条；**不是**第二连接事实源）
+model ConnectionSyncState {
+  id                   String    @id @default(uuid())
+  organizationId       String
+  connectionId         String
+  cursor               String?
+  lastSuccessfulSyncAt DateTime?
+  lastAttemptAt        DateTime?
+  lastError            String?
+  lastErrorAt          DateTime?
+  consecutiveFailures  Int       @default(0)
+  retryState           String    @default("IDLE")
+  nextRetryAt          DateTime?
+  createdAt            DateTime
+  updatedAt            DateTime
+
+  @@unique([organizationId, connectionId])
+  @@unique([organizationId, id])
+}

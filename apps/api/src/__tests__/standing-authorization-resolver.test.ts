@@ -69,7 +69,15 @@ function input(
       providerTermsFlags: [],
       regulatoryFlags: [],
     },
-    gates: { productionGate: 'SATISFIED' },
+    gates: {
+      productionGate: 'SATISFIED',
+      platformEnablement: true,
+      killSwitchActive: false,
+      providerCapabilityReady: true,
+      credentialReady: true,
+      regulatoryRestriction: null,
+      tenantAccountIsolationOk: true,
+    },
     guard: {
       decision: 'REQUIRE_APPROVAL',
       code: 'ACTION_GUARD_HUMAN_APPROVAL_REQUIRED',
@@ -222,6 +230,19 @@ describe('SA-3b 解析器 — 回退 HITL 与 gate 阻断', () => {
       }),
     );
     expect(poa?.decision).toBe('DENY');
+  });
+
+  it('AEL FINAL2 / C3：非可绕过 gate 证明缺失 / UNKNOWN → DENY（授权无权满足）', async () => {
+    const missing = await resolveStandingAuthorizationAlternative(input(authorization(), { gates: {} }));
+    expect(missing?.decision).toBe('DENY');
+    expect(missing?.authorizedBy).toBe('NONE');
+
+    const unknownProduction = await resolveStandingAuthorizationAlternative(
+      input(authorization(), {
+        gates: { productionGate: 'UNKNOWN', killSwitchActive: false, tenantAccountIsolationOk: true },
+      }),
+    );
+    expect(unknownProduction?.decision).toBe('DENY');
   });
 
   it('Guard 已 DENY → DENY（授权不得把 Guard 的拒绝变成放行）', async () => {

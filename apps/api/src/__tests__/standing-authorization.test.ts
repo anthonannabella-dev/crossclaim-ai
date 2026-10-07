@@ -335,7 +335,11 @@ describe('SA 验收 9–12：POA 边界 / 生产 gate / exactly-once / 版本失
         },
         NOW,
       ),
-      gates: { productionGate: 'SATISFIED' },
+      gates: {
+        productionGate: 'SATISFIED',
+        killSwitchActive: false,
+        tenantAccountIsolationOk: true,
+      },
       now: NOW,
     });
     expect(result.riskTier).toBe('TIER_3_REGULATED_HIGH_RISK');
@@ -374,6 +378,67 @@ describe('SA 验收 9–12：POA 边界 / 生产 gate / exactly-once / 版本失
       expect(result.decision).toBe('DENY');
       expect(result.blockingGates).toContain(gate);
     }
+  });
+
+  it('⑩c AEL FINAL2 / C3：非可绕过 gate 证明缺失 / UNKNOWN → DENY（fail-closed，而非 REQUIRE_APPROVAL）', () => {
+    // 完全缺失的快照：核心三项都没有 server-owned 证明
+    const empty = decide({ gates: {} });
+    expect(empty.decision).toBe('DENY');
+    expect(empty.authorizedBy).toBe('NONE');
+    expect(empty.externalWritePerformed).toBe(false);
+    expect(empty.incompleteGateProofs).toEqual(
+      expect.arrayContaining(['killSwitch', 'productionGate', 'tenantAccountIsolation']),
+    );
+    expect(empty.blockingGates).toEqual(
+      expect.arrayContaining(['killSwitch', 'productionGate', 'tenantAccountIsolation']),
+    );
+    expect(empty.reasonCodes).toContain('NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE:productionGate');
+    expect(empty.reasonCodes).toContain('NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE:killSwitch');
+    expect(empty.reasonCodes).toContain('NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE:tenantAccountIsolation');
+
+    // productionGate = UNKNOWN 不是证明（未知 ≠ 满足）
+    const unknown = decide({
+      gates: { productionGate: 'UNKNOWN', killSwitchActive: false, tenantAccountIsolationOk: true },
+    });
+    expect(unknown.decision).toBe('DENY');
+    expect(unknown.reasonCodes).toContain('NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE:productionGate');
+
+    // action 派生：guard 声明 platformEnablement 时，缺失证明同样 DENY
+    const derivedGuard = guardFor('claim.submit');
+    expect(derivedGuard.requiredGates).toContain('platformEnablement');
+    const derivedMissing = decide({
+      guard: derivedGuard,
+      request: {
+        organizationId: ORG,
+        platformAccountId: ACCT,
+        provider: 'AMAZON',
+        action: 'claim.submit',
+        amountUsd: 500,
+        currency: 'USD',
+        domain: 'PLATFORM',
+        jurisdiction: 'US',
+        expectedAuthorizationVersion: 1,
+        expectedTermsPolicyVersion: 'terms/v1',
+      },
+      gates: { productionGate: 'SATISFIED', killSwitchActive: false, tenantAccountIsolationOk: true },
+    });
+    expect(derivedMissing.decision).toBe('DENY');
+    expect(derivedMissing.incompleteGateProofs).toContain('platformEnablement');
+    expect(derivedMissing.reasonCodes).toContain('NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE:platformEnablement');
+
+    // 给出显式证明后，快照本身不再阻断
+    const derivedProven = decide({
+      guard: { ...derivedGuard, decision: 'ALLOW', code: 'ACTION_GUARD_ALLOWED' },
+      gates: {
+        productionGate: 'SATISFIED',
+        platformEnablement: true,
+        killSwitchActive: false,
+        tenantAccountIsolationOk: true,
+      },
+    });
+    expect(derivedProven.incompleteGateProofs).toEqual([]);
+    expect(derivedProven.blockingGates).toEqual([]);
+    expect(derivedProven.decision).not.toBe('DENY');
   });
 
   it('⑪ 重复调用保持 exactly-once 语义：判定稳定、摘要一致、无任何执行副作用', () => {

@@ -6,6 +6,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import CustomerShell from '../app/components/customer-shell';
+import { buildCustomerNav } from '../app/components/nav-model';
 import ConnectionManager, { type ConnectionItem } from '../app/components/connection-manager';
 import AccountManagementView from '../app/accounts/account-management-view';
 import RecoveryPipeline from '../app/components/ui/recovery-pipeline';
@@ -23,15 +24,25 @@ import {
   buildCurrencySummaries,
   buildOpportunityView,
   buildPlatformCards,
+  buildHeadlineCards,
   buildTasks,
+  buildConnectionTasks,
+  buildTaskKindLabels,
+  mergeNeedsAttention,
+  buildAuthorizationTasks,
+  TASK_KINDS,
   selectPrimaryCta,
   type AccountsResponse,
   type MoneyBucket,
   type OpportunityApiItem,
   type RecoveryStateItem,
 } from '../app/lib/dashboard-view';
-import enUS from '../i18n/dictionaries/en-US';
+import enUS from '../i18n/dictionaries/en-US';import GoalConsole from '../app/components/ui/goal-console';
+import AgentRunViewComponent from '../app/recoveries/runs/[id]/agent-run-view';
+import AuthorizationList from '../app/authorizations/authorization-list';
+import RecoveryHeadlineCards from '../app/components/ui/recovery-headline-cards';
 import zhCN from '../i18n/dictionaries/zh-CN';
+import { buildAgentRunView } from '../app/lib/agent-run-view';
 
 const failures: string[] = [];
 const results: string[] = [];
@@ -202,14 +213,26 @@ check('task.cta.href.by.scope', tasks[0]!.ctaHref === '/connections' && tasks[0]
 const taskHtml = render(
   <TaskCenter
     tasks={tasks}
-    labels={{ impact: zhCN.dashboardPage.taskImpact, why: zhCN.dashboardPage.taskWhyUser, empty: zhCN.dashboardPage.tasksEmpty }}
+    labels={{
+      title: zhCN.dashboardPage.tasksTitle,
+      impact: zhCN.dashboardPage.taskImpact,
+      why: zhCN.dashboardPage.taskWhyUser,
+      empty: zhCN.dashboardPage.tasksEmpty,
+      kindLabels: buildTaskKindLabels(zhCN),
+    }}
   />,
 );
 check('task.renders.what.impact.why', taskHtml.includes('授权已过期') && taskHtml.includes(zhCN.dashboardPage.taskImpactRecoverable) && taskHtml.includes(zhCN.dashboardPage.taskWhyUser));
 const emptyTaskHtml = render(
   <TaskCenter
     tasks={[]}
-    labels={{ impact: zhCN.dashboardPage.taskImpact, why: zhCN.dashboardPage.taskWhyUser, empty: zhCN.dashboardPage.tasksEmpty }}
+    labels={{
+      title: zhCN.dashboardPage.tasksTitle,
+      impact: zhCN.dashboardPage.taskImpact,
+      why: zhCN.dashboardPage.taskWhyUser,
+      empty: zhCN.dashboardPage.tasksEmpty,
+      kindLabels: buildTaskKindLabels(zhCN),
+    }}
   />,
 );
 check('task.empty.state', emptyTaskHtml.includes(zhCN.dashboardPage.tasksEmpty));
@@ -438,6 +461,220 @@ const statusHtml = render(
 );
 check('a11y.info.role.status', statusHtml.includes('role="status"'));
 check('a11y.notice.tone.classes', alertHtml.includes('border-red-200') && statusHtml.includes('border-sky-200'));
+// AGENT EXPERIENCE LAYER / P4：Goal Console + 四张核心结果卡
+const goalConsoleHtml = render(<GoalConsole labels={zhCN.goalConsole} />);
+check('goal.console.title', goalConsoleHtml.includes(zhCN.goalConsole.title));
+check('goal.console.suggestions', goalConsoleHtml.includes(zhCN.goalConsole.suggestion1) && goalConsoleHtml.includes(zhCN.goalConsole.suggestion5));
+check('goal.console.submit', goalConsoleHtml.includes(zhCN.goalConsole.submit));
+check('goal.console.no.fake.execution', !goalConsoleHtml.includes('已提交') && !goalConsoleHtml.includes('执行完成'));
+check('goal.console.en.parity', render(<GoalConsole labels={enUS.goalConsole} />).includes(enUS.goalConsole.title));
+
+const headlineCards = buildHeadlineCards([bucket], 3, zhCN);
+const headlineHtml = render(<RecoveryHeadlineCards cards={headlineCards} note={zhCN.goalConsole.perCurrencyNote} />);
+check('headline.cards.count', headlineCards.length === 4);
+check('headline.recoverable', headlineHtml.includes(zhCN.goalConsole.recoverable));
+check('headline.in.recovery', headlineHtml.includes(zhCN.goalConsole.inRecovery));
+check('headline.recovered', headlineHtml.includes(zhCN.goalConsole.recovered));
+check('headline.needs.attention', headlineHtml.includes(zhCN.goalConsole.needsAttention));
+check('headline.per.currency.raw', headlineHtml.includes('USD') && headlineHtml.includes(bucket.discovered));
+check('headline.needs.attention.count', headlineHtml.includes('>3<'));
+check('headline.no.cross.currency.sum', !headlineHtml.includes('8760.00') && !headlineCards.some((card) => card.values.length > 1));
+check('headline.per.currency.note', headlineHtml.includes(zhCN.goalConsole.perCurrencyNote));
+
+// AGENT EXPERIENCE LAYER / P5：Needs Your Attention（单一待办中心，类别可承载）
+const connAccounts: AccountsResponse = {
+  platforms: [
+    {
+      platform: 'AMAZON',
+      accounts: [
+        {
+          platform: 'AMAZON',
+          displayName: 'Amazon US',
+          status: 'ACTIVE',
+          connections: [
+            {
+              status: 'NEEDS_AUTH',
+              channel: 'AMAZON_FBA',
+              domain: 'PLATFORM',
+              lastSyncAt: null,
+              lastErrorAt: null,
+              actions: { reconnect: { available: true, reason: 'REAL_OAUTH_EXTERNAL_GATE' } },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  unboundLegacyConnections: [],
+};
+const connTasks = buildConnectionTasks(connAccounts, zhCN);
+check('tasks.connection.reauth.kind', connTasks[0]?.kind === 'CONNECTION_REAUTH');
+check('tasks.connection.reauth.cta', connTasks[0]?.ctaLabel === zhCN.needsAttention.reconnectCta && connTasks[0]?.ctaHref === '/connections');
+const mergedTasks = mergeNeedsAttention(tasks, connTasks, connTasks);
+check('tasks.merge.dedupe', mergedTasks.length === tasks.length + connTasks.length);
+const kindLabels = buildTaskKindLabels(zhCN);
+check('tasks.kind.labels.all', TASK_KINDS.every((kind) => (kindLabels[kind] ?? '').length > 0));
+const taskCenterHtml = render(
+  <TaskCenter
+    tasks={connTasks}
+    labels={{
+      title: zhCN.dashboardPage.tasksTitle,
+      impact: zhCN.dashboardPage.taskImpact,
+      why: zhCN.dashboardPage.taskWhyUser,
+      empty: zhCN.dashboardPage.tasksEmpty,
+      kindLabels,
+    }}
+  />,
+);
+check('tasks.center.reauth.copy', taskCenterHtml.includes(zhCN.needsAttention.reconnectBody));
+check('tasks.center.kind.badge', taskCenterHtml.includes(zhCN.needsAttention.kindConnectionReauth));
+check('tasks.center.list.semantics', taskCenterHtml.includes('role="list"') && taskCenterHtml.includes('role="listitem"'));
+check('tasks.center.no.raw.code', !taskCenterHtml.includes('REAL_OAUTH_EXTERNAL_GATE') && !taskCenterHtml.includes('NEEDS_AUTH'));
+
+// AGENT EXPERIENCE LAYER / P6：执行详情（业务语言，不暴露内部实现）
+const agentRunPayload = {
+  goalId: 'agentgoal-demo',
+  status: 'PROPOSED',
+  intent: '检查我过去12个月所有可以追回的钱',
+  interpretation: {
+    goalType: 'DISCOVER_AND_RECOVER',
+    domains: ['PLATFORM', 'CUSTOMS'],
+    timeRange: { kind: 'LAST_N_MONTHS', months: 12 },
+    executionMode: 'AUTO_WHEN_AUTHORIZED',
+    approvalThreshold: { currency: 'USD', amount: 1000 },
+  },
+  createdAt: '2026-10-07T00:00:00.000Z',
+  runs: [] as Array<{ runId: string; status: string; startedAt: string; completedAt: string | null; summary: unknown }>,
+};
+const agentRunView = buildAgentRunView(agentRunPayload, zhCN);
+const agentRunHtml = render(<AgentRunViewComponent view={agentRunView} t={zhCN} />);
+check('agent.run.intent', agentRunHtml.includes(agentRunPayload.intent));
+check('agent.run.scope.business', agentRunHtml.includes(zhCN.agentRun.scopePlatform) && agentRunHtml.includes(zhCN.agentRun.scopeCustoms));
+check('agent.run.time.range', agentRunHtml.includes(zhCN.agentRun.lastNMonths.replace('{months}', '12')));
+check('agent.run.progress.steps', agentRunHtml.includes(zhCN.agentRun.stepRecorded) && agentRunHtml.includes(zhCN.agentRun.stepSummary));
+check('agent.run.results.empty.honest', agentRunHtml.includes(zhCN.agentRun.resultsEmpty));
+check('agent.run.hold.wording', agentRunHtml.includes(zhCN.agentRun.holdNote));
+check('agent.run.no.internals', !/runner|judge|policy engine|model router|task:recovery/.test(agentRunHtml));
+
+const agentRunWithSummary = buildAgentRunView(
+  {
+    ...agentRunPayload,
+    status: 'RUNNING',
+    runs: [
+      {
+        runId: 'run-1',
+        status: 'RUNNING',
+        startedAt: '2026-10-07T01:00:00.000Z',
+        completedAt: null,
+        summary: {
+          opportunitiesFound: 37,
+          needsApproval: 2,
+          waitingEvidence: 6,
+          recovered: 0,
+          estimatedRecoverableByCurrency: [{ currency: 'USD', amount: '18,420.00' }],
+        },
+      },
+    ],
+  },
+  zhCN,
+);
+const agentRunSummaryHtml = render(<AgentRunViewComponent view={agentRunWithSummary} t={zhCN} />);
+check('agent.run.results.rendered', agentRunSummaryHtml.includes('37') && agentRunSummaryHtml.includes('USD 18,420.00'));
+check('agent.run.no.cross.currency', agentRunWithSummary.results.filter((row) => row.key.startsWith('estimated:')).length === 1);
+check('agent.run.activity.timeline', agentRunSummaryHtml.includes(zhCN.agentRun.activityGoalRecorded) && agentRunSummaryHtml.includes(zhCN.agentRun.activityRunStarted));
+
+// AGENT EXPERIENCE LAYER / P7：授权管理面（只读 + 撤销，状态全部来自后端）
+const authItem = {
+  authorizationId: 'sa-p7-demo',
+  provider: 'AMAZON',
+  platformAccountId: 'acct-p7-1',
+  allowedActionTypes: ['claim.prepare', 'recovery.manual_submit'],
+  monetaryLimitUsd: 1000,
+  currency: 'USD',
+  domain: 'PLATFORM',
+  jurisdiction: 'US',
+  effectiveAt: '2026-10-01T00:00:00.000Z',
+  expiresAt: '2027-10-01T00:00:00.000Z',
+  authorizationVersion: 1,
+  termsPolicyVersion: 'terms/v1',
+  revocationState: 'ACTIVE',
+  revokedAt: null as string | null,
+  revokedBy: null as string | null,
+  revocationReason: null as string | null,
+  scopeDigest: 'ab'.repeat(32),
+  createdAt: '2026-10-01T00:00:00.000Z',
+};
+const authHtml = render(<AuthorizationList items={[authItem]} t={zhCN} />);
+check('auth.page.limit', authHtml.includes('USD 1000'));
+check('auth.page.action.label', authHtml.includes(zhCN.authorizationPage.actionRecoveryManualSubmit));
+check('auth.page.status.active', authHtml.includes(zhCN.authorizationPage.statusActive));
+check('auth.page.automation.on', authHtml.includes(zhCN.authorizationPage.automationOn));
+check('auth.page.revoke.cta', authHtml.includes(zhCN.authorizationPage.revokeCta));
+check('auth.page.scope.digest.advanced', authHtml.includes(zhCN.authorizationPage.scopeRefLabel) && authHtml.includes(authItem.scopeDigest));
+check('auth.page.boundary.note', authHtml.includes(zhCN.authorizationPage.boundaryNote));
+check('auth.page.hold.note', authHtml.includes(zhCN.authorizationPage.holdNote));
+check('auth.page.no.code.as.main.copy', !authHtml.split(zhCN.authorizationPage.advancedLabel)[0].includes('recovery.manual_submit'));
+check('auth.page.no.scope.editing', !authHtml.includes('name="allowedActionTypes"') && !authHtml.includes('name="monetaryLimitUsd"'));
+
+const revokedAuthHtml = render(
+  <AuthorizationList
+    items={[
+      {
+        ...authItem,
+        revocationState: 'REVOKED',
+        revokedAt: '2026-10-07T00:00:00.000Z',
+        revokedBy: 'user-1',
+        revocationReason: 'customer revoked',
+      },
+    ]}
+    t={zhCN}
+  />,
+);
+check('auth.page.revoked.note', revokedAuthHtml.includes('customer revoked'));
+check('auth.page.revoked.no.cta', !revokedAuthHtml.includes(zhCN.authorizationPage.revokeCta));
+const emptyAuthHtml = render(<AuthorizationList items={[]} t={zhCN} />);
+check('auth.page.empty.honest', emptyAuthHtml.includes(zhCN.authorizationPage.emptyHint));
+
+// AGENT EXPERIENCE LAYER / P8：Navigation Progressive Disclosure（不删任何 route）
+check('nav.primary.recoveries', shellHtml.includes(zhCN.customerShell.navRecoveries));
+check('nav.primary.needs.attention', shellHtml.includes(zhCN.customerShell.navNeedsAttention));
+check('nav.primary.connections', shellHtml.includes(zhCN.customerShell.navConnections));
+check('nav.group.more', shellHtml.includes(zhCN.customerShell.groupMore));
+check('nav.group.advanced', shellHtml.includes(zhCN.customerShell.groupAdvanced));
+const REQUIRED_HREFS = [
+  '/',
+  '/recoveries',
+  '/money',
+  '/connections',
+  '/opportunities',
+  '/cases',
+  '/customs',
+  '/accounts',
+  '/upload',
+  '/billing',
+  '/plan',
+  '/authorizations',
+];
+check(
+  'nav.no.route.removed',
+  REQUIRED_HREFS.every((href) => shellHtml.includes('href="' + href + '"')),
+);
+check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
+
+// AGENT EXPERIENCE LAYER / P9：按需授权（目标等待授权 → Needs Your Attention → 去授权后继续原目标）
+const pendingGoalTasks = buildAuthorizationTasks(
+  [{ goalId: 'agentgoal-a', status: 'PROPOSED', intent: '检查我过去12个月可以追回的钱' }],
+  zhCN,
+);
+check('authz.task.kind', pendingGoalTasks.length === 1 && pendingGoalTasks[0].kind === 'AUTHORIZATION');
+check('authz.task.cta', pendingGoalTasks[0].ctaHref === '/authorizations');
+check('authz.task.resume.copy', pendingGoalTasks[0].why === zhCN.needsAttention.authorizationGoalBody);
+const authorizedGoalTasks = buildAuthorizationTasks(
+  [{ goalId: 'agentgoal-b', status: 'ADMITTED', intent: 'x' }],
+  zhCN,
+);
+check('authz.task.disappears.after.authorization', authorizedGoalTasks.length === 0);
+check('authz.customs.reuse.link', zhCN.authorizationPage.customsReuseCta.length > 0 && zhCN.authorizationPage.customsReuseBody.length > 0);
 
 console.log(results.join('\n'));
 if (failures.length > 0) {

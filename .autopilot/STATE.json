@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "a15169a4",
+  "head": "45a8fbad",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T09:48:49.310Z",
+  "updated_at": "2026-10-07T07:12:22.405Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（SA-1…SA-4b、FE-1、BE-1 完成并 push；REL-1 / FINAL 待执行）",
-  "next_execution_unit": "REL-1 —— main 与 gate/7 divergence 处置（查明 main 独有 commit 5a340bc0、安全 integration plan、合并前全门禁）。",
+  "continuous_execution": "CLOSED（AEL 程序收口：P0–P9 + FINAL + AEL FINAL2 全部 PASS/CLOSED；不再自动推进）",
+  "next_execution_unit": "NONE —— AEL 程序 CLOSED；后续（真实 provider / 外写 / 支付 / production enablement / systemd 实机）必须先获新的独立授权",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T09:48:49.310Z",
-  "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成 BE-1（a15169a4）：按 HOST 列出的后端能力面逐项扫描并给出 B1–B10 GAP ANALYSIS（纯审计、无代码改动）——B1 Fastify = DESIGN_ONLY 且按要求不重写 Node HTTP；B2 = PARTIAL（registry/契约/能力/凭据边界已有；OAuthAuthorizationSession / ConnectionSyncState / SecretVault 未一等建模，其中 SecretVault 在无生产凭据前 HOLD_EXTERNAL）；B3/B4/B10 = IMPLEMENTED（只读契约/投影 API）；B5/B6/B7/B8/B9 = PARTIAL 并逐项给出缺口与「是否值得实施」判断（明确不新建双路径引擎、不新增第二事实源）；确认 4000+ 回归基线未破坏，api tsc 0、prisma validate valid。判定 BACKEND_PRODUCTIZATION = PASS。",
-  "last_action_at": "2026-10-06T09:48:49.310Z",
-  "next_action": "先查明 main 独有 commit 内容与是否已在 gate/7 体现，再产出无 force-push、不丢 main 提交的 integration plan；随后跑合并前全门禁（fresh DB/migrations/prisma validate/api tsc/web tsc/web build/full regression/security negative/tenant isolation/concurrency/SI-RSI/SA/Customs golden path），全绿才建 release/integration HEAD。",
-  "current_head": "a15169a4",
-  "last_completed_head": "a15169a4",
-  "reviewed_head": "a15169a4",
+  "last_tick_at": "2026-10-07T07:12:22.405Z",
+  "state": "AGENT_EXPERIENCE_LAYER_CLOSED",
+  "last_action": "AEL 程序 FINAL CLOSURE：外部独立复审裁决 MSG-20261007-02 = PASS / CLOSED（FINAL3_REQUIRED = NO、CHANGES = 无阻断性 CHANGE），已逐字归档 AI-ARCHITECT-INBOX.md（FNV1A_MATCH ef621411 + FULL_COPY_OK 141 行一致）；收口报告 docs/releases/AGENT-EXPERIENCE-LAYER-FINAL-CLOSURE.md（提交 45a8fbad）。P0–P9 + FINAL + AEL FINAL2（C1 25bf985b / C2 9d2d7c6b / C3 3c426361 / 报告 b0e9400f）全部 CLOSED / PUSHED；受审代码 HEAD = 78eeb2cc。全量回归 4550/4551（唯一失败 = 既有 P2E-DB5 并行隔离 flake，单跑 20/20）；api tsc 0；web tsc 0；prisma validate valid；92 migrations；触发器清单 73 OK。EXECUTION_ACTIVE=false、SAFE_CONTINUATION_QUEUE=[]、180s watchdog 已删除；全部 HOLD / FORBIDDEN 不变，PRODUCTION_READY = NO。",
+  "last_action_at": "2026-10-07T07:12:22.405Z",
+  "next_action": "无（AEL 程序已收口）。裁决 MSG-20261007-02 = PASS / CLOSED 已逐字归档并校验（FNV1A ef621411 / FULL_COPY_OK）；EXECUTION_ACTIVE=false、SAFE_CONTINUATION_QUEUE=[]、watchdog 已删除。任何后续动作必须来自新的独立授权单元 + 独立审计。",
+  "current_head": "45a8fbad",
+  "last_completed_head": "45a8fbad",
+  "reviewed_head": "42161550",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5168,10 +5168,7 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [
-    "REL-1 main 与 gate/7 divergence 处置：查明 main 独有 commit 5a340bc0 内容、判断保留/移植、生成安全 integration plan；合并前跑 fresh DB/migrations/prisma validate/api tsc/web tsc/web build/full regression/security negative/tenant isolation/concurrency/SI-RSI/SA/Customs golden path；全绿后建立 release/integration HEAD。",
-    "FINAL 输出最终状态报告（FRONTEND_PRODUCTIZATION / BACKEND_PRODUCTIZATION / SI_RSI_INTEGRATION / STANDING_AUTHORIZATION / CUSTOMS_DUTY_RECOVERY / REAL_PROVIDER_INTEGRATION / REAL_EXTERNAL_WRITE / PAYMENT_AUTOPAY / B1_FASTIFY / B2_INTEGRATION_FOUNDATION / B4_B10_GAP_STATUS / MAIN_DIVERGENCE_RESOLUTION / FULL_REGRESSION / WEB_BUILD / API_TSC / WEB_TSC / FINAL_RELEASE_HEAD / PRODUCTION_READY / HOST_ACTION_REQUIRED）。"
-  ],
+  "safe_continuation_queue": [],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -5195,6 +5192,77 @@
   },
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
+  "agent_experience_layer_final_closure": {
+    "program": "AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION",
+    "state": "AGENT_EXPERIENCE_LAYER_CLOSED",
+    "verdict": "MSG-20261007-02 = PASS / CLOSED（FINAL3_REQUIRED = NO；CHANGES = 无阻断性 CHANGE）",
+    "archive": "AI-ARCHITECT-INBOX.md ### [MSG-20261007-02]",
+    "archive_integrity": "FNV1A_MATCH ef621411 + FULL_COPY_OK（原文 141 行 / 归档 141 行 / 缺失 0 / 多出 0）",
+    "reviewed_code_head": "78eeb2cc78f194f1c299fb7d15f98c69cadb0c8e",
+    "last_code_change_head": "3c426361",
+    "closure_report": "docs/releases/AGENT-EXPERIENCE-LAYER-FINAL-CLOSURE.md",
+    "closure_head": "45a8fbad",
+    "prior_verdict": "MSG-20261007-01 = PASS WITH REVISE / NOT CLOSED（三条 CHANGE 已在 AEL FINAL2 闭合）",
+    "units": "P0–P9 + FINAL + AEL FINAL2（C1 25bf985b / C2 9d2d7c6b / C3 3c426361 / 报告 b0e9400f）全部 CLOSED / PUSHED",
+    "returns": {
+      "AGENT_EXPERIENCE_LAYER": "PASS / CLOSED",
+      "STANDING_AUTHORIZATION_DURABLE": "PASS",
+      "GOAL_COMPILER": "PASS",
+      "GOAL_RUNTIME_WIRING": "PASS",
+      "GOAL_RUNTIME_SINGLE_ENTRY": "PASS / CLOSED",
+      "HOME_GOAL_CONSOLE": "PASS",
+      "AGENT_RUN_UI": "PASS",
+      "NEEDS_ATTENTION": "PASS",
+      "AUTHORIZATION_UI": "PASS",
+      "NAVIGATION_PROGRESSIVE_DISCLOSURE": "PASS",
+      "OAUTH_AUTHORIZATION_SESSION": "PASS",
+      "OAUTH_SUCCESS_STATE_MACHINE": "PASS / CLOSED",
+      "CONNECTION_SYNC_STATE": "PASS",
+      "NON_BYPASSABLE_GATE_FAIL_CLOSED": "PASS / CLOSED",
+      "ACTION_GUARD_SINGLE_CATALOG": "PASS",
+      "CAPABILITY_LOSS": "0",
+      "ONE_SI_RUNTIME": "YES",
+      "SECOND_RUNTIME": "0",
+      "SECOND_SCHEDULER": "0",
+      "SECOND_GUARD": "0",
+      "FULL_REGRESSION": "4550/4551（唯一失败 = 既有 P2E-DB5 并行隔离 flake，单跑 20/20）",
+      "FINAL_AUDIT": "PASS / CLOSED",
+      "PRODUCTION_READY": "NO"
+    },
+    "evidence": {
+      "api_full_regression": "4550/4551",
+      "oauth_session_connection_sync_db": "11/11",
+      "standing_authorization_targeted": "308/308",
+      "connect_targeted": "235/235",
+      "architecture_contract": "170/170",
+      "api_tsc": "0",
+      "web_tsc": "0",
+      "prisma": "validate valid / 92 migrations applied",
+      "tenant_triggers": "73 OK（真实 PostgreSQL）",
+      "github_actions": "NOT_OBSERVED"
+    },
+    "non_blocking_recommendation": "把「产品代码不得 import goal-runtime-adapter」的静态扫描从 barrel + 目录约定扩展到 apps/api/src/**（审计明确不阻断 PASS；本次收口未实施，须作为新的独立单元并重新送审）",
+    "execution": {
+      "EXECUTION_ACTIVE": false,
+      "SAFE_CONTINUATION_QUEUE": [],
+      "watchdog": "crossclaim-agent-experience-watchdog-180s DELETED（收口后不再自动推进）"
+    },
+    "hard_boundaries_hold": [
+      "REAL_PROVIDER_WRITE",
+      "CUSTOMS_FILING",
+      "PAYMENT",
+      "AUTO_COMMISSION_CHARGE",
+      "PRODUCTION_CREDENTIALS",
+      "PRODUCTION_ENABLEMENT",
+      "REAL_MODEL_NETWORK",
+      "PAID_MODEL_CALLS",
+      "EXTERNAL_WRITE",
+      "TRANSPORT",
+      "P2_F",
+      "P2_G"
+    ],
+    "closed_at": "2026-10-07T07:12:22.405Z"
+  },
   "final_status": {
     "computed_at": "2026-10-05T13:03:35.072Z",
     "head": "e7467b73",
@@ -7663,7 +7731,7 @@
     "duty_difference_registration": "HOLD_UNTIL_CALCULATION_SEMANTICS_CONFIRMED",
     "first_registration_recipe": "TEST-ONLY RuleVersion row → parseRecoveryRuleDefinition → createSeoPublicEngineRegistry([engine]) → createSeoPublicCheckerPorts → runPublicSeoChecker；首次注册时补 createEligibilitySeoPublicEngine() adapter + integration test，无需重做 engine design audit"
   },
-  "SAFE_CONTINUATION_QUEUE": "NOT_EMPTY（BG-* 证据核对类内部单元仍有 OPEN 项，P0 优先）；RSI 侧 = EMPTY。",
+  "SAFE_CONTINUATION_QUEUE": "EMPTY（AEL 程序 CLOSED；无安全续作单元）",
   "rsi_runtime": {
     "runner_noop_autopass": "REMOVED",
     "runner_default": "BLOCK（未配置执行器绝不 PASS）",
@@ -9310,13 +9378,15 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": true,
+  "CONTINUATION_REQUIRED": false,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
     "kind": "heartbeat",
     "role": "WAKEUP_WATCHDOG_ONLY",
-    "status": "ACTIVE",
+    "status": "DELETED_ON_CLOSURE",
+    "deleted_at": "2026-10-07T07:12:22.405Z",
+    "closure_note": "AEL 程序收口（MSG-20261007-02 = PASS / CLOSED）后删除 crossclaim-agent-experience-watchdog-180s；不再自动唤醒执行。",
     "rrule": "FREQ=MINUTELY;INTERVAL=1",
     "interval_seconds": 60,
     "target_thread_id": "01a10b70-753f-7603-abde-9901ce56feac",
@@ -9339,7 +9409,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T09:48:49.310Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T09:55:01.250Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11645,8 +11715,8 @@
     "id": "PRODUCTIZATION-RELEASE-INTEGRATION",
     "authorized_at": "2026-10-06",
     "branch": "gate/7-commercial-validation",
-    "current_unit": "REL-1",
-    "status": "RUNNING",
+    "current_unit": null,
+    "status": "COMPLETE",
     "report": "docs/releases/STANDING-AUTHORIZATION-V1-REPORT.md"
   },
   "program_progress": {
@@ -12043,6 +12113,30 @@
         },
         "baseline": "443 文件 / 4461 tests（4460 pass + 1 既有隔离 flake）；api tsc 0；prisma validate valid（88 migrations up to date）"
       }
+    },
+    "REL-1": {
+      "name": "main ↔ gate/7 divergence 处置 + 安全 integration plan + 合并前全门禁",
+      "status": "DONE / PUSHED",
+      "head": "3baaf5ba",
+      "evidence": {
+        "divergence": "main 独有 1 提交 5a340bc0（parents 16b47a24 + a6ba5e8a），标题 release: integrate gate/7 into main (FINAL_ACCEPTANCE_HEAD 0f7f7ac)；merge-base=a6ba5e8a；git diff origin/gate/7...origin/main 为空 → main 无 gate/7 未包含内容；0f7f7ac 是 gate/7 祖先；main 不是 gate/7 祖先（需正常 merge，非 force）",
+        "actions": "新建 release/integration-20261006 = gate/7 → merge origin/main（保留 5a340bc0 及其祖先，非 force push）→ 校验文件树与 gate/7 一致（diff 为空）→ 推送新分支（origin/main 未改动，仍为 5a340bc0）；随后把 FINAL 文档再次 merge 进该分支",
+        "gates": "api tsc 0；prisma validate valid；fresh DB（crossclaim_relcheck）prisma migrate deploy 全部成功（88 migrations）；定向安全横扫 227/227（SA 四套件 + action-guard approval + HITL concurrency + tenant isolation + architecture 157 + customs golden path）；全量 443 文件 / 4461 tests → 4460 passed + 1 failed（既有 P2E-DB5 隔离 flake）；web tsc 0；web build 0；i18n OK（5 语言/644 键/硬编码 0）；UI render 81/81",
+        "heads": {
+          "integration_first": "f7ffd859",
+          "integration_final": "e3405a05",
+          "gate7": "42161550",
+          "main_untouched": "5a340bc0"
+        }
+      }
+    },
+    "FINAL": {
+      "name": "产品化 + release integration 最终状态报告",
+      "status": "DONE / PUSHED",
+      "head": "42161550",
+      "evidence": {
+        "report": "docs/releases/PRODUCTIZATION-RELEASE-FINAL-REPORT.md"
+      }
     }
   },
   "program_final_report": "docs/releases/CUSTOMS-DUTY-RECOVERY-FINAL-REPORT.md",
@@ -12161,6 +12255,387 @@
       "TRANSPORT",
       "P2_F",
       "P2_G"
+    ]
+  },
+  "productization_release": {
+    "final_report": "docs/releases/PRODUCTIZATION-RELEASE-FINAL-REPORT.md",
+    "fields": {
+      "FRONTEND_PRODUCTIZATION": "PASS",
+      "BACKEND_PRODUCTIZATION": "PASS",
+      "SI_RSI_INTEGRATION": "PASS",
+      "STANDING_AUTHORIZATION": "PASS",
+      "CUSTOMS_DUTY_RECOVERY": "PASS",
+      "REAL_PROVIDER_INTEGRATION": "NO",
+      "REAL_EXTERNAL_WRITE": "HOLD",
+      "PAYMENT_AUTOPAY": "HOLD",
+      "B1_FASTIFY": "DESIGN_ONLY",
+      "B2_INTEGRATION_FOUNDATION": "PARTIAL",
+      "B4_B10_GAP_STATUS": "B3/B4/B10 IMPLEMENTED（只读/投影）；B5/B6/B7/B8/B9 PARTIAL（详见 BACKEND-PRODUCTIZATION-GAP-ANALYSIS.md）",
+      "MAIN_DIVERGENCE_RESOLUTION": "main 独有 1 提交且不含 gate/7 未含内容；已在新分支 merge main 保留历史；main 未改动、无 force push",
+      "FULL_REGRESSION": "443 files / 4461 tests → 4460 passed + 1 failed（既有 P2E-DB5 隔离 flake）",
+      "WEB_BUILD": "PASS",
+      "API_TSC": "PASS",
+      "WEB_TSC": "PASS",
+      "FINAL_RELEASE_HEAD": "e3405a05（release/integration-20261006）；gate/7 = 42161550",
+      "PRODUCTION_READY": "NO",
+      "HOST_ACTION_REQUIRED": "YES —— ① main 推进方式（--no-ff / --ff-only）② Standing Authorization 持久化 Schema Delta ③ Experience Memory 持久化 Schema Delta ④ Linux/systemd 实机验证 ⑤ 真实 provider 凭据 / 收费 OCR / 真实外写 / 支付开通（HOLD 项）"
+    },
+    "remaining_hold_external": [
+      "REAL_PROVIDER_WRITE",
+      "CUSTOMS_FILING",
+      "PAYMENT",
+      "AUTO_COMMISSION_CHARGE",
+      "PRODUCTION_CREDENTIALS",
+      "PRODUCTION_ENABLEMENT",
+      "REAL_MODEL_NETWORK",
+      "PAID_MODEL_CALLS",
+      "EXTERNAL_WRITE",
+      "TRANSPORT",
+      "P2_F",
+      "P2_G"
+    ]
+  },
+  "agent_experience_layer": {
+    "authorization": "HOST 2026-10-07 AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION",
+    "baseline_head": "96a26c29",
+    "program_head": "a316749a",
+    "branch": "gate/7-commercial-validation",
+    "units": {
+      "P0": {
+        "name": "STANDING AUTHORIZATION 持久化（durable）",
+        "status": "CLOSED / PUSHED",
+        "head": "0a710d8b",
+        "report": "docs/releases/STANDING-AUTHORIZATION-PERSISTENCE-IMPLEMENTATION.md",
+        "schema": "StandingAuthorization（模型总数 108 → 109）",
+        "migration": "20261007090000_standing_authorization",
+        "files": [
+          "apps/api/src/services/standing-authorization/standing-authorization-store.ts",
+          "apps/api/src/__tests__/standing-authorization-persistence-db.test.ts"
+        ],
+        "tests": "standing-authorization-persistence-db 10/10；定向安全 236/236；api tsc 0；prisma validate valid；89 migrations；触发器清单 114/91/68 OK",
+        "returns": {
+          "STANDING_AUTHORIZATION_DURABLE": "PASS",
+          "RESTART_SURVIVAL": "PASS",
+          "REVOCATION_TRACED": "PASS",
+          "SCOPE_IMMUTABLE": "PASS",
+          "TENANT_ISOLATION": "PASS"
+        }
+      },
+      "P1": {
+        "name": "AGENT GOAL DOMAIN（薄层：compiler / schema / validator / capability / planner / runtime adapter）",
+        "status": "CLOSED / PUSHED",
+        "head": "406d0433",
+        "report": "docs/releases/AGENT-GOAL-DOMAIN-P1-REPORT.md",
+        "files": [
+          "apps/api/src/services/agent-goal/goal-contract.ts",
+          "apps/api/src/services/agent-goal/goal-schema.ts",
+          "apps/api/src/services/agent-goal/goal-compiler.ts",
+          "apps/api/src/services/agent-goal/goal-validator.ts",
+          "apps/api/src/services/agent-goal/goal-capability-resolver.ts",
+          "apps/api/src/services/agent-goal/goal-task-planner.ts",
+          "apps/api/src/services/agent-goal/goal-runtime-adapter.ts",
+          "apps/api/src/services/agent-goal/index.ts",
+          "apps/api/src/__tests__/agent-goal.test.ts"
+        ],
+        "tests": "agent-goal 29/29 PASS；api tsc exit 0；动作词汇全部来自 ACTION_GUARD_CATALOG；未新增 schema / migration",
+        "returns": {
+          "GOAL_COMPILER": "PASS（确定性优先，modelCallCount = 0）",
+          "GOAL_SCHEMA_ALLOWLIST": "PASS",
+          "GOAL_TENANT_FORGERY_REJECTED": "PASS",
+          "GOAL_ACTION_OR_SERVICE_INJECTION_REJECTED": "PASS",
+          "GOAL_CAPABILITY_RESOLUTION": "PASS（decisionOwner = services/action-guard）",
+          "GOAL_TASK_NAMESPACE": "task:recovery:*（保留路由，幂等）",
+          "SECOND_RUNTIME": "0"
+        }
+      },
+      "P2": {
+        "name": "GOAL → 既有 ONE SI Runtime 接线（binding 走既有任务队列）",
+        "status": "CLOSED / PUSHED",
+        "head": "e504f35a",
+        "report": "docs/releases/AGENT-GOAL-RUNTIME-P2-REPORT.md",
+        "files": [
+          "apps/api/src/services/agent-goal/goal-runtime-binding.ts",
+          "apps/api/src/__tests__/agent-goal-runtime-wiring.test.ts"
+        ],
+        "tests": "agent-goal-runtime-wiring 7/7（真实 composeRsiRuntime）；定向回归 69/69（agent-goal 29 + wiring 7 + rsi-domain-pack-wiring 22 + rsi-si-runtime-real-guard-e2e 11）；api tsc exit 0；无 schema/migration",
+        "returns": {
+          "GOAL_RUNTIME_WIRING": "PASS（既有任务队列入口；不直接调用 runner）",
+          "RECOVERY_NAMESPACE_HIJACK": "REJECTED（domainPacks 注入 recovery-si → RESERVED_PACK_ID_REJECTED）",
+          "CALLER_RUNNER_CANNOT_STEAL_RECOVERY": "CONFIRMED（callerCalls = 0）",
+          "ADMISSION_IS_NOT_EXECUTION": "ENFORCED",
+          "SECOND_RUNTIME": "0"
+        }
+      },
+      "P3": {
+        "name": "AGENT GOAL 持久化（AgentGoal / AgentGoalRun = 客户意图 + 执行投影）",
+        "status": "CLOSED / PUSHED",
+        "head": "05717294",
+        "report": "docs/releases/AGENT-GOAL-PERSISTENCE-P3-REPORT.md",
+        "audit": "docs/releases/AGENT-GOAL-PERSISTENCE-DELTA-AUDIT.md",
+        "schema": "AgentGoal + AgentGoalRun（模型总数 109 → 111）",
+        "migration": "20261007150000_agent_goal_persistence",
+        "files": [
+          "apps/api/src/services/agent-goal/goal-store.ts",
+          "apps/api/src/__tests__/agent-goal-persistence-db.test.ts"
+        ],
+        "tests": "agent-goal-persistence-db 8/8（真实 PG）；定向回归 217/217；api tsc 0；prisma validate valid；migrate deploy 90 migrations；触发器清单 116/93/70 OK",
+        "returns": {
+          "GOAL_PERSISTENCE": "PASS",
+          "IS_BUSINESS_SSOT": "NO（intent + execution projection only）",
+          "TENANT_ISOLATION": "PASS",
+          "IDENTITY_IMMUTABLE": "PASS",
+          "CREDENTIAL_STORAGE": "REJECTED"
+        }
+      },
+      "P4a": {
+        "name": "P4a — 目标 HTTP 入口（编译 + 落库 + 计划预览，零执行）",
+        "status": "CLOSED / PUSHED（P4 的前置接线；P4b 前端 Goal Console 仍待做）",
+        "head": "ba3e8cb0",
+        "files": [
+          "apps/api/src/services/agent-goal/http-request.ts",
+          "apps/api/src/__tests__/agent-goal-http-db.test.ts",
+          "apps/api/src/server.ts"
+        ],
+        "tests": "agent-goal-http-db 5/5（真实 HTTP + PostgreSQL）；api tsc exit 0",
+        "returns": {
+          "AGENT_GOAL_HTTP": "PASS（POST /agent-goals：编译→校验→落库→计划预览；GET 列表）",
+          "EXECUTION_PERFORMED": "false",
+          "CLIENT_FORGED_FIELDS": "IGNORED（只接受 intent；tenant/actor 来自会话）"
+        }
+      },
+      "P4b": {
+        "name": "P4b — 首页 Goal Console + 四张核心结果卡（保留既有 Dashboard 全部内容）",
+        "status": "CLOSED / PUSHED",
+        "head": "999998b1",
+        "report": "docs/releases/AGENT-EXPERIENCE-P4-HOME-GOAL-CONSOLE-REPORT.md",
+        "files": [
+          "apps/web/app/components/ui/goal-console.tsx",
+          "apps/web/app/components/ui/recovery-headline-cards.tsx",
+          "apps/web/app/lib/dashboard-view.ts",
+          "apps/web/app/page.tsx",
+          "apps/web/i18n/dictionaries/*.ts (goalConsole ×5)",
+          "apps/web/scripts/ui-check-entry.tsx"
+        ],
+        "tests": "i18n OK（5 语言 / 671 键 / 硬编码 0）；UI render 95/95；web tsc 0；next build 0；API 定向 57/57",
+        "returns": {
+          "HOME_GOAL_CONSOLE": "PASS",
+          "HEADLINE_CARDS": "PASS（Recoverable / In recovery / Recovered / Needs your attention）",
+          "CROSS_CURRENCY_SUMMING": "FORBIDDEN_AND_ENFORCED（逐币种原样展示）",
+          "CAPABILITY_LOSS": "0（既有 Dashboard 区块全部保留）",
+          "FAKE_EXECUTION_CLAIM": "NONE"
+        }
+      },
+      "P4": {
+        "name": "P4 — 首页 AI Recovery Manager / Goal Console（P4a API + P4b 前端）",
+        "status": "CLOSED / PUSHED",
+        "head": "999998b1",
+        "parts": {
+          "P4a": "ba3e8cb0",
+          "P4b": "999998b1"
+        }
+      },
+      "P5": {
+        "name": "NEEDS YOUR ATTENTION（复用既有 TaskCenter，单一待办中心）",
+        "status": "CLOSED / PUSHED",
+        "head": "7a0149d9",
+        "report": "docs/releases/AGENT-EXPERIENCE-P5-NEEDS-ATTENTION-REPORT.md",
+        "files": [
+          "apps/web/app/lib/dashboard-view.ts",
+          "apps/web/app/components/ui/task-center.tsx",
+          "apps/web/app/page.tsx",
+          "apps/web/i18n/dictionaries/*.ts (needsAttention ×5)",
+          "apps/web/scripts/ui-check-entry.tsx"
+        ],
+        "tests": "i18n OK（5 语言 / 692 键 / 硬编码 0）；UI render 103/103；web tsc 0；next build 0",
+        "returns": {
+          "NEEDS_ATTENTION": "PASS（单一待办中心，未建第二套）",
+          "TASK_KINDS_COVERED": "12（HOST 10 类 + 既有 CONNECTION / IMPORT）",
+          "POPULATED_FROM_REAL_TRUTH": [
+            "CONNECTION_REAUTH",
+            "ACCOUNT_RECONNECT",
+            "CASE",
+            "CONNECTION",
+            "IMPORT"
+          ],
+          "NOT_FABRICATED": [
+            "AUTHORIZATION",
+            "APPROVAL",
+            "CUSTOMS_POA",
+            "CUSTOMS_SIGNER",
+            "PROVIDER_AUTHORIZATION",
+            "EVIDENCE_CONFLICT",
+            "PAYMENT_ACTION"
+          ],
+          "RAW_CODES_IN_CUSTOMER_COPY": "NONE"
+        }
+      },
+      "P6": {
+        "name": "AGENT RUN 页面 /recoveries/runs/:id（业务语言）",
+        "status": "CLOSED / PUSHED",
+        "head": "8356549c",
+        "report": "docs/releases/AGENT-EXPERIENCE-P6-AGENT-RUN-REPORT.md",
+        "files": [
+          "apps/api/src/services/agent-goal/http-request.ts",
+          "apps/web/app/lib/agent-run-view.ts",
+          "apps/web/app/recoveries/runs/[id]/agent-run-view.tsx",
+          "apps/web/app/recoveries/runs/[id]/page.tsx",
+          "apps/web/i18n/dictionaries/*.ts (agentRun ×5)"
+        ],
+        "tests": "agent-goal-http-db 6/6（含详情面 / 跨租户 404 / 写方法 405）；i18n OK（741 键 / 硬编码 0）；UI render 113/113；api tsc 0；web tsc 0；next build 0",
+        "returns": {
+          "AGENT_RUN_UI": "PASS",
+          "BUSINESS_LANGUAGE_ONLY": "PASS（自动断言无 runner/judge/policy engine/model router/task:recovery）",
+          "FABRICATED_PROGRESS": "NONE",
+          "CROSS_CURRENCY_SUMMING": "FORBIDDEN_AND_ENFORCED"
+        }
+      },
+      "P7": {
+        "name": "AUTHORIZATION 管理 UI（/authorizations；只读 + 撤销）",
+        "status": "CLOSED / PUSHED",
+        "head": "d4194cf3",
+        "report": "docs/releases/AGENT-EXPERIENCE-P7-AUTHORIZATION-UI-REPORT.md",
+        "files": [
+          "apps/api/src/services/standing-authorization/http-request.ts",
+          "apps/api/src/__tests__/standing-authorization-http-db.test.ts",
+          "apps/web/app/authorizations/page.tsx",
+          "apps/web/app/authorizations/authorization-list.tsx",
+          "apps/web/app/authorizations/revoke-authorization-button.tsx",
+          "apps/web/i18n/dictionaries/*.ts (authorizationPage ×5)"
+        ],
+        "tests": "standing-authorization-http-db 4/4；SA 相关回归 14/14；api tsc 0；i18n OK（783 键 / 硬编码 0）；UI render 126/126；web tsc 0；next build 0",
+        "returns": {
+          "AUTHORIZATION_UI": "PASS",
+          "STATE_SOURCE": "backend Standing Authorization only",
+          "CLIENT_SCOPE_DIGEST": "FORBIDDEN（请求体只有 reason）",
+          "SERVER_ONLY_FIELDS_FROM_CLIENT": "IGNORED_AND_REJECTED_BY_DESIGN",
+          "SILENT_SCOPE_EDIT": "NOT_PROVIDED（改范围需重新同意条款）",
+          "REVOKE_TRACED": "PASS"
+        }
+      },
+      "P8": {
+        "name": "NAVIGATION PROGRESSIVE DISCLOSURE（一级 5 项 + More/Advanced；零 route 删除）",
+        "status": "CLOSED / PUSHED",
+        "head": "e9ce6731",
+        "report": "docs/releases/AGENT-EXPERIENCE-P8-NAVIGATION-REPORT.md",
+        "files": [
+          "apps/web/app/components/nav-model.ts",
+          "apps/web/app/recoveries/page.tsx",
+          "apps/web/i18n/dictionaries/*.ts (customerShell + recoveriesPage ×5)"
+        ],
+        "tests": "i18n OK（798 键 / 硬编码 0）；UI render 133/133（含 12 个必需 href 全部存在）；web tsc 0；next build 0",
+        "returns": {
+          "NAVIGATION": "PASS（Main 5 项 + More + Advanced）",
+          "ROUTE_REMOVED": "NONE（断言逐一核对 href）",
+          "API_CONTRACT": "UNCHANGED",
+          "CAPABILITY_LOSS": "0"
+        }
+      },
+      "FINAL": {
+        "name": "FINAL —— 全量回归 + 自包含 FINAL AUDIT PACKAGE + 独立审计",
+        "status": "CLOSED（MSG-20261007-02 = PASS / CLOSED）",
+        "head": "a316749a",
+        "package": "docs/releases/FINAL-AUDIT-PACKAGE.md",
+        "tests": "full regression 4540/4541（唯一失败为既有 P2E-DB5 隔离债，单独 20/20）；api tsc 0；prisma validate valid；91 migrations；触发器清单 118/95/72 OK；architecture-contract 167/167；i18n 5 语言 803 键硬编码 0；UI render 138/138；web tsc 0；next build 30/30",
+        "returns": {
+          "AGENT_EXPERIENCE_LAYER": "PASS（P0–P9 CLOSED / PUSHED）",
+          "FULL_REGRESSION": "4540/4541（1 = 既有 P2E-DB5 隔离 flake）",
+          "CAPABILITY_LOSS": "0",
+          "SECOND_RUNTIME": "0",
+          "SECOND_GUARD": "0",
+          "PRODUCTION_READY": "NO",
+          "FINAL_AUDIT": "PENDING（ChatGPT 独立审计）"
+        },
+        "verdict": {
+          "messageId": "MSG-20261007-01",
+          "archive": "AI-ARCHITECT-INBOX.md### [MSG-20261007-01]",
+          "archiveVerified": "FULL_COPY_OK（198 行逐行一致）",
+          "decision": "PASS WITH REVISE",
+          "reviewedCodeHead": "299b008a64cefafa561b56a07d619276c2157912",
+          "p9Anchor": "e9cc7dc91d227dc1fbc1832b5f7a8911835e6c57",
+          "auditPackageHead": "e5eaab012c7e44dc9c9a18900deb1b1d46b577b4"
+        },
+        "verdictReturns": {
+          "AGENT_EXPERIENCE_LAYER": "PASS WITH REVISE",
+          "STANDING_AUTHORIZATION_DURABLE": "PASS",
+          "GOAL_COMPILER": "PASS",
+          "GOAL_RUNTIME_MAIN_WIRING": "PASS",
+          "GOAL_RUNTIME_SINGLE_ENTRY": "REVISE",
+          "OAUTH_SESSION_DURABILITY": "PASS WITH REVISE",
+          "OAUTH_STATE_SINGLE_USE": "PASS",
+          "OAUTH_SUCCESS_STATE_MACHINE": "REVISE",
+          "CONNECTION_SYNC_STATE": "PASS",
+          "ACTION_GUARD_SINGLE_CATALOG": "PASS",
+          "NON_BYPASSABLE_GATE_FAIL_CLOSED": "REVISE",
+          "SECOND_RUNTIME": "0",
+          "SECOND_SCHEDULER": "0",
+          "SECOND_GUARD": "0",
+          "CAPABILITY_LOSS": "0",
+          "FINAL_AUDIT": "PASS WITH REVISE / NOT YET CLOSED",
+          "PRODUCTION_READY": "NO"
+        },
+        "requiredChanges": [
+          "C1 single runtime admission surface：从 agent-goal/index.ts 移除 goal-runtime-adapter 导出；direct-runner adapter 降为 internal/test-only 或删除；architecture contract 增加「Agent Goal 产品代码不得调用 runner.run / RsiEvidenceRunner.run」；P2 测试只认可 createGoalRuntimeBinding() 为 product execution admission surface",
+          "C2 durable OAuth transition CAS：succeedOAuthAuthorizationSession 必须要求 current.status === CONSUMED 并用原子 CAS(WHERE id AND organizationId AND status=CONSUMED)；SUCCEEDED 重入仅当 connectionId+credentialRef 完全相同才幂等，不同 binding → OAUTH_SESSION_BINDING_CONFLICT；terminal success 不可改写；补 connectionId 必须存在于同 organizationId 的 SourceConnection；resumeGoalId 非空时校验 AgentGoal.organizationId === session.organizationId；修正把旁路固定下来的 PG-P9-3 测试",
+          "C3 complete non-bypassable gate proof：按 action + guard.requiredGates 计算 required non-bypassable gates，每个都必须有 server-owned explicit SATISFIED proof；缺失/UNKNOWN → DENY（至少 production gate / kill switch / tenant-account isolation 不得因 undefined 通过）；新增 NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE 与 missing-field 测试"
+        ]
+      },
+      "AEL-FINAL2": {
+        "name": "AEL FINAL2 —— 按 MSG-20261007-01 的三条 CHANGE 最小修订",
+        "status": "CLOSED / PUSHED / AUDIT_PASS（C1 / C2 / C3 全部 PASS，MSG-20261007-02）",
+        "head": "b0e9400f",
+        "verdictRef": "AI-ARCHITECT-INBOX.md ### [MSG-20261007-01]",
+        "changes": {
+          "C1": {
+            "name": "single runtime admission surface（关闭 Goal direct-runner 旁路）",
+            "status": "CLOSED / PUSHED",
+            "head": "25bf985b",
+            "evidence": "agent-goal/index.ts 移除 goal-runtime-adapter 导出；adapter 标注 INTERNAL/TEST-ONLY 并改由 goal-runtime-binding 提供断言；P2 测试只认可 createGoalRuntimeBinding()；architecture-contract +3 断言（barrel 不得导出 adapter / 产品代码不得 runtime.run·RsiEvidenceRunner / adapter 自述 INTERNAL-TEST-ONLY）；architecture-contract 170/170、agent-goal 29/29、runtime-wiring 7/7；api tsc 0"
+          },
+          "C2": {
+            "name": "durable OAuth transition CAS（成功必须经 CONSUMED + 原子 CAS + binding 冲突 + connection·goal 血缘）",
+            "status": "CLOSED / PUSHED",
+            "head": "9d2d7c6b",
+            "migration": "20261007200000_oauth_session_transition_guard（DB 状态机 + 终态绑定不可改写 + append-only-triggers 登记）",
+            "evidence": "succeedOAuthAuthorizationSession 要求 status=CONSUMED 且用原子 CAS(WHERE id AND organizationId AND status='CONSUMED') 获取终态；SUCCEEDED 重入仅 connectionId+credentialRef 完全相同才幂等，不同 binding → OAUTH_SESSION_BINDING_CONFLICT；connectionId 必须同租户 SourceConnection（否则 OAUTH_SESSION_CONNECTION_NOT_FOUND）；resumeGoalId 必须同租户既有 AgentGoal（否则 OAUTH_SESSION_GOAL_NOT_FOUND）；fail 同样走 CAS；PG-P9-3 修正（成功前必须一次性 take）；PG-P9-1/PG-P9-3 改用真实 AgentGoal；新增 PG-P9-7..PG-P9-11（PENDING 不得直接成功 / binding 冲突 / 跨租户连接拒绝 / resumeGoal 血缘 / DB 状态机与绑定不可改写）；oauth-session-connection-sync-db 11/11；定向回归 235/235；api tsc 0；migrate deploy OK；触发器清单 73 OK"
+          },
+          "C3": {
+            "name": "complete non-bypassable gate proof（缺失/UNKNOWN → DENY）",
+            "status": "CLOSED / PUSHED",
+            "head": "3c426361",
+            "evidence": "新增 evaluateGateProof / computeRequiredNonBypassableGates / assessNonBypassableGates：required = 核心三项（productionGate / killSwitch / tenantAccountIsolation）∪ 由 action 的 guard.requiredGates 派生的非可绕过 gate；collectBlockingGates 返回 blocking ∪ incomplete（fail-closed，undefined 不再当通过）；evaluateAutonomousExecution 结果新增 requiredNonBypassableGates / incompleteGateProofs，reason code 拆为 NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE:<gate> 与 NON_BYPASSABLE_GATE_BLOCKED:<gate>；boundary 增 requiresExplicitGateProof / gateProofFailClosed / coreRequiredNonBypassableGates；既有宽松快照用例改为显式提供 gate 证明（未削弱断言）；新增 ⑩c 与 resolver missing-proof 用例；standing-authorization 20/20、standing-authorization-resolver 15/15、standing-authorization-persistence-db 10/10；定向回归 308/308；api tsc 0"
+          }
+        }
+      }
+    },
+    "safe_continuation_queue": [],
+    "hard_boundaries": [
+      "REAL_PROVIDER_WRITE",
+      "CUSTOMS_FILING",
+      "PAYMENT",
+      "AUTO_COMMISSION_CHARGE",
+      "PRODUCTION_CREDENTIALS",
+      "PRODUCTION_ENABLEMENT",
+      "REAL_MODEL_NETWORK",
+      "PAID_MODEL_CALLS",
+      "EXTERNAL_WRITE",
+      "TRANSPORT",
+      "P2_F",
+      "P2_G"
+    ],
+    "forbidden": [
+      "SECOND_RUNTIME",
+      "SECOND_POLICY_ENGINE",
+      "SECOND_GUARD_IMPLEMENTATION",
+      "SECOND_CONTROL_PLANE",
+      "SECOND_MODEL_GATEWAY",
+      "SECOND_COST_LEDGER",
+      "SECOND_META_EVIDENCE_STORE",
+      "L5_RELAXATION"
+    ],
+    "host_action_required": [
+      "真实 provider 凭据 / 外部写 / 支付开通（HOLD 项）",
+      "Linux/systemd 实机验证（SYSTEMD_RUNTIME_VALIDATION）",
+      "main 推进方式（--no-ff / --ff-only）"
     ]
   }
 }

@@ -65,6 +65,13 @@ import {
   readSessionToken,
 } from './services/auth';
 import { handleWorkflowRequest } from './services/workflow';
+// AGENT EXPERIENCE LAYER / P4（HOST 2026-10-07）：目标入口（编译 + 落库 + 计划预览；零执行）
+import { AGENT_GOAL_PATH, handleAgentGoalRequest } from './services/agent-goal/http-request';
+// AGENT EXPERIENCE LAYER / P7（HOST 2026-10-07）：Standing Authorization 客户管理面（只读 + 撤销）
+import {
+  STANDING_AUTHORIZATION_HTTP_PATH,
+  handleStandingAuthorizationRequest,
+} from './services/standing-authorization/http-request';
 import {
   handleSeoPublicNodeRequest,
   isSeoPublicRouteRequest,
@@ -349,6 +356,58 @@ export function createServer(deps: ServerDeps): http.Server {
     }
 
     // C-0008-B1 / B2-1 内部工作流端点：机会复核、建案、连接管理；会话与角色矩阵由服务层校验
+    // AGENT EXPERIENCE LAYER / P7（HOST 2026-10-07）：Standing Authorization 客户管理面（只读 + 撤销）
+    if (auth && STANDING_AUTHORIZATION_HTTP_PATH.test(url.split('?')[0] ?? '')) {
+      const saToken = readSessionToken(parseCookies(req.headers.cookie));
+      if (!saToken) {
+        send(401, { error: 'UNAUTHENTICATED' });
+        return;
+      }
+      resolveSession(saToken, auth.session)
+        .then((context) => {
+          if (!context) {
+            send(401, { error: 'UNAUTHENTICATED' });
+            return;
+          }
+          return handleStandingAuthorizationRequest(req, res, {
+            prisma,
+            session: { userId: context.userId, organizationId: context.organizationId },
+          }).then((handled) => {
+            if (!handled) send(404, { error: 'not_found' });
+          });
+        })
+        .catch((err) =>
+          send(500, { error: err instanceof Error ? err.message : 'standing_authorization_error' }),
+        );
+      return;
+    }
+
+    // AGENT EXPERIENCE LAYER / P4（HOST 2026-10-07）：目标入口（只编译 / 落库 / 预览，零执行）
+    if (auth && AGENT_GOAL_PATH.test(url.split('?')[0] ?? '')) {
+      const goalToken = readSessionToken(parseCookies(req.headers.cookie));
+      if (!goalToken) {
+        send(401, { error: 'UNAUTHENTICATED' });
+        return;
+      }
+      resolveSession(goalToken, auth.session)
+        .then((context) => {
+          if (!context) {
+            send(401, { error: 'UNAUTHENTICATED' });
+            return;
+          }
+          return handleAgentGoalRequest(req, res, {
+            prisma,
+            session: { userId: context.userId, organizationId: context.organizationId },
+          }).then((handled) => {
+            if (!handled) send(404, { error: 'not_found' });
+          });
+        })
+        .catch((err) =>
+          send(500, { error: err instanceof Error ? err.message : 'agent_goal_error' }),
+        );
+      return;
+    }
+
     if (auth && WORKFLOW_PATH.test(url.split('?')[0] ?? '')) {
       handleWorkflowRequest(req, res, {
         prisma,
