@@ -147,13 +147,17 @@ const enUS: Messages = {
   goalConsole: {
     title: "What would you like CrossClaim to recover?",
     subtitle: "Describe the goal in one sentence. CrossClaim interprets it first, then acts automatically only within your authorization; anything out of scope or needing your confirmation comes back to you.",
-    placeholder: "e.g. Check everything recoverable over the last 12 months",
+    placeholder: "Tell CrossClaim what you want to recover, or let us check where money may be slipping away…",
+    firstUseHint:
+      "No need to pick complex menus. Just describe your goal — CrossClaim works out which accounts, data and authorizations need checking.",
     submit: "Start",
     suggestedTitle: "Suggested goals",
-    suggestion1: "Check everything recoverable over the last 12 months",
-    suggestion2: "Check Amazon for missed reimbursements and unusual fees",
-    suggestion3: "Check logistics delays and incorrect charges",
-    suggestion4: "Check customs duties that may have been overpaid",
+    suggestion1: "Check Amazon reimbursements I may have missed in the last 90 days",
+    suggestion2: "Check my logistics bills for delays or overcharges",
+    suggestion3: "See which import records may have recoverable customs duties",
+    suggestion4: "Check my payment disputes and unrecovered amounts",
+    broadHint:
+      "Sure. You can also tell me the platform, time range or account — or just submit and I'll start with the data you have already connected.",
     busy: "Understanding your goal…",
     recordedTitle: "Started checking",
     recordedBody: "CrossClaim checks and prepares within your authorization. Authorized steps continue automatically; anything that needs your confirmation appears under \u201cNeeds your attention\u201d.",

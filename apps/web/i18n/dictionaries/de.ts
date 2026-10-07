@@ -147,13 +147,17 @@ const de: Messages = {
   goalConsole: {
     title: "Was soll CrossClaim heute für Sie zurückholen?",
     subtitle: "Beschreiben Sie das Ziel in einem Satz. CrossClaim versteht es zuerst und handelt danach nur im Rahmen Ihrer Freigabe; alles außerhalb oder mit Klärungsbedarf kommt zu Ihnen zurück.",
-    placeholder: "z. B.: Prüfe alles, was in den letzten 12 Monaten erstattungsfähig ist",
+    placeholder: "Sagen Sie CrossClaim, was Sie zurückholen möchten — oder lassen Sie uns prüfen, wo Verluste entstehen…",
+    firstUseHint:
+      "Keine komplizierten Menüs nötig. Beschreiben Sie einfach Ihr Ziel — CrossClaim ermittelt, welche Konten, Daten und Freigaben geprüft werden müssen.",
     submit: "Starten",
     suggestedTitle: "Vorgeschlagene Ziele",
-    suggestion1: "Alles prüfen, was in den letzten 12 Monaten erstattungsfähig ist",
-    suggestion2: "Amazon auf verpasste Erstattungen und ungewöhnliche Gebühren prüfen",
-    suggestion3: "Logistikverzögerungen und falsche Berechnungen prüfen",
-    suggestion4: "Zu viel gezahlte Zölle prüfen",
+    suggestion1: "Amazon-Erstattungen prüfen, die ich in den letzten 90 Tagen verpasst haben könnte",
+    suggestion2: "Meine Logistikrechnungen auf Verzögerungen oder Überzahlungen prüfen",
+    suggestion3: "Importvorgänge prüfen, bei denen Zölle erstattungsfähig sein könnten",
+    suggestion4: "Meine Zahlungsstreitigkeiten und nicht zurückgeholten Beträge prüfen",
+    broadHint:
+      "Gerne. Nennen Sie mir zusätzlich Plattform, Zeitraum oder Konto — oder senden Sie es so ab; ich beginne mit den bereits verbundenen Daten.",
     busy: "Ziel wird verstanden…",
     recordedTitle: "Prüfung gestartet",
     recordedBody: "CrossClaim prüft und bereitet im Rahmen Ihrer Freigabe vor. Freigegebene Schritte laufen automatisch weiter; alles, was Ihre Bestätigung braucht, erscheint unter \u201eBraucht Ihre Aufmerksamkeit\u201c.",

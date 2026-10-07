@@ -148,13 +148,17 @@ const zhCN = {
   goalConsole: {
     title: "今天想让 CrossClaim 帮你追回什么？",
     subtitle: "用一句话描述目标，CrossClaim 会先理解，再只在你的授权范围内自动执行；超出范围或需要你确认的部分会来问你。",
-    placeholder: "例如：检查我过去 12 个月所有可以追回的钱",
+    placeholder: "告诉 CrossClaim 你想追回什么，或让我们检查哪里可能有损失……",
+    firstUseHint:
+      "不用选择复杂菜单。直接描述你的目标，CrossClaim 会自动判断需要检查哪些账户、数据和授权。",
     submit: "开始",
     suggestedTitle: "建议任务",
-    suggestion1: "检查我过去 12 个月所有可以追回的钱",
-    suggestion2: "检查 Amazon 平台漏赔和异常费用",
-    suggestion3: "检查物流延误和错误收费",
-    suggestion4: "检查可能多缴的关税",
+    suggestion1: "帮我检查最近 90 天可能漏掉的 Amazon 赔偿",
+    suggestion2: "检查我的物流账单里有没有延误或多收费",
+    suggestion3: "看看哪些进口记录可能存在可追回关税",
+    suggestion4: "检查我的支付争议和未追回款项",
+    broadHint:
+      "可以。你可以再告诉我平台、时间范围或账户；也可以直接提交，我会先检查已连接的数据。",
     busy: "正在理解你的目标…",
     recordedTitle: "已开始检查",
     recordedBody: "CrossClaim 会按你的授权范围检查和准备；已授权的步骤会自动继续，需要你确认的部分会出现在「需要你处理」。",

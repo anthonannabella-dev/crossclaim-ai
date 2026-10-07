@@ -127,6 +127,58 @@ export async function runJourney(input) {
   check('home.no.engineer.jargon', !body.includes('工程字段') && !body.includes('技术字段'), '');
   check('home.no.role.code', !body.includes('OWNER') && !body.includes('ADMIN'), '首页出现内部角色码');
 
+  /* ---------------- 4a. GOAL INPUT UX GUIDANCE（只引导，不改变执行） ---------------- */
+  const heroSection = page.locator('section:has(#ai-goal-hero)');
+  const goalInputGuidance = page.getByLabel('今天想让 CrossClaim 帮你追回什么？');
+  const placeholderText = await goalInputGuidance.getAttribute('placeholder');
+  check(
+    'home.goal.placeholder.guidance',
+    typeof placeholderText === 'string' && placeholderText.includes('告诉 CrossClaim 你想追回什么'),
+    String(placeholderText),
+  );
+  check(
+    'home.goal.placeholder.no.raw.enums',
+    typeof placeholderText === 'string' && !/PLATFORM|LOGISTICS|CUSTOMS|INDEPENDENT_SITE/.test(placeholderText),
+    String(placeholderText),
+  );
+  check('home.goal.firstUseHint.visible', body.includes('不用选择复杂菜单'), '');
+  const suggestionButtons = heroSection.locator('button.rounded-full');
+  const suggestionCount = await suggestionButtons.count();
+  check('home.goal.suggestions.four', suggestionCount === 4, String(suggestionCount));
+  const suggestionTexts = await suggestionButtons.allTextContents();
+  check(
+    'home.goal.suggestions.customer.language',
+    suggestionTexts.length === 4 &&
+      suggestionTexts.every((item) => !/PLATFORM|LOGISTICS|CUSTOMS|INDEPENDENT_SITE/.test(item)),
+    JSON.stringify(suggestionTexts),
+  );
+  const readGoalCount = () =>
+    page.evaluate(async () => {
+      const r = await fetch('/api/agent-goals');
+      const b = await r.json().catch(() => null);
+      return Array.isArray(b) ? b.length : (b && b.items ? b.items.length : -1);
+    });
+  const goalsBeforeSuggestionClick = await readGoalCount();
+  await suggestionButtons.first().click();
+  await sleep(700);
+  const inputAfterSuggestionClick = await goalInputGuidance.inputValue();
+  check('home.goal.suggestion.click.fills.input', inputAfterSuggestionClick === suggestionTexts[0], inputAfterSuggestionClick);
+  const goalsAfterSuggestionClick = await readGoalCount();
+  check(
+    'home.goal.suggestion.click.no.auto.submit',
+    goalsAfterSuggestionClick === goalsBeforeSuggestionClick,
+    goalsBeforeSuggestionClick + "->" + goalsAfterSuggestionClick,
+  );
+  await goalInputGuidance.fill('帮我追回钱');
+  await sleep(600);
+  const broadInputBody = await text(page);
+  check('home.goal.broad.hint.visible', broadInputBody.includes('可以。你可以再告诉我平台'), '');
+  const broadSubmitEnabled = await page.getByRole('button', { name: '开始' }).first().isEnabled();
+  check('home.goal.broad.submit.still.enabled', broadSubmitEnabled, String(broadSubmitEnabled));
+  check('home.goal.broad.no.wizard', !/必填|请选择平台|步骤 1|Step 1/.test(broadInputBody), '宽泛输入出现了表单化/向导化提示');
+  await goalInputGuidance.fill('');
+  await sleep(300);
+
   /* ---------------- 4b. 追回进度（一级导航 route 真实可达，客户语言） ---------------- */
   await open(page, webBase + '/recoveries');
   const recoveriesBody = await text(page);

@@ -31,6 +31,7 @@ import {
   type OpportunityApiItem,
   type RecoveryStateItem,
 } from './lib/dashboard-view';
+import { connectedGoalSignals } from './lib/goal-input-guidance';
 
 const API_BASE = process.env.CROSSCLAIM_API_URL ?? 'http://127.0.0.1:3000';
 
@@ -146,7 +147,8 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-10">
       {/* P1 — AI Goal Hero: the single primary entry on the home page. */}
-      <GoalConsole labels={t.goalConsole} />
+      {/* GOAL INPUT UX GUIDANCE: suggestion order only, derived from read-only /accounts facts. */}
+      <GoalConsole labels={t.goalConsole} signals={connectedGoalSignals(accounts.body)} />
 
       {/* P2 — four golden metrics: money first, strictly from persisted backend facts. */}
       <RecoveryHeadlineCards cards={headlineCards} note={t.goalConsole.perCurrencyNote} />

@@ -147,13 +147,17 @@ const es: Messages = {
   goalConsole: {
     title: "¿Qué quieres que CrossClaim recupere hoy?",
     subtitle: "Describe el objetivo en una frase. CrossClaim lo interpreta primero y solo actúa automáticamente dentro de tu autorización; lo que quede fuera de alcance o necesite tu confirmación te lo preguntamos.",
-    placeholder: "p. ej.: Revisa todo lo recuperable de los últimos 12 meses",
+    placeholder: "Dile a CrossClaim qué quieres recuperar, o deja que revisemos dónde puede haber pérdidas…",
+    firstUseHint:
+      "No hace falta elegir menús complejos. Describe tu objetivo y CrossClaim decidirá qué cuentas, datos y autorizaciones hay que revisar.",
     submit: "Empezar",
     suggestedTitle: "Objetivos sugeridos",
-    suggestion1: "Revisa todo lo recuperable de los últimos 12 meses",
-    suggestion2: "Revisa en Amazon los reembolsos no recibidos y las comisiones inusuales",
-    suggestion3: "Revisa retrasos logísticos y cargos incorrectos",
-    suggestion4: "Revisa aranceles que puedan haberse pagado de más",
+    suggestion1: "Revisa las compensaciones de Amazon que pueda haber perdido en los últimos 90 días",
+    suggestion2: "Revisa mis facturas logísticas por retrasos o cobros indebidos",
+    suggestion3: "Mira qué registros de importación pueden tener aranceles recuperables",
+    suggestion4: "Revisa mis disputas de pago y los importes no recuperados",
+    broadHint:
+      "Claro. También puedes indicarme la plataforma, el periodo o la cuenta; o enviarlo así y empezaré con los datos que ya tienes conectados.",
     busy: "Entendiendo tu objetivo…",
     recordedTitle: "Revisión iniciada",
     recordedBody: "CrossClaim revisa y prepara dentro de tu autorización. Los pasos autorizados continúan solos; lo que necesite tu confirmación aparecerá en \u00abRequiere tu atención\u00bb.",

@@ -147,13 +147,17 @@ const ja: Messages = {
   goalConsole: {
     title: "今日は CrossClaim に何を取り戻してもらいますか？",
     subtitle: "目標を一文で入力してください。CrossClaim はまず意図を理解し、承認された範囲だけで自動実行します。範囲外・高額・規制対象はご確認をお願いします。",
-    placeholder: "例：過去 12 か月で取り戻せるお金をすべて確認",
+    placeholder: "取り戻したいものを CrossClaim に伝えてください。どこに損失があるか確認することもできます……",
+    firstUseHint:
+      "複雑なメニューは不要です。目標をそのまま書けば、CrossClaim が確認すべきアカウント・データ・承認を判断します。",
     submit: "開始",
     suggestedTitle: "おすすめのタスク",
-    suggestion1: "過去 12 か月で取り戻せるお金をすべて確認",
-    suggestion2: "Amazon の未払い補償と異常な手数料を確認",
-    suggestion3: "物流の遅延と誤請求を確認",
-    suggestion4: "払い過ぎた可能性のある関税を確認",
+    suggestion1: "過去 90 日で見逃している可能性のある Amazon の補償を確認",
+    suggestion2: "物流請求書に遅延や過請求がないか確認",
+    suggestion3: "輸入記録のうち、取り戻せる可能性のある関税を確認",
+    suggestion4: "支払い異議と未回収の金額を確認",
+    broadHint:
+      "はい。プラットフォームや期間、アカウントを追加で教えていただいても構いません。そのまま送信すれば、接続済みのデータから確認を始めます。",
     busy: "目標を理解しています…",
     recordedTitle: "確認を開始しました",
     recordedBody: "CrossClaim は承認範囲内で確認と準備を進めます。承認済みの手順は自動で続行し、ご確認が必要なものは「対応が必要」に表示されます。",

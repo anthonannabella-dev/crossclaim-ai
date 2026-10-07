@@ -2,16 +2,27 @@
 
 import { useState } from 'react';
 
+import {
+  isBroadGoalIntent,
+  orderGoalSuggestions,
+  type GoalSuggestionKey,
+  type KeyedGoalSuggestion,
+} from '../../lib/goal-input-guidance';
+
 export interface GoalConsoleLabels {
   title: string;
   subtitle: string;
   placeholder: string;
+  /** GOAL INPUT UX GUIDANCE：首次使用说明（轻量，不抢占 Hero 主视觉） */
+  firstUseHint: string;
   submit: string;
   suggestedTitle: string;
   suggestion1: string;
   suggestion2: string;
   suggestion3: string;
   suggestion4: string;
+  /** GOAL INPUT UX GUIDANCE：输入过于宽泛时的自然语言辅助提示（不阻断提交） */
+  broadHint: string;
   busy: string;
   recordedTitle: string;
   recordedBody: string;
@@ -48,8 +59,35 @@ interface GoalRecorded {
  * 只把文本交给服务端理解并记录 —— 前端不做任何业务判定，也不声称已执行；
  * 结果区只出现客户语言（业务范围），**不出现 domain / task namespace / 任务计数**。
  */
-export default function GoalConsole({ labels }: { labels: GoalConsoleLabels }) {
-  const suggestions = [labels.suggestion1, labels.suggestion2, labels.suggestion3, labels.suggestion4];
+export default function GoalConsole({
+  labels,
+  signals = [],
+}: {
+  labels: GoalConsoleLabels;
+  /** GOAL INPUT UX GUIDANCE：只来自首页已有的只读事实；缺省 = 默认 4 条顺序。 */
+  signals?: readonly GoalSuggestionKey[];
+}) {
+  return <GoalConsoleView labels={labels} signals={signals} />;
+}
+
+/**
+ * GOAL INPUT UX GUIDANCE：`signals` 只来自首页已有的只读事实（`GET /accounts`），
+ * 仅用于调整建议项的**排列**；为空时保持默认 4 条顺序。
+ */
+export function GoalConsoleView({
+  labels,
+  signals,
+}: {
+  labels: GoalConsoleLabels;
+  signals: readonly GoalSuggestionKey[];
+}) {
+  const keyed: KeyedGoalSuggestion[] = [
+    { key: 'PLATFORM', text: labels.suggestion1 },
+    { key: 'LOGISTICS', text: labels.suggestion2 },
+    { key: 'CUSTOMS', text: labels.suggestion3 },
+    { key: 'INDEPENDENT_SITE', text: labels.suggestion4 },
+  ];
+  const suggestions = orderGoalSuggestions(keyed, signals);
   const scopeNames: Record<string, string> = {
     PLATFORM: labels.scopePlatform,
     LOGISTICS: labels.scopeLogistics,
@@ -122,16 +160,29 @@ export default function GoalConsole({ labels }: { labels: GoalConsoleLabels }) {
         </button>
       </div>
 
+      {/* 首次使用说明：只解释「说目标即可」，不暗示任何尚未开放的真实外部执行能力。 */}
+      <p className="mt-3 max-w-2xl text-xs text-slate-500 sm:text-sm">{labels.firstUseHint}</p>
+
+      {/* 宽泛输入的自然语言提示：仅提示，不阻断提交、不强制补字段、不引入 Wizard。 */}
+      {isBroadGoalIntent(intent) && recorded === null ? (
+        <p
+          role="status"
+          className="mt-3 max-w-2xl rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 sm:text-sm"
+        >
+          {labels.broadHint}
+        </p>
+      ) : null}
+
       <p className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">{labels.suggestedTitle}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {suggestions.map((suggestion) => (
           <button
-            key={suggestion}
+            key={suggestion.key}
             type="button"
-            onClick={() => setIntent(suggestion)}
+            onClick={() => setIntent(suggestion.text)}
             className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100"
           >
-            {suggestion}
+            {suggestion.text}
           </button>
         ))}
       </div>

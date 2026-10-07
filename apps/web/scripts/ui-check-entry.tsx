@@ -49,6 +49,12 @@ import RecoveryHeadlineCards from '../app/components/ui/recovery-headline-cards'
 import ActiveRecovery from '../app/components/ui/active-recovery';
 import zhCN from '../i18n/dictionaries/zh-CN';
 import { buildAgentRunView } from '../app/lib/agent-run-view';
+import {
+  connectedGoalSignals,
+  isBroadGoalIntent,
+  orderGoalSuggestions,
+  type KeyedGoalSuggestion,
+} from '../app/lib/goal-input-guidance';
 
 const failures: string[] = [];
 const results: string[] = [];
@@ -483,6 +489,86 @@ check('goal.console.no.task.count', !goalConsoleHtml.includes('已生成') && !g
 check('goal.console.submit', goalConsoleHtml.includes(zhCN.goalConsole.submit));
 check('goal.console.no.fake.execution', !goalConsoleHtml.includes('已提交') && !goalConsoleHtml.includes('执行完成'));
 check('goal.console.en.parity', render(<GoalConsole labels={enUS.goalConsole} />).includes(enUS.goalConsole.title));
+
+// GOAL INPUT UX GUIDANCE：输入引导（placeholder / 首次说明 / 建议项排列 / 宽泛提示）
+const goalInputHtml = render(<GoalConsole labels={zhCN.goalConsole} />);
+check('goal.input.placeholder.guidance', goalInputHtml.includes(zhCN.goalConsole.placeholder));
+check('goal.input.first.use.hint', goalInputHtml.includes(zhCN.goalConsole.firstUseHint));
+check(
+  'goal.input.suggestions.four.defaults',
+  [zhCN.goalConsole.suggestion1, zhCN.goalConsole.suggestion2, zhCN.goalConsole.suggestion3, zhCN.goalConsole.suggestion4]
+    .every((suggestion) => goalInputHtml.includes(suggestion)),
+);
+const goalInputSuggestionCopy = [
+  zhCN.goalConsole.placeholder,
+  zhCN.goalConsole.firstUseHint,
+  zhCN.goalConsole.suggestion1,
+  zhCN.goalConsole.suggestion2,
+  zhCN.goalConsole.suggestion3,
+  zhCN.goalConsole.suggestion4,
+].join(" | ");
+check('goal.input.copy.no.raw.enums', !/PLATFORM|LOGISTICS|CUSTOMS|INDEPENDENT_SITE|AMAZON_FBA|Chargeback|SI Runtime/.test(goalInputSuggestionCopy));
+const keyedSuggestions: KeyedGoalSuggestion[] = [
+  { key: 'PLATFORM', text: 's1' },
+  { key: 'LOGISTICS', text: 's2' },
+  { key: 'CUSTOMS', text: 's3' },
+  { key: 'INDEPENDENT_SITE', text: 's4' },
+];
+check('goal.input.suggestions.default.order', orderGoalSuggestions(keyedSuggestions, []).map((s) => s.key).join(',') === 'PLATFORM,LOGISTICS,CUSTOMS,INDEPENDENT_SITE');
+const logisticsFirst = orderGoalSuggestions(keyedSuggestions, ['LOGISTICS']);
+check('goal.input.suggestions.context.reorders.only', logisticsFirst[0].key === 'LOGISTICS' && logisticsFirst.length === 4 && logisticsFirst.map((s) => s.key).sort().join(',') === 'CUSTOMS,INDEPENDENT_SITE,LOGISTICS,PLATFORM');
+const goalSignalActive: AccountsResponse = {
+  platforms: [
+    {
+      platform: 'AMAZON',
+      accounts: [
+        {
+          platform: 'AMAZON',
+          displayName: 'Amazon US',
+          status: 'ACTIVE',
+          connections: [
+            { status: 'ACTIVE', channel: 'AMAZON_FBA', domain: 'PLATFORM', lastSyncAt: null, lastErrorAt: null },
+            { status: 'ACTIVE', channel: 'UPS', domain: 'LOGISTICS', lastSyncAt: null, lastErrorAt: null },
+          ],
+        },
+      ],
+    },
+  ],
+  unboundLegacyConnections: [],
+};
+const goalSignalInactive: AccountsResponse = {
+  platforms: [
+    {
+      platform: 'AMAZON',
+      accounts: [
+        {
+          platform: 'AMAZON',
+          displayName: 'Amazon US',
+          status: 'ACTIVE',
+          connections: [
+            { status: 'NEEDS_AUTH', channel: 'AMAZON_FBA', domain: 'PLATFORM', lastSyncAt: null, lastErrorAt: null },
+          ],
+        },
+      ],
+    },
+  ],
+  unboundLegacyConnections: [],
+};
+check('goal.input.signals.from.readonly.accounts', connectedGoalSignals(goalSignalActive).join(',') === 'PLATFORM,LOGISTICS');
+check('goal.input.signals.ignore.non.active', connectedGoalSignals(goalSignalInactive).length === 0);
+check('goal.input.signals.no.accounts', connectedGoalSignals(null).length === 0 && connectedGoalSignals({ platforms: [], unboundLegacyConnections: [] }).length === 0);
+check('goal.input.broad.detects.short.vague', isBroadGoalIntent('帮我追回钱'));
+check('goal.input.broad.ignores.specific', !isBroadGoalIntent('检查我过去 12 个月所有可以追回的钱') && !isBroadGoalIntent('检查 Amazon 平台漏赔和异常费用'));
+check('goal.input.broad.empty.not.flagged', !isBroadGoalIntent('') && !isBroadGoalIntent('   '));
+check(
+  'goal.input.guidance.copy.parity',
+  [zhCN, enUS, ja, es, de].every(
+    (dictionary) =>
+      dictionary.goalConsole.placeholder.length > 0 &&
+      dictionary.goalConsole.firstUseHint.length > 0 &&
+      dictionary.goalConsole.broadHint.length > 0,
+  ),
+);
 
 const headlineCards = buildHeadlineCards([bucket], 3, zhCN);
 const headlineHtml = render(<RecoveryHeadlineCards cards={headlineCards} note={zhCN.goalConsole.perCurrencyNote} />);
