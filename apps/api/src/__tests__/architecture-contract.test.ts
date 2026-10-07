@@ -176,7 +176,9 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'ProviderCaseProjection',
     // slice A-S4：AI 回复解读（advisory only；append-only）
     'ProviderCaseResponseInterpretation',    // AGENT EXPERIENCE LAYER / P0（HOST 2026-10-07）：Standing Authorization 耐久承载
-    'StandingAuthorization',
+    'StandingAuthorization',    // AGENT EXPERIENCE LAYER / P3（HOST 2026-10-07）：Goal 持久化（客户意图 + 执行投影）
+    'AgentGoal',
+    'AgentGoalRun',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -191,7 +193,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(84);
+    expect(CORE).toHaveLength(86);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -215,8 +217,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     }
   });
 
-  it('模型总数为 109（96 + 5 耐久底座 + 3 Scheduler + 3 Provider 事实层 + 1 AI 解读 + 1 Standing Authorization 持久化）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(109);
+  it('模型总数为 111（96 + 5 耐久底座 + 3 Scheduler + 3 Provider 事实层 + 1 AI 解读 + 1 Standing Authorization 持久化 + 2 Goal 持久化）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(111);
   });
 });
 
@@ -235,7 +237,9 @@ describe('租户归属（C-0002 CHANGE #2）', () => {
     'ProviderCaseProjection',
     // slice A-S4：AI 解读事实同样 tenant-owned
     'ProviderCaseResponseInterpretation',    // AGENT EXPERIENCE LAYER / P0：Standing Authorization 为 tenant-owned
-    'StandingAuthorization',
+    'StandingAuthorization',    // AGENT EXPERIENCE LAYER / P3：Goal 持久化为 tenant-owned
+    'AgentGoal',
+    'AgentGoalRun',
     'SourceConnection',
     'FileAsset',
     'ImportBatch',

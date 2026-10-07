@@ -3871,3 +3871,41 @@ model StandingAuthorization {
   @@unique([organizationId, id])
   @@index([organizationId, platformAccountId, provider, revocationState, expiresAt])
 }
+
+// ============================================================
+// AGENT EXPERIENCE LAYER / P3（HOST 2026-10-07 授权）
+// 最小 Goal 持久化：客户意图（AgentGoal）+ 执行投影（AgentGoalRun）
+// **不是** Opportunity / Case / Claim / Evidence / Money / Settlement 的 SSOT
+// ============================================================
+
+/// 客户目标（Customer Intent）。只表达「想得到什么结果」；不携带权限、不决定金额与资格。
+model AgentGoal {
+  id             String   @id @default(uuid())
+  organizationId String
+  createdBy      String
+  rawUserIntent  String
+  normalizedGoal Json
+  status         String   @default("PROPOSED")
+  createdAt      DateTime
+  updatedAt      DateTime
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status, createdAt])
+}
+
+/// 目标的一次执行投影（Execution Projection）。只引用既有 task / opportunity / case lineage，
+/// 不复制任何业务事实，也不构成第二事实源。
+model AgentGoalRun {
+  id             String    @id @default(uuid())
+  organizationId String
+  goalId         String
+  status         String    @default("QUEUED")
+  startedAt      DateTime
+  completedAt    DateTime?
+  summary        Json?
+  createdAt      DateTime
+  updatedAt      DateTime
+
+  @@unique([organizationId, id])
+  @@index([organizationId, goalId, startedAt])
+}
