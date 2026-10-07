@@ -25,30 +25,40 @@ export function isBareRoute(pathname: string | null | undefined): boolean {
   return BARE_ROUTES.some((route) => pathname === route || pathname.startsWith(route + '/'));
 }
 
+/**
+ * P8：Navigation Progressive Disclosure。
+ * 一级只保留 Home / Recoveries / Money / Needs Attention / Connections；
+ * 其余入口进 More / Advanced —— **所有既有 route 仍然可达**（不删任何入口、不破坏 URL / API contract）。
+ */
 export function buildCustomerNav(t: Messages): NavGroup[] {
   return [
     {
       title: t.customerShell.groupMain,
       items: [
         { href: '/', label: t.customerShell.navHome },
+        { href: '/recoveries', label: t.customerShell.navRecoveries },
+        { href: '/money', label: t.customerShell.navMoney },
+        { href: '/#customer-tasks', label: t.customerShell.navNeedsAttention },
+        { href: '/connections', label: t.customerShell.navConnections },
+      ],
+    },
+    {
+      title: t.customerShell.groupMore,
+      items: [
         { href: '/opportunities', label: t.customerShell.navOpportunities },
         { href: '/cases', label: t.customerShell.navCases },
-        { href: '/money', label: t.customerShell.navMoney },
         { href: '/customs', label: t.customerShell.navCustoms },
         { href: '/accounts', label: t.customerShell.navAccounts },
         { href: '/upload', label: t.customerShell.navUpload },
       ],
     },
     {
-      title: t.customerShell.groupBilling,
+      title: t.customerShell.groupAdvanced,
       items: [
         { href: '/billing', label: t.customerShell.navBilling },
         { href: '/plan', label: t.customerShell.navPlan },
+        { href: '/authorizations', label: t.customerShell.navAuthorizations },
       ],
-    },
-    {
-      title: t.customerShell.groupSettings,
-      items: [{ href: '/connections', label: t.customerShell.navConnections }],
     },
   ];
 }

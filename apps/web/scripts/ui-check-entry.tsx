@@ -6,6 +6,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import CustomerShell from '../app/components/customer-shell';
+import { buildCustomerNav } from '../app/components/nav-model';
 import ConnectionManager, { type ConnectionItem } from '../app/components/connection-manager';
 import AccountManagementView from '../app/accounts/account-management-view';
 import RecoveryPipeline from '../app/components/ui/recovery-pipeline';
@@ -632,6 +633,32 @@ check('auth.page.revoked.note', revokedAuthHtml.includes('customer revoked'));
 check('auth.page.revoked.no.cta', !revokedAuthHtml.includes(zhCN.authorizationPage.revokeCta));
 const emptyAuthHtml = render(<AuthorizationList items={[]} t={zhCN} />);
 check('auth.page.empty.honest', emptyAuthHtml.includes(zhCN.authorizationPage.emptyHint));
+
+// AGENT EXPERIENCE LAYER / P8：Navigation Progressive Disclosure（不删任何 route）
+check('nav.primary.recoveries', shellHtml.includes(zhCN.customerShell.navRecoveries));
+check('nav.primary.needs.attention', shellHtml.includes(zhCN.customerShell.navNeedsAttention));
+check('nav.primary.connections', shellHtml.includes(zhCN.customerShell.navConnections));
+check('nav.group.more', shellHtml.includes(zhCN.customerShell.groupMore));
+check('nav.group.advanced', shellHtml.includes(zhCN.customerShell.groupAdvanced));
+const REQUIRED_HREFS = [
+  '/',
+  '/recoveries',
+  '/money',
+  '/connections',
+  '/opportunities',
+  '/cases',
+  '/customs',
+  '/accounts',
+  '/upload',
+  '/billing',
+  '/plan',
+  '/authorizations',
+];
+check(
+  'nav.no.route.removed',
+  REQUIRED_HREFS.every((href) => shellHtml.includes('href="' + href + '"')),
+);
+check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
 
 console.log(results.join('\n'));
 if (failures.length > 0) {
