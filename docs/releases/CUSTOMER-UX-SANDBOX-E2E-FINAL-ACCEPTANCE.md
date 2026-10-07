@@ -352,3 +352,63 @@ production enablement 前必须替换为 durable/atomic 准入（或证明单 wr
 **本单元仍未 CLOSED** —— 需把本报告 + 新 exact HEAD 再次提交右侧独立 ChatGPT 重裁
 （CUSTOMER_USABILITY / SANDBOX_END_TO_END / AUTHORIZATION_RESUME / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED /
 EXTERNAL_BOUNDARY_HONESTY / SECURITY_BOUNDARY / PRODUCTION_GATE），拿到 PASS / CLOSED 才关闭。
+
+---
+
+## 14. FINAL4 修订记录（按独立终审 MSG-20261007-05）
+
+裁决 MSG-20261007-05 = **PASS WITH REVISE / NOT CLOSED**（逐字归档；FNV1A_MATCH 4bfe93f1 + FULL_COPY_OK 221 行一致）：
+真实 runtime claim / task→goal lineage / same-goal resume / CUSTOMER_USABILITY / FIRST_RUN_GUIDANCE /
+NO_API_FAIL_CLOSED / EXTERNAL_BOUNDARY_HONESTY / PRODUCTION_GATE = PASS；唯一 REVISE = **SECURITY_BOUNDARY**：
+provider-specific Goal scope 未冻结进 deterministic goal identity（Amazon Goal + Walmart 账户仍可准入）。
+
+### 14.1 provider 意图冻结进 deterministic goal identity
+
+* `goal-compiler.ts`：新增确定性 `PROVIDER_SIGNALS`（AMAZON / WALMART / TIKTOK / EBAY / SHOPIFY / STRIPE /
+  PAYPAL / UPS / FEDEX / DHL / FREIGHT_FORWARDER / INSURANCE / CBP），draft 增加 `providers`
+  —— 仍 `modelCallCount = 0`，纯确定性。
+* `goal-schema.ts`：允许 `providers` 字段并做字符串数组类型校验（其余未知字段仍拒绝）。
+* `goal-validator.ts`：`providers` 走白名单 + 排序去重，并**纳入 `goalDigest`** → provider 意图成为 goal identity
+  的一部分（不可静默改写；Amazon 与 Walmart 意图产生不同 digest 与不同 goal id）。
+* `http-request.ts`：durable goal 记录与响应 interpretation 都带 `providers`。
+
+### 14.2 provider-level 准入匹配（server-owned）
+
+`admitAgentGoal()`：当 durable Goal 自带 provider 意图时，账户 `PlatformAccount.platform` **必须命中**
+（domain 匹配不再是充分条件）；客户端 provider 仍只作断言（不一致 → `PROVIDER_SCOPE_MISMATCH`）。
+
+```
+Amazon Goal + Walmart account            → DENIED / GOAL_SCOPE_MISMATCH（零入队）
+Amazon Goal + UPS account                → DENIED / GOAL_SCOPE_MISMATCH
+Amazon Goal + Amazon account + 匹配授权   → 可进入 admission
+same tenant / wrong provider / wrong domain / cross tenant → 全部 DENY
+```
+
+### 14.3 runtime→goal lineage 与 acceptance 队列卫生
+
+* `recordGoalRunFromRuntime()` 的 lineage 判定：runtime 认领的 task 必须带**该 durable Goal 的 digest 前缀**
+  （计划以 durable goal 记录重建；legacy 缺字段时回退确定性编译），否则 `GOAL_RUNTIME_LINEAGE_MISMATCH`、零投影。
+* acceptance：每次运行清空队列 artifact；runtime 路由若 claim 到的 task 不属于本次 goal →
+  `409 RUNTIME_CLAIMED_OTHER_GOAL`（fail closed）。
+
+### 14.4 FINAL4 证据
+
+| 项 | 结果 |
+| --- | --- |
+| 客户浏览器 E2E | **59/59 PASS**（新增 `security.provider.mismatch.denied`：Amazon Goal + Walmart 账户 → 403 DENIED / GOAL_SCOPE_MISMATCH；其余链路与移动端保持全绿） |
+| goal-admission-db（真实 PG） | **12/12 PASS**（新增 GA-11 Walmart fail-closed；GA-12 provider 意图进入 identity：Amazon ≠ Walmart digest） |
+| FINAL4 定向回归 | 12 files / **305 tests PASS** |
+| api tsc | 0 |
+| API 全量回归（HEAD `020ff317`） | **4560 passed / 4561 total**；唯一失败 = 既有 `recovery-si-phase2-e-db` P2E-DB5 并行隔离 flake，**单独重跑 20/20 PASS** → 记录为既有 test-isolation debt（与 FINAL4 无关） |
+| GitHub Actions | NOT_OBSERVED（local/Codex evidence） |
+
+### 14.5 边界与已登记 production debt（不变）
+
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED；REAL_VALIDATION_COMPLETE = NO；PRODUCTION_READY = NO；
+全部 HOLD / FORBIDDEN 与 `SECOND_* = 0` 保持。
+已登记非阻断 production debt：`createJsonTaskQueuePort()` 为 JSON read-modify-write，缺跨 worker lock/CAS
+——production enablement 前必须换成 durable/atomic 准入或证明单 writer。
+
+**本单元仍未 CLOSED** —— 需把本报告 + 新 exact HEAD 再次提交右侧独立 ChatGPT 重裁
+（CUSTOMER_USABILITY / SANDBOX_END_TO_END / AUTHORIZATION_RESUME / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED /
+EXTERNAL_BOUNDARY_HONESTY / SECURITY_BOUNDARY / PRODUCTION_GATE），拿到 PASS / CLOSED 才关闭。
