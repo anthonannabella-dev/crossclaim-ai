@@ -17,13 +17,15 @@ import {
   assertNoSecondRuntime,
   assertRecoveryNamespaceOnly,
   compileAgentGoal,
-  createGoalRuntimeAdapter,
   planAgentGoal,
   resolveGoalCapabilities,
   validateAgentGoalDraft,
   type GoalCapabilityFacts,
   type GoalPlan,
 } from '../services/agent-goal';
+
+// AEL-FINAL2：direct-runner adapter 不再从产品 barrel 导出，测试显式按路径引用（internal/test-only）
+import { createGoalRuntimeAdapter } from '../services/agent-goal/goal-runtime-adapter';
 import { ACTION_GUARD_CATALOG } from '../services/action-guard/action-guard';
 
 const NOW = new Date('2026-10-07T05:00:00.000Z');

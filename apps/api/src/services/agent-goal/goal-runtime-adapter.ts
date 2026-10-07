@@ -1,6 +1,12 @@
-// AGENT EXPERIENCE LAYER / P1/P2 — Goal → 既有 ONE SI Runtime 适配器
+// AGENT EXPERIENCE LAYER / P1/P2 — Goal → 既有 ONE SI Runtime 适配器（**INTERNAL / TEST-ONLY**）
 // ---------------------------------------------------------------------------
-// 硬约束：**不新增 runtime**。适配器只把规划好的任务草案交给既有 runner（`createRsiDomainPackRunner`
+// ⚠ AEL-FINAL2 修订（审计裁决 MSG-20261007-01 CHANGE 1）：
+//   本文件含 direct-runner dispatch（`runtime.run(...)`），会绕过 queue admission / claim / lease /
+//   park-for-judge / reserved recovery routing。因此它**不得**从 `agent-goal/index.ts` 导出，
+//   产品代码**不得**引用；只允许测试通过显式路径（`./goal-runtime-adapter`）引用。
+//   产品执行准入的唯一入口是 `goal-runtime-binding.ts`（既有任务队列）。
+//
+// 硬约束（保留）：**不新增 runtime**。适配器只把规划好的任务草案交给既有 runner（`createRsiDomainPackRunner`
 // 产出的 runner，owner = `apps/api/src/runtime/rsi-run.ts`），并把结果如实回传。
 //   * 不得创建事件循环 / 调度器 / 轮询；
 //   * 不得抢占 `task:recovery:*`（只允许把该命名空间的任务交给既有 runtime）；
@@ -8,6 +14,7 @@
 //   * 不执行任何外部写。
 
 import { RECOVERY_TASK_DEDUPE_PREFIX } from '../../runtime/rsi-domain-pack';
+import { assertRecoveryNamespaceOnly } from './goal-runtime-binding';
 import type { GoalPlan } from './goal-task-planner';
 
 export const GOAL_RUNTIME_ADAPTER_VERSION = 'agent-goal-runtime-adapter/v1';
@@ -48,21 +55,7 @@ export interface GoalRuntimeAdapter {
   dispatch(plan: GoalPlan, options?: { now?: Date }): Promise<GoalDispatchResult>;
 }
 
-/** 断言：规划结果只能落在既有保留命名空间内 */
-export function assertRecoveryNamespaceOnly(plan: GoalPlan): void {
-  for (const task of plan.tasks) {
-    if (!task.dedupeKey.startsWith(RECOVERY_TASK_DEDUPE_PREFIX)) {
-      throw new Error('GOAL_TASK_NAMESPACE_NOT_ALLOWED: ' + task.dedupeKey);
-    }
-  }
-}
 
-/** 断言：本层不得创建第二 runtime */
-export function assertNoSecondRuntime(members: { secondRuntime?: number }): void {
-  if (members.secondRuntime !== undefined && members.secondRuntime !== 0) {
-    throw new Error('GOAL_SECOND_RUNTIME_FORBIDDEN');
-  }
-}
 
 /**
  * 创建适配器。**runtime 必须由调用方注入既有 runner** —— 本函数不构造任何循环 / 调度。

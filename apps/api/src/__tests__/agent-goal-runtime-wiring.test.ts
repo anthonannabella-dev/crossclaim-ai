@@ -11,13 +11,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { composeRsiRuntime } from '../runtime/rsi-run';
+
+import * as agentGoalBarrel from '../services/agent-goal';
 import type { RsiDomainCapabilityPack } from '../runtime/rsi-domain-pack';
 import type { RecoveryReadPorts } from '../services/intelligence/recovery-read-tools';
 import {
   GOAL_RUNTIME_BINDING_BOUNDARY,
   assertAdmissionIsNotExecution,
   compileAgentGoal,
-  createGoalRuntimeAdapter,
   createGoalRuntimeBinding,
   planAgentGoal,
   resolveGoalCapabilities,
@@ -245,7 +246,9 @@ describe('P2 · Goal → 既有 ONE SI Runtime（真实 composeRsiRuntime）', (
 
   it('P2-A6 未注入队列端口 / adapter 未注入 runner → 一律拒绝（不得自建执行设施）', () => {
     expect(() => createGoalRuntimeBinding({ queue: undefined as never })).toThrow(/GOAL_TASK_QUEUE_PORT_REQUIRED/);
-    expect(() => createGoalRuntimeAdapter({ runtime: undefined as never })).toThrow(/GOAL_RUNTIME_PORT_REQUIRED/);
+    // AEL-FINAL2（MSG-20261007-01 CHANGE 1）：direct-runner adapter 不得出现在产品导出面
+    expect('createGoalRuntimeAdapter' in agentGoalBarrel).toBe(false);
+    expect('GOAL_RUNTIME_ADAPTER_BOUNDARY' in agentGoalBarrel).toBe(false);
   });
 
   it('P2-A7 runtimeMembers：SECOND_RUNTIME = 0，唯一 runtime owner 为 rsi-run.ts', async () => {

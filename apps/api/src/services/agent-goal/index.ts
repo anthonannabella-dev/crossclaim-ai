@@ -7,6 +7,7 @@ export * from './goal-compiler';
 export * from './goal-validator';
 export * from './goal-capability-resolver';
 export * from './goal-task-planner';
-export * from './goal-runtime-adapter';
+// P9/AEL-FINAL2：**不**导出 goal-runtime-adapter —— 它含 direct-runner dispatch，
+// 属 internal/test-only 面；产品执行准入唯一入口是 goal-runtime-binding（既有任务队列）。
 export * from './goal-runtime-binding';
 export * from './goal-store';

@@ -10,8 +10,24 @@
 //     * 入队 ≠ 执行 —— 返回体显式 `admissionOnly = true`、`externalActionPerformed = false`；
 //     * 非 `task:recovery:*` 命名空间一律拒绝（不得抢占、不得绕过 Recovery routing）。
 
+import { RECOVERY_TASK_DEDUPE_PREFIX } from '../../runtime/rsi-domain-pack';
 import type { GoalTaskDraft, GoalPlan } from './goal-task-planner';
-import { assertRecoveryNamespaceOnly } from './goal-runtime-adapter';
+
+/** 只允许既有保留命名空间（`task:recovery:`）——不得抢占 / 不得绕到别的命名空间 */
+export function assertRecoveryNamespaceOnly(plan: GoalPlan): void {
+  for (const task of plan.tasks) {
+    if (!task.dedupeKey.startsWith(RECOVERY_TASK_DEDUPE_PREFIX)) {
+      throw new Error('GOAL_TASK_NAMESPACE_NOT_ALLOWED: ' + task.dedupeKey);
+    }
+  }
+}
+
+/** 断言：本层不得创建第二 runtime */
+export function assertNoSecondRuntime(members: { secondRuntime?: number }): void {
+  if (members.secondRuntime !== undefined && members.secondRuntime !== 0) {
+    throw new Error('GOAL_SECOND_RUNTIME_FORBIDDEN');
+  }
+}
 
 export const GOAL_RUNTIME_BINDING_VERSION = 'agent-goal-runtime-binding/v1';
 

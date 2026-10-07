@@ -678,3 +678,36 @@ describe('CARRIER QUEUE #9B FINAL-2 — DB confirmation truth constraint（MSG-2
     expect(ALL_MIGRATIONS_SQL).toMatch(/CarrierManualSubmission_submissionMode_check[\s\S]{0,160}'MANUAL'/);
   });
 });
+
+// ============================================================
+// AEL-FINAL2（审计裁决 MSG-20261007-01 CHANGE 1）：
+// Agent Goal 的产品执行准入**唯一**入口是既有任务队列（goal-runtime-binding）。
+// direct-runner surface 不得从产品 barrel 导出，产品代码不得直接调用 runner.run。
+// ============================================================
+describe('Agent Goal 单一执行准入面（AEL-FINAL2）', () => {
+  const AGENT_GOAL_DIR = join(API_ROOT, 'src', 'services', 'agent-goal');
+
+  it('产品 barrel 不导出 goal-runtime-adapter（direct-runner 面）', () => {
+    const barrel = readFileSync(join(AGENT_GOAL_DIR, 'index.ts'), 'utf8');
+    expect(barrel).not.toMatch(/export\s+\*\s+from\s+'\.\/goal-runtime-adapter'/);
+    expect(barrel).toContain('goal-runtime-binding');
+  });
+
+  it('Agent Goal 产品代码不得调用 runner.run / 引用 RsiEvidenceRunner', () => {
+    const offenders: string[] = [];
+    for (const entry of readdirSync(AGENT_GOAL_DIR, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
+      // adapter 本身即 direct-runner 面：只允许作为 internal/test-only 存在
+      if (entry.name === 'goal-runtime-adapter.ts') continue;
+      const source = readFileSync(join(AGENT_GOAL_DIR, entry.name), 'utf8');
+      if (/runtime\.run\s*\(/.test(source)) offenders.push(entry.name + ' :: runtime.run');
+      if (/RsiEvidenceRunner/.test(source)) offenders.push(entry.name + ' :: RsiEvidenceRunner');
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('direct-runner adapter 自述为 INTERNAL / TEST-ONLY', () => {
+    const adapter = readFileSync(join(AGENT_GOAL_DIR, 'goal-runtime-adapter.ts'), 'utf8');
+    expect(adapter).toMatch(/INTERNAL\s*\/\s*TEST-ONLY/);
+  });
+});
