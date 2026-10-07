@@ -24,9 +24,15 @@ export default async function AuthorizationsPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
         <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">{t.authorizationPage.pageTitle}</h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-600">{t.authorizationPage.subtitle}</p>
-        <Link href="/connections" className="mt-4 inline-block text-sm text-slate-500 underline hover:text-slate-800">
-          {t.authorizationPage.connectionsLink}
-        </Link>
+        <div className="mt-4 flex flex-wrap gap-4">
+          <Link href="/connections" className="text-sm text-slate-500 underline hover:text-slate-800">
+            {t.authorizationPage.connectionsLink}
+          </Link>
+          <Link href="/customs/authorization" className="text-sm text-slate-500 underline hover:text-slate-800">
+            {t.authorizationPage.customsReuseCta}
+          </Link>
+        </div>
+        <p className="mt-3 max-w-3xl text-xs text-slate-500">{t.authorizationPage.customsReuseBody}</p>
       </section>
 
       {result.ok && result.body ? (

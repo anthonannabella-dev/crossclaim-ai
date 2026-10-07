@@ -553,3 +553,32 @@ export function buildTaskKindLabels(t: Messages): Record<TaskKind, string> {
     IMPORT: t.needsAttention.kindImport,
   };
 }
+
+/**
+ * 按需授权（P9 补强）：当**已记录的目标**还在等待授权时，在 Needs Your Attention 里出现一条
+ * AUTHORIZATION 项 —— 客户完成授权后 CrossClaim 继续执行**原来那个目标**（无需重新提交）。
+ * 数据来自既有 `GET /agent-goals`（客户意图投影），不新增事实源。
+ */
+export interface GoalForAuthorizationTask {
+  goalId: string;
+  status: string;
+  intent: string;
+}
+
+export function buildAuthorizationTasks(
+  goals: GoalForAuthorizationTask[] | null | undefined,
+  t: Messages,
+): TaskView[] {
+  return (goals ?? [])
+    .filter((goal) => goal.status === 'PROPOSED')
+    .map((goal) => ({
+      id: 'authorization:' + goal.goalId,
+      kind: 'AUTHORIZATION' as const,
+      title: goal.intent,
+      what: t.needsAttention.authorizationGoalTitle,
+      impact: t.dashboardPage.taskImpactBlocking,
+      why: t.needsAttention.authorizationGoalBody,
+      ctaLabel: t.needsAttention.authorizationGoalCta,
+      ctaHref: '/authorizations',
+    }));
+}

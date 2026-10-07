@@ -186,6 +186,9 @@ const ja: Messages = {
     paymentStatusNote: "支払状況は表示のみです。入金・支払いは保留のままです。",
     evidenceConflictNote: "同じ金額について証憑が矛盾しています。確認後に続行します。",
     approvalNote: "この金額は自動実行の上限を超えています。承認が必要です。",
+    authorizationGoalTitle: "この目標には承認が必要です",
+    authorizationGoalBody: "承認すると、CrossClaim は元の目標をそのまま続行します。再提出は不要です。",
+    authorizationGoalCta: "承認する",
   },
   agentRun: {
     pageTitle: "実行の詳細",
@@ -281,6 +284,8 @@ const ja: Messages = {
     actionCarrierClaimResponse: "運送会社の回答を記録",
     actionCustomsRecoveryStart: "関税の回収を開始",
     actionOther: "その他の操作",
+    customsReuseCta: "通関承認センターを開く",
+    customsReuseBody: "通関（申告 / 委任状 / 署名者）の承認は既存の通関承認センターで管理します。自動回収の承認で置き換えることはできません。",
   },
   recoveriesPage: {
     pageTitle: "回収タスク",

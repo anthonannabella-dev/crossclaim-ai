@@ -186,6 +186,9 @@ const enUS: Messages = {
     paymentStatusNote: "Payment status is display-only; collection and payment stay on hold.",
     evidenceConflictNote: "Sources disagree about this amount; we need your confirmation before continuing.",
     approvalNote: "This amount exceeds your automatic execution limit and needs your approval.",
+    authorizationGoalTitle: "This goal needs your authorization",
+    authorizationGoalBody: "Once you authorize, CrossClaim continues the original goal — you do not need to submit it again.",
+    authorizationGoalCta: "Authorize",
   },
   agentRun: {
     pageTitle: "Run details",
@@ -281,6 +284,8 @@ const enUS: Messages = {
     actionCarrierClaimResponse: "Record carrier response",
     actionCustomsRecoveryStart: "Start customs recovery",
     actionOther: "Other action",
+    customsReuseCta: "Open the customs authorization center",
+    customsReuseBody: "Customs (entry / POA / signer) authorization is still managed in the existing customs authorization center; a recovery authorization does not replace it.",
   },
   recoveriesPage: {
     pageTitle: "Recoveries",

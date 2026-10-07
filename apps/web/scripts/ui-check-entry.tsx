@@ -29,6 +29,7 @@ import {
   buildConnectionTasks,
   buildTaskKindLabels,
   mergeNeedsAttention,
+  buildAuthorizationTasks,
   TASK_KINDS,
   selectPrimaryCta,
   type AccountsResponse,
@@ -659,6 +660,21 @@ check(
   REQUIRED_HREFS.every((href) => shellHtml.includes('href="' + href + '"')),
 );
 check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
+
+// AGENT EXPERIENCE LAYER / P9：按需授权（目标等待授权 → Needs Your Attention → 去授权后继续原目标）
+const pendingGoalTasks = buildAuthorizationTasks(
+  [{ goalId: 'agentgoal-a', status: 'PROPOSED', intent: '检查我过去12个月可以追回的钱' }],
+  zhCN,
+);
+check('authz.task.kind', pendingGoalTasks.length === 1 && pendingGoalTasks[0].kind === 'AUTHORIZATION');
+check('authz.task.cta', pendingGoalTasks[0].ctaHref === '/authorizations');
+check('authz.task.resume.copy', pendingGoalTasks[0].why === zhCN.needsAttention.authorizationGoalBody);
+const authorizedGoalTasks = buildAuthorizationTasks(
+  [{ goalId: 'agentgoal-b', status: 'ADMITTED', intent: 'x' }],
+  zhCN,
+);
+check('authz.task.disappears.after.authorization', authorizedGoalTasks.length === 0);
+check('authz.customs.reuse.link', zhCN.authorizationPage.customsReuseCta.length > 0 && zhCN.authorizationPage.customsReuseBody.length > 0);
 
 console.log(results.join('\n'));
 if (failures.length > 0) {

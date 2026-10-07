@@ -186,6 +186,9 @@ const de: Messages = {
     paymentStatusNote: "Der Zahlungsstatus dient nur der Anzeige; Einzug und Auszahlung bleiben gesperrt.",
     evidenceConflictNote: "Zu diesem Betrag widersprechen sich die Quellen; wir brauchen Ihre Bestätigung.",
     approvalNote: "Dieser Betrag überschreitet Ihr Limit für die automatische Ausführung und braucht Ihre Genehmigung.",
+    authorizationGoalTitle: "Dieses Ziel braucht Ihre Freigabe",
+    authorizationGoalBody: "Nach der Freigabe führt CrossClaim das ursprüngliche Ziel fort — eine erneute Eingabe ist nicht nötig.",
+    authorizationGoalCta: "Freigeben",
   },
   agentRun: {
     pageTitle: "Ausführungsdetails",
@@ -281,6 +284,8 @@ const de: Messages = {
     actionCarrierClaimResponse: "Carrier-Antwort erfassen",
     actionCustomsRecoveryStart: "Zollrückholung starten",
     actionOther: "Andere Aktion",
+    customsReuseCta: "Zollfreigabe-Zentrum öffnen",
+    customsReuseBody: "Zollfreigaben (Anmeldung / Vollmacht / Unterzeichner) werden weiterhin im bestehenden Zollfreigabe-Zentrum verwaltet; eine Rückhol-Freigabe ersetzt das nicht.",
   },
   recoveriesPage: {
     pageTitle: "Rückholungen",

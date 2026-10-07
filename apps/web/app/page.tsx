@@ -20,6 +20,7 @@ import {
   buildPlatformCards,
   buildTasks,
   buildConnectionTasks,
+  buildAuthorizationTasks,
   buildTaskKindLabels,
   mergeNeedsAttention,
   selectPrimaryCta,
@@ -83,18 +84,23 @@ export default async function DashboardPage() {
   const me = await apiGet<Me>('/auth/me');
   if (!me.ok || !me.body) return <LoginPrompt t={t} />;
 
-  const [money, accounts, recoveryStates, opportunities, imports] = await Promise.all([
+  const [money, accounts, recoveryStates, opportunities, imports, goals] = await Promise.all([
     apiGet<MoneyResponse>('/recovery-money'),
     apiGet<AccountsResponse>('/accounts'),
     apiGet<{ items: RecoveryStateItem[] }>('/recovery-states'),
     apiGet<{ items: OpportunityApiItem[]; hasMore: boolean }>('/opportunities?limit=5'),
     apiGet<{ items: ImportBatchItem[] }>('/imports'),
+    apiGet<{ items: Array<{ goalId: string; status: string; intent: string }> }>('/agent-goals'),
   ]);
 
   const summaries = buildCurrencySummaries(money.body?.organization.byCurrency, t);
   const recoveryTasks = buildTasks(recoveryStates.body?.items, t);
-  // P5: merge recovery-state tasks with authorization / reconnect tasks derived from /accounts (single list)
-  const tasks = mergeNeedsAttention(recoveryTasks, buildConnectionTasks(accounts.body, t));
+  // P5 / P9: one merged Needs Your Attention list (recovery states + account tasks + goals awaiting authorization)
+  const tasks = mergeNeedsAttention(
+    recoveryTasks,
+    buildConnectionTasks(accounts.body, t),
+    buildAuthorizationTasks(goals.body?.items, t),
+  );
   const platforms = buildPlatformCards(accounts.body, t);
   const opportunityViews = (opportunities.body?.items ?? []).map((item) => buildOpportunityView(item, t));
 

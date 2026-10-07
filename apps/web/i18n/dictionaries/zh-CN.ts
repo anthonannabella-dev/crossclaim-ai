@@ -187,6 +187,9 @@ const zhCN = {
     paymentStatusNote: "支付状态仅作展示；收款与付款仍处于 HOLD。",
     evidenceConflictNote: "同一笔金额存在互相冲突的证据，需要你确认后才继续。",
     approvalNote: "这笔金额超过你设置的自动执行上限，需要你批准。",
+    authorizationGoalTitle: "这个目标需要你授权",
+    authorizationGoalBody: "完成授权后，CrossClaim 会继续执行原来的目标，不需要你重新提交。",
+    authorizationGoalCta: "去授权",
   },
   agentRun: {
     pageTitle: "执行详情",
@@ -282,6 +285,8 @@ const zhCN = {
     actionCarrierClaimResponse: "登记承运商回复",
     actionCustomsRecoveryStart: "启动关税追回",
     actionOther: "其他动作",
+    customsReuseCta: "查看关税授权中心",
+    customsReuseBody: "关税（报关 / 委托书 / 签署人）的授权状态仍在既有的关税授权中心管理，自动追回授权不能替代它。",
   },
   recoveriesPage: {
     pageTitle: "追回任务",

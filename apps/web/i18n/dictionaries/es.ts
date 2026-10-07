@@ -186,6 +186,9 @@ const es: Messages = {
     paymentStatusNote: "El estado de pago es solo informativo; el cobro y el pago siguen en espera.",
     evidenceConflictNote: "Las fuentes discrepan sobre este importe; necesitamos tu confirmación para continuar.",
     approvalNote: "Este importe supera tu límite de ejecución automática y requiere tu aprobación.",
+    authorizationGoalTitle: "Este objetivo necesita tu autorización",
+    authorizationGoalBody: "Cuando autorices, CrossClaim continúa el objetivo original: no hace falta enviarlo otra vez.",
+    authorizationGoalCta: "Autorizar",
   },
   agentRun: {
     pageTitle: "Detalle de la ejecución",
@@ -281,6 +284,8 @@ const es: Messages = {
     actionCarrierClaimResponse: "Registrar respuesta del transportista",
     actionCustomsRecoveryStart: "Iniciar recuperación aduanera",
     actionOther: "Otra acción",
+    customsReuseCta: "Abrir el centro de autorización aduanera",
+    customsReuseBody: "La autorización aduanera (entrada / poder / firmante) se sigue gestionando en el centro de autorización aduanera existente; una autorización de recuperación no la sustituye.",
   },
   recoveriesPage: {
     pageTitle: "Recuperaciones",
