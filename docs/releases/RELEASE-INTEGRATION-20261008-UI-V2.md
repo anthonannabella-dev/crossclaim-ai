@@ -87,6 +87,7 @@ HOST 于 2026-10-08 明确授权路径 A：
 | `/standing-authorizations` 路由存在性与行为 | **PASS**：未鉴权 401；鉴权后 200 `{items, standings, executionPerformed}` |
 | 对照（不存在路由） | `/definitely-not-a-route-xyz` → **404**（证明上面的非 404 不是兜底行为） |
 | 路由探针总计 | **13/13 PASS** |
+| 客户链路探针（真实 HTTP + 真实 PostgreSQL，无 mock） | **11/11 PASS**：`signup → POST /agent-goals → durable standing authorization → /agent-goals/:id/admit(ADMITTED, externalActionPerformed=false) → /acceptance/run-si-runtime(claim + run projection, externalWritePerformed=false) → GET /standing-authorizations(revocationState=ACTIVE) → **真实产品路由** POST /standing-authorizations/:id/revoke(revoked=1) → 复读 REVOKED + revokedAt → 同 provider 另一 identity 的新 Goal 准入 = **403 DENIED `["STANDING_AUTH_REVOKED","AUTHORIZATION_DENY"]`**` |
 | 关键页面 smoke（首页 / recoveries / connections / authorizations / money / cases） | 浏览器旅程内 `a11y.*` + `home.*` / `recoveries.*` / `connections.*` / `authorizations.*` 断言全绿 |
 | desktop + mobile 无横向溢出 | **PASS**（`a11y.*.no.horizontal.overflow` + `mobile.*`） |
 | tenant isolation / fail-closed | **PASS**：`tenant-isolation` 19、`architecture-contract` 170、`goal-admission-db` 18（含跨租户 GA-9/GA-10 拒），以及 action-guard / customs / carrier 全套 |
