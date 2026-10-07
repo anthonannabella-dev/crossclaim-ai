@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "7a0149d9",
+  "head": "8356549c",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-07T04:52:54.200Z",
+  "updated_at": "2026-10-07T04:56:58.581Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "IN_PROGRESS（P0 CLOSED / P1–P9 排队）",
-  "next_execution_unit": "P6 — Agent Run 页面 /recoveries/runs/:id（业务语言；不暴露 runner internals / judge / task namespace / policy engine / raw blocker code / model router）",
+  "next_execution_unit": "P7 — Authorization 管理 UI（/authorizations：状态全部来自后端 Standing Authorization；前端不得生成 scopeDigest、不得指定 server-only 权限字段；需要把 P0 durable store 暴露为只读 HTTP 面）",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T09:55:01.250Z",
   "state": "AGENT_EXPERIENCE_LAYER_IN_PROGRESS",
-  "last_action": "P5 CLOSED（7a0149d9）：TaskCenter 升级为 Needs Your Attention —— 复用同一组件（不建第二套待办中心），任务模型扩展为 12 类（HOST 10 类 + 既有 CONNECTION/IMPORT），从既有 /accounts 事实派生 CONNECTION_REAUTH / ACCOUNT_RECONNECT 并与 /recovery-states 合并去重；技术 code 不上主文案；未伪造无事实支撑的类别。i18n 692 键硬编码 0、UI render 103/103、web tsc 0、next build 0。",
-  "last_action_at": "2026-10-07T04:52:54.200Z",
-  "next_action": "按队列推进 P6 → P9（每单元独立 commit/push/checkpoint）。",
-  "current_head": "7a0149d9",
-  "last_completed_head": "7a0149d9",
+  "last_action": "P6 CLOSED（8356549c）：Agent Run 页面 /recoveries/runs/:id 落地 —— 新增 GET /agent-goals/:id（目标 + runs，零执行；跨租户/不存在 404；写方法 405）与业务语言投影 buildAgentRunView（进度按真实状态推进、结果无事实即空状态、金额仅逐币种）；自动断言无 runner/judge/policy engine/model router/task:recovery 外泄。HTTP 6/6、i18n 741 键硬编码 0、UI render 113/113、api/web tsc 0、next build 0。",
+  "last_action_at": "2026-10-07T04:56:58.581Z",
+  "next_action": "按队列推进 P7 → P9（每单元独立 commit/push/checkpoint）。",
+  "current_head": "8356549c",
+  "last_completed_head": "8356549c",
   "reviewed_head": "42161550",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -12225,7 +12225,7 @@
   "agent_experience_layer": {
     "authorization": "HOST 2026-10-07 AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION",
     "baseline_head": "96a26c29",
-    "program_head": "7a0149d9",
+    "program_head": "8356549c",
     "branch": "gate/7-commercial-validation",
     "units": {
       "P0": {
@@ -12395,10 +12395,29 @@
           ],
           "RAW_CODES_IN_CUSTOMER_COPY": "NONE"
         }
+      },
+      "P6": {
+        "name": "AGENT RUN 页面 /recoveries/runs/:id（业务语言）",
+        "status": "CLOSED / PUSHED",
+        "head": "8356549c",
+        "report": "docs/releases/AGENT-EXPERIENCE-P6-AGENT-RUN-REPORT.md",
+        "files": [
+          "apps/api/src/services/agent-goal/http-request.ts",
+          "apps/web/app/lib/agent-run-view.ts",
+          "apps/web/app/recoveries/runs/[id]/agent-run-view.tsx",
+          "apps/web/app/recoveries/runs/[id]/page.tsx",
+          "apps/web/i18n/dictionaries/*.ts (agentRun ×5)"
+        ],
+        "tests": "agent-goal-http-db 6/6（含详情面 / 跨租户 404 / 写方法 405）；i18n OK（741 键 / 硬编码 0）；UI render 113/113；api tsc 0；web tsc 0；next build 0",
+        "returns": {
+          "AGENT_RUN_UI": "PASS",
+          "BUSINESS_LANGUAGE_ONLY": "PASS（自动断言无 runner/judge/policy engine/model router/task:recovery）",
+          "FABRICATED_PROGRESS": "NONE",
+          "CROSS_CURRENCY_SUMMING": "FORBIDDEN_AND_ENFORCED"
+        }
       }
     },
     "safe_continuation_queue": [
-      "P6 — Agent Run 页面 /recoveries/runs/:id（业务语言，不暴露 runner/judge/namespace 内部）",
       "P7 — Authorization 管理 UI（/authorizations，状态全部来自后端 Standing Authorization）",
       "P8 — Navigation Progressive Disclosure（不删 route、不破坏 API contract）",
       "P9 — OAuthAuthorizationSession / ConnectionSyncState 最小补强（B2 PARTIAL 的真实缺口）",

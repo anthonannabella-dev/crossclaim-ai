@@ -1,7 +1,7 @@
 # AGENT RUN 页面 `/recoveries/runs/:id`（P6）—— 交付与证据
 
 授权：HOST 2026-10-07「AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION」P6。
-`EXACT_HEAD = AGENT-EXPERIENCE-P6-HEAD`（基线 `fd0fee6f`）
+`EXACT_HEAD = 8356549c`（基线 `fd0fee6f`）
 
 结论：**P6 = CLOSED**。新增执行详情页，全部使用**业务语言**；不暴露 runner internals / judge /
 task namespace / policy engine / raw blocker code / model router（有自动断言守着）。
