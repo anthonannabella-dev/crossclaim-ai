@@ -214,10 +214,6 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                       {item.hasCredentialRef ? copy.configured : copy.notConfigured}
                     </dd>
                   </div>
-                  <div>
-                    <dt className="text-slate-500">{copy.colKind}</dt>
-                    <dd className="mt-0.5 font-medium text-slate-800">{item.kind}</dd>
-                  </div>
                 </dl>
 
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -240,36 +236,37 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                   ))}
                 </div>
 
-                {item.status !== 'REVOKED' ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <input
-                      value={refDraft[item.id] ?? ''}
-                      onChange={(event) => setRefDraft((prev) => ({ ...prev, [item.id]: event.target.value }))}
-                      className="w-48 rounded-lg border border-slate-300 px-2 py-1 text-xs"
-                      placeholder={copy.newRefPlaceholder}
-                    />
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        void call(
-                          `/connections/${item.id}/credential-ref`,
-                          {
-                            method: 'POST',
-                            body: JSON.stringify({ credentialRef: (refDraft[item.id] ?? '').trim() || null }),
-                          },
-                          copy.noticeRefUpdated,
-                        )
-                      }
-                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                    >
-                      {copy.updateRef}
-                    </button>
-                  </div>
-                ) : null}
-
                 <details className="mt-3 text-[11px] text-slate-500">
                   <summary className="cursor-pointer">{copy.advanced}</summary>
+                  {item.status !== 'REVOKED' ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <input
+                        value={refDraft[item.id] ?? ''}
+                        onChange={(event) =>
+                          setRefDraft((prev) => ({ ...prev, [item.id]: event.target.value }))
+                        }
+                        className="w-48 rounded-lg border border-slate-300 px-2 py-1 text-xs"
+                        placeholder={copy.newRefPlaceholder}
+                      />
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void call(
+                            `/connections/${item.id}/credential-ref`,
+                            {
+                              method: 'POST',
+                              body: JSON.stringify({ credentialRef: (refDraft[item.id] ?? '').trim() || null }),
+                            },
+                            copy.noticeRefUpdated,
+                          )
+                        }
+                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {copy.updateRef}
+                      </button>
+                    </div>
+                  ) : null}
                   <ul className="mt-1 space-y-0.5 font-mono">
                     <li>kind={item.kind}</li>
                     <li>domain={item.domain}</li>

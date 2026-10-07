@@ -165,6 +165,14 @@ export async function runJourney(input) {
   body = await text(page);
   check('connections.created.visible', body.includes(connectionLabel), '');
   check('connections.list.customer.channel', body.includes('UPS'), '');
+  // CHANGE 1：创建连接之后（post-create）默认视图仍不得再现工程字段 / 内部角色码 / 字面量 HOLD。
+  check(
+    'connections.postCreate.no.raw.enums',
+    !/FILE_UPLOAD|CUSTOMS_BROKER|credentialRef/.test(body),
+    'post-create 客户视图仍出现内部枚举/凭据字段',
+  );
+  check('connections.postCreate.no.role.codes', !/\b(OWNER|ADMIN|OPS)\b/.test(body), 'post-create 仍出现内部角色码');
+  check('connections.postCreate.no.hold.literal', !/HOLD/.test(body), 'post-create 仍出现字面量 HOLD');
   await shot(page, '06-connection-created');
 
   /* ---------------- 7. 刷新 / 登出重登（状态延续） ---------------- */
@@ -207,7 +215,15 @@ export async function runJourney(input) {
   await open(mPage, webBase + '/');
   const mBody = await mPage.innerText('body');
   check('mobile.home.goalConsole', mBody.includes('今天想让 CrossClaim 帮你追回什么？'), mBody.slice(0, 140));
-  check('mobile.home.no.horizontal.overflow', mBody.length > 0, '');
+  const mobileGeometry = await mPage.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  check(
+    'mobile.home.no.horizontal.overflow',
+    mobileGeometry.scrollWidth <= mobileGeometry.clientWidth + 1,
+    'scrollWidth=' + mobileGeometry.scrollWidth + ' clientWidth=' + mobileGeometry.clientWidth,
+  );
   check('mobile.home.authenticated', !mBody.includes('第一次使用 CrossClaim？'), mBody.slice(0, 120));
   await mPage.screenshot({ path: path.join(outDir, 'm1-mobile-home.png'), fullPage: true });
 

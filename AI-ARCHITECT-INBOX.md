@@ -158671,3 +158671,312 @@ L5_RELAXATION
 
 最终裁决：AEL FINAL2 = PASS / CLOSED。三条上一轮 CHANGE 已全部闭合；可以停止继续修 AEL 本身。下一步若要接真实 provider、外部写、支付或 production enablement，必须进入新的独立授权/审计单元。
 ```
+
+### [MSG-20261007-03] CUSTOMER-UX-SANDBOX-E2E 终审裁决 = PASS WITH REVISE / NOT CLOSED（首登/注册/验证/登录/导航/Goal 记录/连接创建/刷新重登/无 API 诚实停机 = 达到可用水平；但仍有三段未闭环：Goal → ONE SI Runtime、Goal → Authorization → Resume same Goal、/connections 创建后工程字段再现；另 mobile overflow 断言名不符实），reviewed HEAD 494a0926；建议窄 FINAL2（post-create jargon cleanup + real Goal runtime sandbox admission + authorization→same-goal resume E2E）；PRODUCTION_READY = NO、全部 HOLD/FORBIDDEN 不变
+
+```text
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 494a09260a26f74ab52bb79894734c88268cc2e9
+
+逐项裁决：
+
+纯文本
+CUSTOMER_USABILITY          = REVISE
+FIRST_RUN_GUIDANCE          = PASS
+SANDBOX_END_TO_END          = REVISE
+NO_API_FAIL_CLOSED          = PASS
+AUTHORIZATION_RESUME        = REVISE
+EXTERNAL_BOUNDARY_HONESTY   = PASS
+SECURITY_BOUNDARY           = PASS
+PRODUCTION_GATE             = PASS
+
+CUSTOMER-UX-SANDBOX-E2E
+FINAL ACCEPTANCE            = PASS WITH REVISE / NOT CLOSED
+已确认 PASS 的部分
+
+FIRST_RUN_GUIDANCE = PASS。 实际浏览器脚本确实走了未登录首页 → 注册 → sandbox 邮件验证 → 登录 → 首页 → Goal Console → connections；journey-summary.json 也确实是 38/38。注册后不再卡死，未验证邮箱不发 session，登录页有注册链接。
+
+NO_API_FAIL_CLOSED / EXTERNAL_BOUNDARY_HONESTY = PASS。 未接真实 provider、报关、支付时，界面和服务端没有伪造“已经提交/已经扣款”。/auth/signup 邮件发送也是 best-effort，生产出口没开时返回 delivered=false，不会假装发送成功。
+
+SECURITY_BOUNDARY = PASS。 acceptance server 位于 apps/api/acceptance/；API tsconfig 只包含 src/**/*.ts，不会进入生产构建。生产 self-signup 仍需 signupEnabled === true 才开放。没有看到本单元新增第二 runtime / guard / policy / ledger。
+
+PRODUCTION_GATE = PASS。
+
+纯文本
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+PRODUCTION_READY = NO
+
+成立。
+
+CHANGE 1 — CUSTOMER_USABILITY 仍有客户路径技术信息泄漏
+
+验收报告称：
+
+默认视图无内部枚举与 credentialRef。
+
+但实际 connection-manager.tsx 在连接创建后的默认卡片里仍直接显示：
+
+纯文本
+类型 → item.kind
+
+即客户会看到诸如：
+
+纯文本
+FILE_UPLOAD
+API
+
+而且“新凭据引用 / 更新引用”的输入控件也是默认常驻，并没有全部收进高级区。
+
+更直接的是本次真实 journey-summary.json 自己记录了 /connections：
+
+纯文本
+连接管理仅限 OWNER / ADMIN（当前角色：OWNER）
+
+说明 UX-4 所称的 OWNER / ADMIN 客户术语清理没有真正覆盖该页面。
+
+字典中也仍有客户可见的：
+
+纯文本
+外部通道 HOLD
+外部提交仍处于 HOLD
+支付状态仍处于 HOLD
+
+因此：
+
+CUSTOMER_VISIBLE_TECHNICAL_JARGON = 0 目前不能成立。
+
+最小修改：
+
+默认连接卡隐藏 raw item.kind；
+credentialRef 编辑能力移到“高级信息”，或者改成客户动作“重新连接/更新授权”；
+OWNER/ADMIN/OPS 改成客户语言，如“组织管理员”；
+客户默认文案不显示字面量 HOLD，改成“尚未开放/尚未接入”。
+
+并补浏览器断言：创建连接之后再次扫描这些术语，而不是只在创建前扫描。
+
+CHANGE 2 — SANDBOX_END_TO_END 没有真正跑到 ONE SI Runtime
+
+浏览器 E2E 目前验证的是：
+
+纯文本
+输入目标
+→ POST /agent-goals
+→ “已记录”
+→ 手工进入 /connections
+→ 建一个连接
+
+但实际 /agent-goals HTTP 入口明确仍是：
+
+纯文本
+编译
+→ 校验
+→ 持久化
+→ plan preview
+→ 零执行
+
+它没有把该客户 Goal 经：
+
+纯文本
+createGoalRuntimeBinding()
+→ existing task queue
+→ claim / lease
+→ ONE SI Runtime
+
+真正跑起来。
+
+所以目前可以说：
+
+“Goal 记录 E2E = PASS”
+
+但还不能说：
+
+“客户 Goal → 内部自动化执行 E2E = PASS”。
+
+四域 74 个 HTTP+PG 测试本身可以保留为 PASS；这里缺的是客户入口与现有 ONE SI Runtime 之间最后一段真实接线验收。
+
+最小修订不需要开启任何外部写：
+
+纯文本
+浏览器提交 goal
+→ 同一 goalId
+→ existing queue admission
+→ ONE SI Runtime 认领
+→ 只读/准备类 task 产生 run projection
+→ externalWritePerformed = false
+
+这样才是真正的 sandbox customer E2E。
+
+CHANGE 3 — AUTHORIZATION_RESUME 当前没有真正闭环
+
+这是本轮最重要的功能缺口。
+
+首页确实会为：
+
+纯文本
+goal.status === PROPOSED
+
+生成：
+
+这个目标需要你授权
+完成授权后，CrossClaim 会继续执行原来的目标
+
+CTA：
+
+纯文本
+/authorizations
+
+但实际 /authorizations 页面目前只是：
+
+授权列表 + 撤销。
+
+没有“创建/完成自动追回授权”的客户流程。
+
+而空状态还明确写着：
+
+自动追回授权需要通过条款同意流程开通；当前流程尚未开放，因此这里暂时为空。
+
+所以真实客户当前路径是：
+
+纯文本
+Goal 等待授权
+→ 点击“去授权”
+→ 进入一个不能完成授权的页面
+
+此外，虽然 OAuth durable session 已持久化：
+
+纯文本
+resumeGoalId
+
+但实际代码只是写着：
+
+供上层恢复原目标
+
+我没有看到 OAuth SUCCEEDED 之后真正把该 resumeGoalId：
+
+纯文本
+PROPOSED → ADMITTED
+
+或重新进入 GoalRuntimeBinding 的实际 wiring。
+
+本轮所谓：
+
+刷新 / 登出重登后继续原任务
+
+浏览器实际只断言了：
+
+纯文本
+connection 仍然存在
+
+没有断言原 goal 被授权后恢复执行。
+
+所以：
+
+AUTHORIZATION_RESUME = REVISE
+
+不能用 connection persistence 代替 authorization resume。
+
+最小闭环应证明：
+
+纯文本
+创建 goal A
+→ A 出现在 Needs Your Attention
+→ 完成 sandbox authorization
+→ 授权事实与 A / tenant 正确绑定
+→ A 自动继续，而不是重新创建 goal B
+→ A 进入 ADMITTED/RUNNING 或产生对应 run
+→ 重复 callback / refresh 不产生第二次执行
+
+如果真实 OAuth/条款流程仍必须 HOLD，可以用 acceptance-only sandbox authorization provider 完成这条验证，但必须复用真实 durable authorization + goal resume 代码；不能只在测试脚本里直接改 DB 假装恢复。
+
+额外测试质量问题
+
+不是独立 blocker，但建议这次顺手修：
+
+当前：
+
+纯文本
+mobile.home.no.horizontal.overflow
+
+实际断言只是：
+
+JavaScript
+mBody.length > 0
+
+它没有检测横向溢出。
+
+应该改为真实 DOM 几何：
+
+纯文本
+document.documentElement.scrollWidth
+<= document.documentElement.clientWidth
+
+否则这个 PASS 名称与实际证明不一致。
+
+RISKS
+
+当前主要风险不是安全越权，而是客户看到的承诺超过实际闭环：
+
+UI 说“完成授权后继续原目标”，但客户目前无法在该页面完成授权；
+resumeGoalId 有 durable lineage，但还没看到真正的 resume execution wiring；
+Goal Console 目前真实完成的是“记录目标”，不是浏览器层面的 ONE SI Runtime E2E；
+技术术语清理存在 acceptance blind spot——测试只检查连接创建前，创建后工程字段重新出现。
+
+另外 exact HEAD：
+
+GitHub Actions = NOT_OBSERVED
+
+因此：
+
+38/38 browser
+74/74 四域
+4550/4551 API
+UI 138/138
+
+只能继续记为 仓库中的 local/Codex acceptance evidence，不能写成 GitHub CI green。
+
+PRODUCTION
+
+确认继续：
+
+纯文本
+PRODUCTION_READY = NO
+REAL_VALIDATION_COMPLETE = NO
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+
+全部 HOLD 不变：
+
+纯文本
+REAL_PROVIDER_WRITE
+CUSTOMS_FILING
+PAYMENT
+AUTO_COMMISSION_CHARGE
+PRODUCTION_CREDENTIALS
+PRODUCTION_ENABLEMENT
+REAL_MODEL_NETWORK
+PAID_MODEL_CALLS
+EXTERNAL_WRITE
+TRANSPORT
+P2_F
+P2_G
+
+全部既有 FORBIDDEN 不变。
+
+最终结论
+
+这轮已经证明：第一次访问、注册、验证、登录、基础导航、Goal 记录、连接创建、刷新重登、无 API 诚实停机都达到了可用水平。
+
+但还不能 CLOSED，因为“客户可用”的核心承诺中还有两段没有真正闭环：
+
+纯文本
+Goal → ONE SI Runtime
+Goal → Authorization → Resume same Goal
+
+再加上 /connections 的残余工程术语。
+
+建议只做一个窄的 CUSTOMER-UX FINAL2：
+
+post-create jargon cleanup + real Goal runtime sandbox admission + authorization→same-goal resume E2E。
+
+做完这三项，再送终审即可。
+```
