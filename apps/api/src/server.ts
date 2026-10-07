@@ -67,6 +67,13 @@ import {
 import { handleWorkflowRequest } from './services/workflow';
 // AGENT EXPERIENCE LAYER / P4（HOST 2026-10-07）：目标入口（编译 + 落库 + 计划预览；零执行）
 import { AGENT_GOAL_PATH, handleAgentGoalRequest } from './services/agent-goal/http-request';
+// CUSTOMER-UX FINAL2：目标准入（Goal → 既有任务队列 → ONE SI Runtime；准入 ≠ 执行）
+import { createJsonTaskQueuePort } from './services/agent-goal/goal-admission';
+import {
+  AGENT_GOAL_ADMISSION_PATH,
+  handleAgentGoalAdmissionRequest,
+} from './services/agent-goal/goal-admission-http';
+import { createPrismaStandingAuthorizationResolverDeps } from './services/standing-authorization/standing-authorization-store';
 // AGENT EXPERIENCE LAYER / P7（HOST 2026-10-07）：Standing Authorization 客户管理面（只读 + 撤销）
 import {
   STANDING_AUTHORIZATION_HTTP_PATH,
@@ -212,6 +219,17 @@ export function createServer(deps: ServerDeps): http.Server {
       return '';
     }
   })();
+  /**
+   * CUSTOMER-UX FINAL2：目标准入依赖 —— 复用既有 runtime 任务队列 artifact（RSI_TASKS_PATH）
+   * 与既有 durable Standing Authorization；不新建 runtime / 队列 / guard。
+   * 未配置队列路径时 queue=null → 准入 fail-closed（409/403），绝不假装已入队。
+   */
+  const goalAdmissionDeps = {
+    queue: (process.env.RSI_TASKS_PATH ?? '') === '' ? null : createJsonTaskQueuePort({ tasksPath: String(process.env.RSI_TASKS_PATH) }),
+    loadAuthorization: createPrismaStandingAuthorizationResolverDeps(prisma).loadAuthorization,
+    log: (event: string, fields: Record<string, unknown>) => log.warn(event, fields),
+  };
+
   const auth: import('./services/auth').AuthRouteDeps | undefined =
     deps.auth ??
     (audit
@@ -383,7 +401,8 @@ export function createServer(deps: ServerDeps): http.Server {
     }
 
     // AGENT EXPERIENCE LAYER / P4（HOST 2026-10-07）：目标入口（只编译 / 落库 / 预览，零执行）
-    if (auth && AGENT_GOAL_PATH.test(url.split('?')[0] ?? '')) {
+    const goalPath = url.split('?')[0] ?? '';
+    if (auth && (AGENT_GOAL_PATH.test(goalPath) || AGENT_GOAL_ADMISSION_PATH.test(goalPath))) {
       const goalToken = readSessionToken(parseCookies(req.headers.cookie));
       if (!goalToken) {
         send(401, { error: 'UNAUTHENTICATED' });
@@ -395,12 +414,22 @@ export function createServer(deps: ServerDeps): http.Server {
             send(401, { error: 'UNAUTHENTICATED' });
             return;
           }
-          return handleAgentGoalRequest(req, res, {
+          return handleAgentGoalAdmissionRequest(req, res, {
             prisma,
             session: { userId: context.userId, organizationId: context.organizationId },
-          }).then((handled) => {
-            if (!handled) send(404, { error: 'not_found' });
-          });
+            admission: goalAdmissionDeps,
+          })
+            .then((handled) =>
+              handled
+                ? true
+                : handleAgentGoalRequest(req, res, {
+                    prisma,
+                    session: { userId: context.userId, organizationId: context.organizationId },
+                  }),
+            )
+            .then((handled) => {
+              if (!handled) send(404, { error: 'not_found' });
+            });
         })
         .catch((err) =>
           send(500, { error: err instanceof Error ? err.message : 'agent_goal_error' }),
