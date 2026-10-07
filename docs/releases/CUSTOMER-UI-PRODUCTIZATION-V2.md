@@ -423,6 +423,14 @@ ChatGPT 审计会话 `https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67
 | `final2.conn.rendered.reauth.once` | 三条真实渲染行里「重新授权」只出现 1 次（仅 NEEDS_AUTH 行） |
 | `final2.conn.rendered.error.copy` / `final2.conn.rendered.unknown.copy` | 渲染输出确实包含 ERROR / 未知文案（非只测纯函数） |
 
+### FINAL2 锚点
+
+| 名称 | 值 |
+| --- | --- |
+| `FINAL2_CODE_HEAD` | `199d4ac4`（web 呈现层 + i18n + 断言 + 证据 + MSG-20261007-08 归档） |
+| `FINAL2_EVIDENCE_DIR` | `reports/acceptance/2026-10-07T16-51-31-307Z/` |
+| 基线（封板） | `e0e4a8a1` |
+
 ### FINAL2 回归证据
 
 | 项 | 结果 |
