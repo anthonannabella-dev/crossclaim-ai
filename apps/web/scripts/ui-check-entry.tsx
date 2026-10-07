@@ -25,6 +25,10 @@ import {
   buildPlatformCards,
   buildHeadlineCards,
   buildTasks,
+  buildConnectionTasks,
+  buildTaskKindLabels,
+  mergeNeedsAttention,
+  TASK_KINDS,
   selectPrimaryCta,
   type AccountsResponse,
   type MoneyBucket,
@@ -204,14 +208,26 @@ check('task.cta.href.by.scope', tasks[0]!.ctaHref === '/connections' && tasks[0]
 const taskHtml = render(
   <TaskCenter
     tasks={tasks}
-    labels={{ impact: zhCN.dashboardPage.taskImpact, why: zhCN.dashboardPage.taskWhyUser, empty: zhCN.dashboardPage.tasksEmpty }}
+    labels={{
+      title: zhCN.dashboardPage.tasksTitle,
+      impact: zhCN.dashboardPage.taskImpact,
+      why: zhCN.dashboardPage.taskWhyUser,
+      empty: zhCN.dashboardPage.tasksEmpty,
+      kindLabels: buildTaskKindLabels(zhCN),
+    }}
   />,
 );
 check('task.renders.what.impact.why', taskHtml.includes('授权已过期') && taskHtml.includes(zhCN.dashboardPage.taskImpactRecoverable) && taskHtml.includes(zhCN.dashboardPage.taskWhyUser));
 const emptyTaskHtml = render(
   <TaskCenter
     tasks={[]}
-    labels={{ impact: zhCN.dashboardPage.taskImpact, why: zhCN.dashboardPage.taskWhyUser, empty: zhCN.dashboardPage.tasksEmpty }}
+    labels={{
+      title: zhCN.dashboardPage.tasksTitle,
+      impact: zhCN.dashboardPage.taskImpact,
+      why: zhCN.dashboardPage.taskWhyUser,
+      empty: zhCN.dashboardPage.tasksEmpty,
+      kindLabels: buildTaskKindLabels(zhCN),
+    }}
   />,
 );
 check('task.empty.state', emptyTaskHtml.includes(zhCN.dashboardPage.tasksEmpty));
@@ -459,6 +475,56 @@ check('headline.per.currency.raw', headlineHtml.includes('USD') && headlineHtml.
 check('headline.needs.attention.count', headlineHtml.includes('>3<'));
 check('headline.no.cross.currency.sum', !headlineHtml.includes('8760.00') && !headlineCards.some((card) => card.values.length > 1));
 check('headline.per.currency.note', headlineHtml.includes(zhCN.goalConsole.perCurrencyNote));
+
+// AGENT EXPERIENCE LAYER / P5：Needs Your Attention（单一待办中心，类别可承载）
+const connAccounts: AccountsResponse = {
+  platforms: [
+    {
+      platform: 'AMAZON',
+      accounts: [
+        {
+          platform: 'AMAZON',
+          displayName: 'Amazon US',
+          status: 'ACTIVE',
+          connections: [
+            {
+              status: 'NEEDS_AUTH',
+              channel: 'AMAZON_FBA',
+              domain: 'PLATFORM',
+              lastSyncAt: null,
+              lastErrorAt: null,
+              actions: { reconnect: { available: true, reason: 'REAL_OAUTH_EXTERNAL_GATE' } },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+  unboundLegacyConnections: [],
+};
+const connTasks = buildConnectionTasks(connAccounts, zhCN);
+check('tasks.connection.reauth.kind', connTasks[0]?.kind === 'CONNECTION_REAUTH');
+check('tasks.connection.reauth.cta', connTasks[0]?.ctaLabel === zhCN.needsAttention.reconnectCta && connTasks[0]?.ctaHref === '/connections');
+const mergedTasks = mergeNeedsAttention(tasks, connTasks, connTasks);
+check('tasks.merge.dedupe', mergedTasks.length === tasks.length + connTasks.length);
+const kindLabels = buildTaskKindLabels(zhCN);
+check('tasks.kind.labels.all', TASK_KINDS.every((kind) => (kindLabels[kind] ?? '').length > 0));
+const taskCenterHtml = render(
+  <TaskCenter
+    tasks={connTasks}
+    labels={{
+      title: zhCN.dashboardPage.tasksTitle,
+      impact: zhCN.dashboardPage.taskImpact,
+      why: zhCN.dashboardPage.taskWhyUser,
+      empty: zhCN.dashboardPage.tasksEmpty,
+      kindLabels,
+    }}
+  />,
+);
+check('tasks.center.reauth.copy', taskCenterHtml.includes(zhCN.needsAttention.reconnectBody));
+check('tasks.center.kind.badge', taskCenterHtml.includes(zhCN.needsAttention.kindConnectionReauth));
+check('tasks.center.list.semantics', taskCenterHtml.includes('role="list"') && taskCenterHtml.includes('role="listitem"'));
+check('tasks.center.no.raw.code', !taskCenterHtml.includes('REAL_OAUTH_EXTERNAL_GATE') && !taskCenterHtml.includes('NEEDS_AUTH'));
 
 console.log(results.join('\n'));
 if (failures.length > 0) {

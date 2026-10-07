@@ -19,6 +19,9 @@ import {
   buildOpportunityView,
   buildPlatformCards,
   buildTasks,
+  buildConnectionTasks,
+  buildTaskKindLabels,
+  mergeNeedsAttention,
   selectPrimaryCta,
   type AccountsResponse,
   type MoneyBucket,
@@ -89,7 +92,9 @@ export default async function DashboardPage() {
   ]);
 
   const summaries = buildCurrencySummaries(money.body?.organization.byCurrency, t);
-  const tasks = buildTasks(recoveryStates.body?.items, t);
+  const recoveryTasks = buildTasks(recoveryStates.body?.items, t);
+  // P5: merge recovery-state tasks with authorization / reconnect tasks derived from /accounts (single list)
+  const tasks = mergeNeedsAttention(recoveryTasks, buildConnectionTasks(accounts.body, t));
   const platforms = buildPlatformCards(accounts.body, t);
   const opportunityViews = (opportunities.body?.items ?? []).map((item) => buildOpportunityView(item, t));
 
@@ -174,7 +179,13 @@ export default async function DashboardPage() {
         {recoveryStates.ok ? (
           <TaskCenter
             tasks={tasks}
-            labels={{ impact: t.dashboardPage.taskImpact, why: t.dashboardPage.taskWhyUser, empty: t.dashboardPage.tasksEmpty }}
+            labels={{
+              title: t.dashboardPage.tasksTitle,
+              impact: t.dashboardPage.taskImpact,
+              why: t.dashboardPage.taskWhyUser,
+              empty: t.dashboardPage.tasksEmpty,
+              kindLabels: buildTaskKindLabels(t),
+            }}
           />
         ) : (
           <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>

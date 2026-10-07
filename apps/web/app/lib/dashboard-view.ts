@@ -286,8 +286,29 @@ export interface RecoveryStateItem {
   safeSummary: string;
 }
 
+/**
+ * P5：Needs Your Attention 的任务类别（**单一模型**，不新建第二套待办中心）。
+ * 覆盖 HOST 要求的 10 类 + 既有 recovery-states 的 2 个 scope（保持能力不丢失）。
+ */
+export const TASK_KINDS = [
+  'AUTHORIZATION',
+  'APPROVAL',
+  'CUSTOMS_POA',
+  'CUSTOMS_SIGNER',
+  'PROVIDER_AUTHORIZATION',
+  'CONNECTION_REAUTH',
+  'EVIDENCE_CONFLICT',
+  'ACCOUNT_RECONNECT',
+  'PAYMENT_ACTION',
+  'CASE',
+  'CONNECTION',
+  'IMPORT',
+] as const;
+export type TaskKind = (typeof TASK_KINDS)[number];
+
 export interface TaskView {
   id: string;
+  kind: TaskKind;
   title: string;
   what: string;
   impact: string;
@@ -300,6 +321,7 @@ export interface TaskView {
 export function buildTasks(items: RecoveryStateItem[] | null | undefined, t: Messages): TaskView[] {
   return (items ?? []).map((item) => ({
     id: item.scope + ':' + item.refId,
+    kind: item.scope,
     title: item.title ? item.title + ' · ' + item.label : item.label,
     what: item.explanation,
     impact: item.recoverable ? t.dashboardPage.taskImpactRecoverable : t.dashboardPage.taskImpactBlocking,
@@ -312,6 +334,63 @@ export function buildTasks(items: RecoveryStateItem[] | null | undefined, t: Mes
           ? '/upload'
           : '/cases/' + item.refId,
   }));
+}
+
+/**
+ * P5：从**既有 /accounts 事实**派生授权 / 重连类待办（不新增事实源）。
+ * 只使用连接状态与既有 `actions.reconnect` 结论；不猜测原因、不伪造 CTA。
+ */
+export function buildConnectionTasks(accounts: AccountsResponse | null | undefined, t: Messages): TaskView[] {
+  const rows: TaskView[] = [];
+  for (const group of accounts?.platforms ?? []) {
+    for (const account of group.accounts) {
+      for (const connection of account.connections) {
+        const needsReauth =
+          connection.status === 'NEEDS_AUTH' || connection.actions?.reconnect?.available === true;
+        const label = account.displayName + ' · ' + connection.channel;
+        if (needsReauth) {
+          rows.push({
+            id: 'reauth:' + account.platform + ':' + account.displayName + ':' + connection.channel,
+            kind: 'CONNECTION_REAUTH',
+            title: label,
+            what: t.needsAttention.reconnectTitle,
+            impact: t.dashboardPage.taskImpactBlocking,
+            why: t.needsAttention.reconnectBody,
+            ctaLabel: t.needsAttention.reconnectCta,
+            ctaHref: '/connections',
+          });
+          continue;
+        }
+        if (connection.status === 'ERROR') {
+          rows.push({
+            id: 'reconnect:' + account.platform + ':' + account.displayName + ':' + connection.channel,
+            kind: 'ACCOUNT_RECONNECT',
+            title: label,
+            what: t.needsAttention.repairTitle,
+            impact: t.dashboardPage.taskImpactBlocking,
+            why: t.needsAttention.repairBody,
+            ctaLabel: t.needsAttention.repairCta,
+            ctaHref: '/connections',
+          });
+        }
+      }
+    }
+  }
+  return rows;
+}
+
+/** P5：多个来源合并为**一个**待办列表（按 id 去重，顺序稳定），不产生第二套待办中心。 */
+export function mergeNeedsAttention(...sources: TaskView[][]): TaskView[] {
+  const seen = new Set<string>();
+  const merged: TaskView[] = [];
+  for (const source of sources) {
+    for (const task of source) {
+      if (seen.has(task.id)) continue;
+      seen.add(task.id);
+      merged.push(task);
+    }
+  }
+  return merged;
 }
 
 export interface OpportunityView {
@@ -455,4 +534,22 @@ export function buildHeadlineCards(
       hint: t.goalConsole.attentionHint,
     },
   ];
+}
+
+/** P5：任务类别 → 客户语言（技术 code 不上主文案；高级视图才看得到 code） */
+export function buildTaskKindLabels(t: Messages): Record<TaskKind, string> {
+  return {
+    AUTHORIZATION: t.needsAttention.kindAuthorization,
+    APPROVAL: t.needsAttention.kindApproval,
+    CUSTOMS_POA: t.needsAttention.kindCustomsPoa,
+    CUSTOMS_SIGNER: t.needsAttention.kindCustomsSigner,
+    PROVIDER_AUTHORIZATION: t.needsAttention.kindProviderAuthorization,
+    CONNECTION_REAUTH: t.needsAttention.kindConnectionReauth,
+    EVIDENCE_CONFLICT: t.needsAttention.kindEvidenceConflict,
+    ACCOUNT_RECONNECT: t.needsAttention.kindAccountReconnect,
+    PAYMENT_ACTION: t.needsAttention.kindPaymentAction,
+    CASE: t.needsAttention.kindCase,
+    CONNECTION: t.needsAttention.kindConnection,
+    IMPORT: t.needsAttention.kindImport,
+  };
 }
