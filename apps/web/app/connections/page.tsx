@@ -39,7 +39,7 @@ function roleLabel(t: Awaited<ReturnType<typeof getServerMessages>>, code: strin
             : code === 'VIEWER'
               ? 'roleViewer'
               : '';
-  return key === '' ? code : (table[key] ?? code);
+  return key === '' ? table.roleOther : (table[key] ?? table.roleOther);
 }
 
 export default async function ConnectionsPage() {

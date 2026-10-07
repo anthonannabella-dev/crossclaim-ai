@@ -25,7 +25,7 @@
 | P8 工程字段隔离 | DONE | 5 语言「工程/技术字段」措辞清零（字典级 guard）；深层详情统一为「详细信息 / 授权详情」 |
 | P9 Connections 简化 | DONE | 卡片主视图回答五问（含「CrossClaim 能否继续工作」与「最近同步」）；credentialRef / raw 字段与原始错误下沉到「详细信息」 |
 | P10 Mobile / a11y | DONE | 7 条关键路由的 h1/溢出/aria 健康检查 + 键盘焦点 + 移动端新增页面验证 |
-| P11 i18n parity + hardcode scan | 持续 | 每个单元都跑；P1–P4 已加入 5 语言并 0 硬编码 |
+| P11 i18n 终扫 | DONE | parity PASS / 0 硬编码 / raw enum 回落清零（新增 check-i18n 静态 guard）+ 未知状态客户语言回落 |
 | P12 全客户旅程回归 | QUEUED | 每批次跑真实浏览器旅程 |
 | CUSTOMER-UI-PRODUCTIZATION-V2-FINAL | QUEUED | 独立审计单元（不复用上一轮 CLOSED 状态） |
 
@@ -99,6 +99,27 @@
 | 浏览器客户旅程（真实 Edge + HTTP + PostgreSQL；desktop 1440×900 + mobile 390×844） | **65/65 PASS**（新增：hero-first、Hero 在金额之前、Active Recovery 可见、无「工程字段/技术字段」、首页无内部角色码、目标结果区无 raw code / 任务计数） |
 | 浏览器证据目录 | `reports/acceptance/2026-10-07T15-52-05-717Z/` |
 | api tsc | 0（本轮未改 `apps/api`） |
+
+### 批次 8（P11）
+
+**i18n 终扫与「raw enum 回落」清零**
+
+* 未知状态一律回落到客户语言：`status.UNKNOWN` 从「未知状态 / Unknown status / Unbekannter Status / 不明なステータス / Estado desconocido」
+  改为「状态待确认 / Status being confirmed / Status wird geprüft / 状態を確認中 / Estado por confirmar」。
+* 未知渠道回落 `channelOther`（既有键），未知角色回落新增 `common.roleOther`（成员 / Member / Mitglied / メンバー / Miembro）。
+* 代码层清零 raw enum 回落（原来 `?? code` / `return code;` 会把后端枚举直接显示给客户）：
+  `lib/case-view.ts`、`components/connection-manager.tsx`（status / 能否继续 / 渠道）、`accounts/account-management-view.tsx`、
+  `accounts/page.tsx`（角色）、`billing/page.tsx`、`opportunities/opportunity-list.tsx`、`connections/page.tsx`（角色）。
+* **新增 durable gate**：`tools/i18n/check-i18n.mjs` 第 6 项 —— 扫描客户视图源码，出现 `?? code` / `return code;` 即 FAIL
+  （本轮该 guard 当场抓出 `opportunity-list.tsx` 一处遗漏，已修复）。
+
+| 项 | 结果 |
+| --- | --- |
+| i18n | **OK**：5 语言 / 881 键 parity / 客户硬编码 **0** / `RAW_ENUM_FALLBACK_HITS=0` |
+| web tsc | 0 |
+| UI render check | **183/183 OK**（新增 4 项：UNKNOWN 客户语言、roleOther 存在、caseStatusLabel 未知码回落中英文） |
+| 浏览器客户旅程 | **103/103 PASS** |
+| 浏览器证据目录 | `reports/acceptance/2026-10-07T16-30-23-066Z/` |
 
 ### 批次 7（P10）
 

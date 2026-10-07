@@ -11,6 +11,7 @@ const ja: Messages = {
     roleOps: '運用',
     roleFinance: '財務',
     roleViewer: '閲覧のみのメンバー',
+    roleOther: "メンバー",
     createAccount: 'アカウント作成',
     loginRequired: 'ログインが必要です',
     goToLogin: 'ログインへ',
@@ -930,7 +931,7 @@ const ja: Messages = {
     NEEDS_REVIEW: "レビューが必要",
     PROCESSING: "処理中",
     FAILED: "失敗",
-    UNKNOWN: "不明なステータス",
+    UNKNOWN: "状態を確認中",
   },
   recover: {
     error: {

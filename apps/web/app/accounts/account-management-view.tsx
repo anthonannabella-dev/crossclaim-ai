@@ -91,17 +91,17 @@ export default function AccountManagementView({ t, locale }: { t: Messages; loca
     const table = copy as unknown as Record<string, string>;
     switch (code) {
       case 'ACTIVE':
-        return table.statusConnected ?? code;
+        return table.statusConnected ?? t.status.UNKNOWN;
       case 'NEEDS_AUTH':
-        return table.statusNeedsAuth ?? code;
+        return table.statusNeedsAuth ?? t.status.UNKNOWN;
       case 'PAUSED':
-        return table.statusPaused ?? code;
+        return table.statusPaused ?? t.status.UNKNOWN;
       case 'ERROR':
-        return table.statusError ?? code;
+        return table.statusError ?? t.status.UNKNOWN;
       case 'REVOKED':
-        return table.statusRevoked ?? code;
+        return table.statusRevoked ?? t.status.UNKNOWN;
       default:
-        return code;
+        return t.status.UNKNOWN;
     }
   };
 

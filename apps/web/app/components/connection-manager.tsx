@@ -72,17 +72,17 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
     const table = copy as unknown as Record<string, string>;
     switch (code) {
       case 'ACTIVE':
-        return table.statusActive ?? code;
+        return table.statusActive ?? t.status.UNKNOWN;
       case 'PAUSED':
-        return table.statusPaused ?? code;
+        return table.statusPaused ?? t.status.UNKNOWN;
       case 'REVOKED':
-        return table.statusRevoked ?? code;
+        return table.statusRevoked ?? t.status.UNKNOWN;
       case 'ERROR':
-        return table.statusError ?? code;
+        return table.statusError ?? t.status.UNKNOWN;
       case 'NEEDS_AUTH':
-        return table.statusNeedsAuth ?? code;
+        return table.statusNeedsAuth ?? t.status.UNKNOWN;
       default:
-        return code;
+        return t.status.UNKNOWN;
     }
   };
 
@@ -91,13 +91,13 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
     const table = copy as unknown as Record<string, string>;
     switch (code) {
       case 'ACTIVE':
-        return table.summaryCanContinue ?? code;
+        return table.summaryCanContinue ?? t.status.UNKNOWN;
       case 'PAUSED':
-        return table.summaryPaused ?? code;
+        return table.summaryPaused ?? t.status.UNKNOWN;
       case 'REVOKED':
-        return table.summaryStopped ?? code;
+        return table.summaryStopped ?? t.status.UNKNOWN;
       default:
-        return table.summaryNeedsReauth ?? code;
+        return table.summaryNeedsReauth ?? t.status.UNKNOWN;
     }
   };
 
@@ -108,7 +108,7 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
       .split('_')
       .map((word) => (word === '' ? '' : word[0] + word.slice(1).toLowerCase()))
       .join('');
-    return table['channel' + suffix] ?? code;
+    return table['channel' + suffix] ?? table.channelOther ?? t.status.UNKNOWN;
   };
 
   /** 向导：选择「想连接什么」→ 自动推导内部 kind / domain / channel。 */

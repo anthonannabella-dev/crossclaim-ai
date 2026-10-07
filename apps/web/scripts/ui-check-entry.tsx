@@ -757,6 +757,12 @@ check('p9.connections.reauth.copy', zhCN.connectionsPage.summaryNeedsReauth.incl
 check('p9.connections.lastSync.copy', zhCN.connectionsPage.lastSyncLabel.length > 0 && zhCN.connectionsPage.lastSyncNever.length > 0);
 check('p9.connections.lastError.customer.copy', !/code|error/i.test(zhCN.connectionsPage.lastErrorNotice));
 check('p9.en.parity', enUS.connectionsPage.summaryLabel.includes('CrossClaim') && enUS.connectionsPage.lastSyncLabel.length > 0);
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P11：未知状态使用安全的客户语言回落（不得回落 raw enum）
+check('p11.status.unknown.customer.language', zhCN.status.UNKNOWN === '状态待确认' && enUS.status.UNKNOWN === 'Status being confirmed');
+check('p11.role.other.exists', zhCN.common.roleOther.length > 0 && enUS.common.roleOther.length > 0);
+check('p11.case.status.unknown.fallback', !caseStatusLabel('SOMETHING_NEW', zhCN).includes('SOMETHING_NEW'));
+check('p11.case.status.unknown.fallback.en', !caseStatusLabel('SOMETHING_NEW', enUS).includes('SOMETHING_NEW'));
 check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
 
 // AGENT EXPERIENCE LAYER / P9：按需授权（目标等待授权 → Needs Your Attention → 去授权后继续原目标）

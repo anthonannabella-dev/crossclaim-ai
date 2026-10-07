@@ -12,6 +12,7 @@ const zhCN = {
     roleOps: '运营',
     roleFinance: '财务',
     roleViewer: '只读成员',
+    roleOther: "成员",
     createAccount: '创建账号',
     loginRequired: '需要登录',
     goToLogin: '前往登录',
@@ -928,7 +929,7 @@ const zhCN = {
     NEEDS_REVIEW: "需要人工复核",
     PROCESSING: "处理中",
     FAILED: "失败",
-    UNKNOWN: "未知状态",
+    UNKNOWN: "状态待确认",
   },
   recover: {
     error: {

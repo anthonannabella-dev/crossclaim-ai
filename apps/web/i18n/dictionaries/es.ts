@@ -11,6 +11,7 @@ const es: Messages = {
     roleOps: 'Operaciones',
     roleFinance: 'Finanzas',
     roleViewer: 'Miembro de solo lectura',
+    roleOther: "Miembro",
     createAccount: 'Crear cuenta',
     loginRequired: 'Se requiere iniciar sesión',
     goToLogin: 'Ir a iniciar sesión',
@@ -932,7 +933,7 @@ const es: Messages = {
     NEEDS_REVIEW: "Requiere revisión",
     PROCESSING: "En proceso",
     FAILED: "Fallido",
-    UNKNOWN: "Estado desconocido",
+    UNKNOWN: "Estado por confirmar",
   },
   recover: {
     error: {
