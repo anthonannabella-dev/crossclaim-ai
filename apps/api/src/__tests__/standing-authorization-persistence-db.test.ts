@@ -358,7 +358,15 @@ describe('P0 · Standing Authorization 耐久承载（真实 PostgreSQL）', () 
         providerTermsFlags: [],
         regulatoryFlags: [],
       },
-      gates: { productionGate: 'SATISFIED' as const },
+      gates: {
+        productionGate: 'SATISFIED' as const,
+        platformEnablement: true,
+        killSwitchActive: false,
+        providerCapabilityReady: true,
+        credentialReady: true,
+        regulatoryRestriction: null,
+        tenantAccountIsolationOk: true,
+      },
       guard: {
         decision: 'REQUIRE_APPROVAL' as const,
         code: 'ACTION_GUARD_HUMAN_APPROVAL_REQUIRED',
