@@ -207,3 +207,96 @@ EXTERNAL_BOUNDARY_HONESTY / SECURITY_BOUNDARY / PRODUCTION_GATE` 逐项裁决；
 
 **生产影响**：`apps/*/acceptance/` 不在 `tsc` 的 `include`（`src/**`）内，不进 `dist`，不被任何生产路由引用；
 `playwright-core` 仅为 `apps/web` 的 devDependency（不下载浏览器，使用本机已安装 Edge）。
+
+---
+
+## 12. FINAL2 修订记录（按独立终审 MSG-20261007-03）
+
+裁决 MSG-20261007-03 = **PASS WITH REVISE / NOT CLOSED**（逐字归档于 AI-ARCHITECT-INBOX.md；
+FNV1A_MATCH 23b7ca2a + FULL_COPY_OK 195 行一致），要求三件事：post-create 术语清理、
+Goal → 既有 ONE SI Runtime 的真实接线、Authorization → 同一条 Goal 的恢复闭环。以下为本轮修订与证据。
+
+### 12.1 CHANGE 1 — CUSTOMER_USABILITY（post-create 术语）
+
+* 连接卡默认视图不再显示 raw item.kind；credentialRef 更新控件移入「高级信息（工程字段）」；
+* 连接页角色码改为客户语言（组织管理员 / 运营 / 财务 / 只读成员；字典新增 roleOwner/roleAdmin/roleOps/roleFinance/roleViewer，5 语言 parity）；
+* 客户文案去掉字面量 HOLD（改为「外部提交通道尚未开放 / 收款与付款尚未启用 / 邮件通道尚未接入」）；
+* 浏览器旅程新增 **post-create** 术语扫描（raw 枚举 / credentialRef / OWNER·ADMIN·OPS / HOLD）——
+  不再只在创建连接之前扫描（这正是上一轮裁决指出的 acceptance blind spot）。
+
+### 12.2 CHANGE 2 — SANDBOX_END_TO_END（Goal 真正进入既有 SI Runtime）
+
+新增**产品代码**（非测试脚手架）apps/api/src/services/agent-goal/goal-admission.ts +
+goal-admission-http.ts + server.ts 接线：
+
+```
+Goal → admitAgentGoal（真实 compiler → validator → capability → planner，校验 durable goalDigest）
+     → 非可绕过 gate / 高风险动作一律 DENIED
+     → 缺 durable Standing Authorization → REQUIRES_AUTHORIZATION
+     → createGoalRuntimeBinding() → 既有队列 artifact 准入（RSI_TASKS_PATH，按 dedupeKey 幂等）
+     → ONE SI Runtime 认领（既有 composeRsiRuntime；acceptance 只注入只读 runner）
+     → recordGoalRunFromRuntime() → AgentGoalRun / run projection
+     → externalActionPerformed = false / externalWritePerformed = false
+```
+
+### 12.3 客户浏览器 E2E（55/55 PASS，desktop + mobile）
+
+新增链路（与既有 41 项合并执行）：
+
+```
+输入 Goal A → 首页提示「这个目标需要你授权」
+→ 客户语言向导建立采集连接（账户/提供方血缘由服务端推导）
+→ sandbox authorization provider（只模拟外部授权结果；durable authorization 走真实 store）
+→ 真实产品路由 POST /agent-goals/:id/admit（ADMITTED；admissionOnly=true；externalActionPerformed=false）
+→ 既有 ONE SI Runtime 认领（composeRsiRuntime().loop.pollOnce()）→ AgentGoalRun 投影
+→ 首页 Needs Your Attention 的授权待办消失
+→ /recoveries/runs/:id 看到 run projection，且无「已真实提交 / 已报关 / 已扣款」声明
+→ 幂等：重复准入不产生第二次入队/执行；重复 runtime 调用 created=false
+```
+
+证据目录：reports/acceptance/2026-10-07T10-37-06-102Z/（含 08-goal-authorized-run.png 与 journey-summary.json）。
+
+### 12.4 CHANGE 3 — AUTHORIZATION_RESUME（授权后恢复原 Goal）
+
+goal-admission-db（真实 PostgreSQL）7/7：
+
+| 用例 | 断言 |
+| --- | --- |
+| GA-1 | 缺 durable 授权 → REQUIRES_AUTHORIZATION；goal 仍 PROPOSED、零入队、零 run |
+| GA-2 | 有效授权 → ADMITTED；并入既有队列（task:recovery:*）、PROPOSED→ADMITTED、externalActionPerformed=false |
+| GA-3 | 重复准入 → dedupeKey 幂等，不重复入队 |
+| GA-4 | 既有 runtime 认领 → run projection（externalWritePerformed=false、executedBy=ONE_SI_RUNTIME）；重复不再产生第二次执行 |
+| GA-5 | 授权撤销后 → DENIED，零入队（撤销后不得继续） |
+| GA-6 | 跨租户 goal/account → NOT_FOUND（tenant lineage 不可越界） |
+| GA-7 | claim.submit 等高风险动作 → 被 findNonAdmissibleActions 拦下（productionGate / platformEnablement 不可绕过） |
+
+授权事实只来自**真实 durable** Standing Authorization（persistStandingAuthorization / revokeStandingAuthorizationScope）；
+sandbox provider 仅替代「外部授权结果」，不替换 durable authorization、goal admission、runtime binding、queue、
+SI Runtime 或 Action Guard。未新建第二个 Goal（goalId 不变），刷新/重放不产生第二次执行。
+
+### 12.5 本轮回归（FINAL2）
+
+| 项 | 结论 |
+| --- | --- |
+| 客户浏览器 E2E | **55/55 PASS**（desktop + mobile；零控制台错误 / 零未捕获异常） |
+| goal admission（真实 PG） | **7/7 PASS** |
+| 定向回归（admission + goal + SA + OAuth + Action Guard + 四域 E2E + architecture） | **20 files / 352 tests PASS** |
+| api tsc --noEmit | 0 |
+| web tsc --noEmit | 0 |
+| UI render check | UI_RENDER_CHECK=OK checks=138 |
+| i18n | I18N_CHECK=OK locales=5 keys=839 customerHardcodes=0 |
+| prisma validate | valid（未改 Schema、未加迁移） |
+| API 全量回归 | 见提交说明（P2E-DB5 并行隔离 flake 单独记录） |
+| GitHub Actions | NOT_OBSERVED |
+
+### 12.6 边界（FINAL2 后仍不变）
+
+REAL_PROVIDER_WRITE / CUSTOMS_FILING / PAYMENT / AUTO_COMMISSION_CHARGE / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / TRANSPORT = HOLD；
+SECOND_RUNTIME / SECOND_SCHEDULER / SECOND_GUARD / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE /
+SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE / L5_RELAXATION = FORBIDDEN；
+高金额 HITL KEEP；Standing Authorization ≠ Broker POA；PRODUCTION_READY = NO。
+
+**本单元仍未 CLOSED** —— 需把本报告 + 新 exact HEAD 再次提交右侧独立 ChatGPT 重裁
+（CUSTOMER_USABILITY / SANDBOX_END_TO_END / AUTHORIZATION_RESUME / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED /
+EXTERNAL_BOUNDARY_HONESTY / SECURITY_BOUNDARY / PRODUCTION_GATE），拿到 PASS / CLOSED 才关闭。
