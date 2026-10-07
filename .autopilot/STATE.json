@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "ba3e8cb0",
+  "head": "999998b1",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-07T04:42:56.987Z",
+  "updated_at": "2026-10-07T04:49:25.219Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "IN_PROGRESS（P0 CLOSED / P1–P9 排队）",
-  "next_execution_unit": "P4b — 前端：首页 Goal Console（AI Recovery Manager）+ 四张结果卡 + i18n 5 语言 + ui render check + web tsc/build",
+  "next_execution_unit": "P5 — TaskCenter 升级 Needs Your Attention（复用 apps/web/app/components/ui/task-center.tsx；覆盖 AUTHORIZATION/APPROVAL/CUSTOMS_POA/CUSTOMS_SIGNER/PROVIDER_AUTHORIZATION/CONNECTION_REAUTH/EVIDENCE_CONFLICT/ACCOUNT_RECONNECT/PAYMENT_ACTION(仅状态)/CASE）",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T09:55:01.250Z",
   "state": "AGENT_EXPERIENCE_LAYER_IN_PROGRESS",
-  "last_action": "P4a CLOSED（ba3e8cb0）：目标 HTTP 入口落地 —— POST /agent-goals（P1 编译 → 服务端校验 → P3 落库 → 计划预览）与 GET /agent-goals 列表；只接受 intent，客户端自报 tenant/scope/action 一律忽略；恒 executionPerformed=false；HTTP 回归 5/5、api tsc 0。P4b（web Goal Console + 四张卡 + i18n）仍在本单元内待做。",
-  "last_action_at": "2026-10-07T04:42:56.987Z",
-  "next_action": "下一 tick 继续 P4b（同一单元内），完成后再前移到 P5。",
-  "current_head": "ba3e8cb0",
-  "last_completed_head": "ba3e8cb0",
+  "last_action": "P4 CLOSED（P4a ba3e8cb0 / P4b 999998b1）：首页 Goal Console + 四张核心结果卡落地 —— 客户端 Console 提交到 POST /agent-goals（服务端编译/落库/预览，恒零执行），四张卡金额逐币种原样展示（禁跨币种求和，前端零算术），既有 Dashboard 区块全部保留；i18n 5 语言 671 键硬编码 0、UI render 95/95、web tsc 0、next build 0、API 定向 57/57。",
+  "last_action_at": "2026-10-07T04:49:25.219Z",
+  "next_action": "按队列推进 P5 → P9（每单元独立 commit/push/checkpoint）。",
+  "current_head": "999998b1",
+  "last_completed_head": "999998b1",
   "reviewed_head": "42161550",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -12225,7 +12225,7 @@
   "agent_experience_layer": {
     "authorization": "HOST 2026-10-07 AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION",
     "baseline_head": "96a26c29",
-    "program_head": "ba3e8cb0",
+    "program_head": "999998b1",
     "branch": "gate/7-commercial-validation",
     "units": {
       "P0": {
@@ -12329,10 +12329,40 @@
           "EXECUTION_PERFORMED": "false",
           "CLIENT_FORGED_FIELDS": "IGNORED（只接受 intent；tenant/actor 来自会话）"
         }
+      },
+      "P4b": {
+        "name": "P4b — 首页 Goal Console + 四张核心结果卡（保留既有 Dashboard 全部内容）",
+        "status": "CLOSED / PUSHED",
+        "head": "999998b1",
+        "report": "docs/releases/AGENT-EXPERIENCE-P4-HOME-GOAL-CONSOLE-REPORT.md",
+        "files": [
+          "apps/web/app/components/ui/goal-console.tsx",
+          "apps/web/app/components/ui/recovery-headline-cards.tsx",
+          "apps/web/app/lib/dashboard-view.ts",
+          "apps/web/app/page.tsx",
+          "apps/web/i18n/dictionaries/*.ts (goalConsole ×5)",
+          "apps/web/scripts/ui-check-entry.tsx"
+        ],
+        "tests": "i18n OK（5 语言 / 671 键 / 硬编码 0）；UI render 95/95；web tsc 0；next build 0；API 定向 57/57",
+        "returns": {
+          "HOME_GOAL_CONSOLE": "PASS",
+          "HEADLINE_CARDS": "PASS（Recoverable / In recovery / Recovered / Needs your attention）",
+          "CROSS_CURRENCY_SUMMING": "FORBIDDEN_AND_ENFORCED（逐币种原样展示）",
+          "CAPABILITY_LOSS": "0（既有 Dashboard 区块全部保留）",
+          "FAKE_EXECUTION_CLAIM": "NONE"
+        }
+      },
+      "P4": {
+        "name": "P4 — 首页 AI Recovery Manager / Goal Console（P4a API + P4b 前端）",
+        "status": "CLOSED / PUSHED",
+        "head": "999998b1",
+        "parts": {
+          "P4a": "ba3e8cb0",
+          "P4b": "999998b1"
+        }
       }
     },
     "safe_continuation_queue": [
-      "P4 — 首页升级 AI Recovery Manager / Goal Console（保留既有 Dashboard 全部内容）",
       "P5 — TaskCenter 升级 Needs Your Attention（复用 apps/web/app/components/ui/task-center.tsx）",
       "P6 — Agent Run 页面 /recoveries/runs/:id（业务语言，不暴露 runner/judge/namespace 内部）",
       "P7 — Authorization 管理 UI（/authorizations，状态全部来自后端 Standing Authorization）",
@@ -12368,10 +12398,6 @@
       "真实 provider 凭据 / 外部写 / 支付开通（HOLD 项）",
       "Linux/systemd 实机验证（SYSTEMD_RUNTIME_VALIDATION）",
       "main 推进方式（--no-ff / --ff-only）"
-    ],
-    "pending_within_unit": {
-      "unit": "P4b",
-      "scope": "apps/web：首页 AI Recovery Manager / Goal Console（保留既有 Dashboard 全部内容）+ 四张结果卡（Recoverable / In Recovery / Recovered / Needs Your Attention，禁跨币种求和）+ i18n 5 语言 + ui-render-check + web tsc/build"
-    }
+    ]
   }
 }

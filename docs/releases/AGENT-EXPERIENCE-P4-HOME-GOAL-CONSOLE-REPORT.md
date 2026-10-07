@@ -1,7 +1,7 @@
 # 首页 AI RECOVERY MANAGER / GOAL CONSOLE（P4）—— 交付与证据
 
 授权：HOST 2026-10-07「AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION」P4。
-`EXACT_HEAD = AGENT-EXPERIENCE-P4-HEAD`（基线 `87eb36ae`）
+`EXACT_HEAD = 999998b1`（基线 `87eb36ae`）
 
 结论：**P4 = CLOSED**。首页上半部分升级为 Goal Console + 四张核心结果卡；
 既有 Dashboard 内容**全部保留**（资金概览 / 待处理事项 / 平台卡片 / 追回机会 / 上传批次 / 安全条 / CTA / HOLD 提示）。
