@@ -337,7 +337,7 @@ export async function admitAgentGoal(
       platformAccountId: input.platformAccountId,
       provider: input.provider,
       action: requiredAction,
-      amountUsd: null,
+      amountUsd: 0,
       currency: 'USD',
       domain: validated.domains[0] ?? 'PLATFORM',
       jurisdiction: authorization.jurisdiction,
