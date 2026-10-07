@@ -412,3 +412,77 @@ REAL_EXTERNAL_EXECUTION = NOT_EXECUTED；REAL_VALIDATION_COMPLETE = NO；PRODUCT
 **本单元仍未 CLOSED** —— 需把本报告 + 新 exact HEAD 再次提交右侧独立 ChatGPT 重裁
 （CUSTOMER_USABILITY / SANDBOX_END_TO_END / AUTHORIZATION_RESUME / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED /
 EXTERNAL_BOUNDARY_HONESTY / SECURITY_BOUNDARY / PRODUCTION_GATE），拿到 PASS / CLOSED 才关闭。
+
+---
+
+## 15. FINAL5 修订记录（针对复审裁决 MSG-20261007-06）
+
+裁决 MSG-20261007-06 = **PASS WITH REVISE / NOT CLOSED**（已归档：FNV1A_MATCH 2d7f4340 + FULL_COPY_OK 273 行一致）。
+除 SECURITY_BOUNDARY 外全部 PASS；SECURITY_BOUNDARY 的 REVISE 只指向 3 条：runtime→goal lineage 回到
+exact deterministic task membership、durable goal identity 完整重建、canonical provider→domain 单源映射。
+本节只记录 FINAL5 的最小修订面与证据，不扩大范围。
+
+### 15.1 exact deterministic task membership（FINAL5 一，HEAD 837d404c）
+
+* `recordGoalRunFromRuntime()` 的 lineage 判定恢复为 **exact membership**：`expectedTasks.has(key)`；
+  删除 FINAL4 引入的「digest token 子串」兜底（该兜底使 `task:recovery:...:forged-task:<digest24>` 之类伪造 task 也能通过）。
+* 仍保留 `task:recovery:` 命名空间前缀检查：非该 Goal 计划内的 task 一律 `GOAL_RUNTIME_LINEAGE_MISMATCH` + **零投影**。
+
+### 15.2 durable Goal identity 完整重建（FINAL5 二，HEAD b71ae5d7）
+
+* lineage 重建 draft 不再丢字段：`approvalThreshold: stored.approvalThreshold ?? null`
+  （FINAL4 写死 `null`，会使带 threshold 偏好的 Goal 在重建时 digest 漂移）。
+* 重建后新增 **identity 一致性 fail-closed**：重建 `goalDigest` 与持久化 `goalDigest` 不一致 →
+  `GOAL_RUNTIME_LINEAGE_MISMATCH`（runtime lineage 以 durable Goal identity 为 SSOT）。
+* DB 层 `AGENT_GOAL_IDENTITY_IMMUTABLE` 触发器使 `normalizedGoal` 不可被改写（GA-18(a) 实证）。
+
+### 15.3 canonical provider→domain 单源映射（FINAL5 一，HEAD 837d404c）
+
+* `goal-contract.ts` 新增唯一 `GOAL_PROVIDER_DOMAINS`：AMAZON / WALMART / TIKTOK / EBAY / SHOPIFY → PLATFORM；
+  STRIPE / PAYPAL → INDEPENDENT_SITE；UPS / FEDEX / DHL / FREIGHT_FORWARDER / INSURANCE → LOGISTICS；CBP / ABI → CUSTOMS。
+* compiler 的域推断与 admission 的 `goalDomainOfPlatform()` **同源引用**该映射（含 TIKTOK_SHOP→TIKTOK、
+  CARRIER→FREIGHT_FORWARDER、CUSTOMS_BROKER→CBP 别名归一；未知平台 → null → fail-closed），
+  消除「compiler 说 PLATFORM / admission 说 INDEPENDENT_SITE」导致合法 Shopify Goal 被误拒的漏洞。
+
+### 15.4 修订过程中撤回的一项自造改动（诚实记录）
+
+初次尝试把 provider-level 不匹配拆成新 reason code `GOAL_PROVIDER_SCOPE_MISMATCH`；复核裁决原文后确认裁决要求
+**Amazon Goal + Walmart account 仍为 `GOAL_SCOPE_MISMATCH`（GA-11 已覆盖该点）**，故已完整撤回该分裂，
+负向探针与用例回到严格单一 code，避免顺手改变对外语义或放宽判定。
+
+### 15.5 acceptance harness 收紧（仅 dev/test 侧）
+
+* `apps/api/acceptance/sandbox-server.ts`：runtime claim 归属判定从 digest 子串改为 goal task namespace
+  （`task:recovery:` 前缀 + `:goal:<digest24>` 结尾）；不属于本 Goal 的 claim → `409 RUNTIME_CLAIMED_OTHER_GOAL`。
+  该文件只存在于 acceptance sandbox server，不进入生产入口。
+
+### 15.6 FINAL5 证据（exact HEAD = b71ae5d7）
+
+| 项 | 结果 |
+| --- | --- |
+| goal-admission-db（真实 PostgreSQL） | **18/18 PASS**：GA-13 Amazon Goal + Amazon account → ADMITTED；GA-14 Shopify Goal + Shopify account → ADMITTED（canonical 单源）；GA-15 Amazon Goal + UPS → GOAL_SCOPE_MISMATCH；GA-16 泛 PLATFORM Goal（未指定 provider）→ domain-level ADMITTED；GA-17 伪造 token task → GOAL_RUNTIME_LINEAGE_MISMATCH + 零投影，真计划内 exact task 仍被接受；GA-18 身份不可改写 + 带 approvalThreshold 的 lineage 重建一致 |
+| agent-goal 系列（unit / http / persistence / wiring） | **50/50 PASS**（4 files） |
+| 客户浏览器 E2E（真实 Edge + sandbox provider） | **59/59 PASS**，`reports/acceptance/2026-10-07T13-38-19-797Z/`（含 Amazon→Walmart 403 负向探针、授权恢复、幂等 / 刷新 / 重放、desktop + mobile 390×844、零控制台错误与零未捕获异常） |
+| FINAL5 定向回归 | 36 files / **352 tests PASS**（standing-authorization + action-guard）＋ 10 files / **233 tests PASS**（architecture-contract 170 + 四域 E2E） |
+| API 全量回归（exact HEAD b71ae5d7） | **4568 passed / 4569 total**；唯一失败 = 既有 `recovery-si-phase2-e-db` P2E-DB5 并行隔离 flake，**单跑 20/20 PASS**，如实记录不掩盖 |
+| api tsc / web tsc | 0 / 0 |
+| next build | exit 0（全部路由构建成功） |
+| UI render check | **138/138 OK** |
+| i18n | OK：5 语言 / **839 键** parity / 客户硬编码字符串 **0** |
+| prisma validate | valid（本单元无 schema delta） |
+| GitHub Actions | NOT_OBSERVED（本单元为 local/Codex evidence） |
+
+### 15.7 边界与未关闭声明
+
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED；REAL_VALIDATION_COMPLETE = NO；PRODUCTION_READY = NO。
+全部 HOLD（REAL_PROVIDER_WRITE / CUSTOMS_FILING / PAYMENT / AUTO_COMMISSION_CHARGE / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / TRANSPORT / P2_F / P2_G）与
+FORBIDDEN（SECOND_RUNTIME / SECOND_SCHEDULER / SECOND_GUARD / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE /
+SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE / L5_RELAXATION）不变，`SECOND_* = 0`。
+高金额 HITL 阈值（>1000 OWNER/ADMIN、≥10000 ADMIN）KEEP；Standing Authorization ≠ Broker POA。
+非阻断 production debt（保留登记）：`createJsonTaskQueuePort()` 仍是 JSON read-modify-write，缺跨 worker CAS/lock，
+production enablement 前必须替换为 durable / atomic 准入写者。
+
+**本单元仍未 CLOSED** —— 已按本节重跑证据并以 exact HEAD 再次提交右侧 ChatGPT 复审；只有
+CUSTOMER_USABILITY / SANDBOX_END_TO_END / AUTHORIZATION_RESUME / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED /
+EXTERNAL_BOUNDARY_HONESTY / SECURITY_BOUNDARY / PRODUCTION_GATE 全部 PASS / CLOSED 才关闭本验收单元。
