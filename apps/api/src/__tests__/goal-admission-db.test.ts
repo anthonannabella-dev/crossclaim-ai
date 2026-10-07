@@ -15,6 +15,7 @@ import {
   recordGoalRunFromRuntime,
   requiredAuthorizationAction,
 } from '../services/agent-goal/goal-admission';
+import { GOAL_PROVIDER_DOMAINS } from '../services/agent-goal/goal-contract';
 import { compileAgentGoal } from '../services/agent-goal/goal-compiler';
 import { resolveGoalCapabilities } from '../services/agent-goal/goal-capability-resolver';
 import { defaultGoalCapabilityFacts } from '../services/agent-goal/http-request';
@@ -135,6 +136,84 @@ function deps() {
     queue: createJsonTaskQueuePort({ tasksPath, now: () => NOW }),
     loadAuthorization: createPrismaStandingAuthorizationResolverDeps(prisma).loadAuthorization,
   };
+}
+
+async function seedGoalWithIntent(organizationId: string, intent: string): Promise<string> {
+  const compiled = compileAgentGoal({ text: intent });
+  if (!compiled.ok) throw new Error('intent must compile');
+  const validated = validateAgentGoalDraft({
+    draft: compiled.draft,
+    context: { organizationId, actorUserId: USER, now: NOW },
+  });
+  const persisted = await persistAgentGoal(prisma, {
+    organizationId,
+    createdBy: USER,
+    rawUserIntent: intent,
+    normalizedGoal: {
+      goalType: validated.goalType,
+      domains: validated.domains,
+      providers: validated.providers,
+      timeRange: validated.timeRange,
+      executionMode: validated.executionMode,
+      approvalThreshold: validated.approvalThresholdPreference,
+      policyVersion: validated.policyVersion,
+      goalDigest: validated.goalDigest,
+    },
+    now: NOW,
+  });
+  return persisted.goalId;
+}
+
+function planForIntent(intent: string): GoalPlan {
+  const compiled = compileAgentGoal({ text: intent });
+  if (!compiled.ok) throw new Error('intent must compile');
+  const validated = validateAgentGoalDraft({
+    draft: compiled.draft,
+    context: { organizationId: ORG, actorUserId: USER, now: NOW },
+  });
+  const capabilities = resolveGoalCapabilities({
+    organizationId: ORG,
+    domains: validated.domains,
+    facts: defaultGoalCapabilityFacts(),
+    now: NOW,
+  });
+  return planAgentGoal({ goal: validated, capabilities, now: NOW });
+}
+
+async function grantAuthorizationFor(
+  organizationId: string,
+  platformAccountId: string,
+  plan: GoalPlan,
+  provider: string,
+  domain: string,
+) {
+  const actions = new Set<string>();
+  const required = requiredAuthorizationAction(plan);
+  if (required !== null) actions.add(required);
+  for (const task of plan.tasks) {
+    for (const action of task.candidateActions) actions.add(action);
+    for (const action of task.autoExecutableActions) actions.add(action);
+  }
+  return persistStandingAuthorization(prisma, {
+    serverDerived: true,
+    authorizationId: 'sa-' + organizationId.slice(0, 8) + '-' + provider.toLowerCase(),
+    organizationId,
+    platformAccountId,
+    provider,
+    allowedActionTypes: [...actions],
+    monetaryLimitUsd: 1000,
+    currency: 'USD',
+    domain,
+    jurisdiction: 'US',
+    effectiveAt: new Date(NOW.getTime() - 60_000).toISOString(),
+    expiresAt: new Date(NOW.getTime() + 86_400_000).toISOString(),
+    authorizationVersion: 1,
+    termsPolicyVersion: 'terms/v1',
+    consentEvidenceRef: 'consent:test',
+    createdAt: NOW.toISOString(),
+    revocation: { state: 'ACTIVE', revokedAt: null, revokedBy: null, reason: null },
+    scopeDigest: '',
+  } as never);
 }
 
 beforeAll(async () => {
@@ -376,6 +455,154 @@ describe('CUSTOMER-UX FINAL2 · Goal admission（真实 PostgreSQL）', () => {
     expect(amazonGoal.providers).toEqual(['AMAZON']);
     expect(walmartGoal.providers).toEqual(['WALMART']);
     expect(amazonGoal.goalDigest).not.toBe(walmartGoal.goalDigest);
+  });
+  it('GA-13 FINAL5：Amazon Goal + Amazon account + 匹配授权 → ADMITTED（provider/domain 都匹配）', async () => {
+    const goalId = await seedGoal(ORG);
+    const accountId = await seedAccount(ORG, 'ga-13');
+    await grantAuthorization(ORG, accountId, planFor());
+    const result = await admitAgentGoal(
+      prisma,
+      { organizationId: ORG, goalId, platformAccountId: accountId, provider: PROVIDER, now: NOW },
+      deps(),
+    );
+    expect(result.kind).toBe('ADMITTED');
+    expect(result.admitted.length).toBeGreaterThan(0);
+  });
+
+  it('GA-14 FINAL5：canonical provider→domain 映射单源（Shopify Goal + Shopify account → ADMITTED，不再被两处映射不一致误拒）', async () => {
+    const intent = '帮我追回 Shopify 上被扣的钱';
+    const compiled = compileAgentGoal({ text: intent });
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    expect(compiled.draft.providers).toEqual(['SHOPIFY']);
+    const validated = validateAgentGoalDraft({
+      draft: compiled.draft,
+      context: { organizationId: ORG, actorUserId: USER, now: NOW },
+    });
+    // compiler 推断的 domain 必须等于 canonical 映射（单源）；否则合法 Shopify Goal 会被误拒
+    expect(validated.domains).toEqual([GOAL_PROVIDER_DOMAINS.SHOPIFY]);
+    const goalId = await seedGoalWithIntent(ORG, intent);
+    const shopify = await prisma.platformAccount.create({
+      data: { organizationId: ORG, platform: 'SHOPIFY', externalAccountId: 'shopify-ga14', displayName: 'Shopify' },
+      select: { id: true },
+    });
+    await grantAuthorizationFor(ORG, shopify.id, planForIntent(intent), 'SHOPIFY', GOAL_PROVIDER_DOMAINS.SHOPIFY);
+    const result = await admitAgentGoal(
+      prisma,
+      { organizationId: ORG, goalId, platformAccountId: shopify.id, now: NOW },
+      deps(),
+    );
+    expect(result.kind).toBe('ADMITTED');
+  });
+
+  it('GA-15 FINAL5：Amazon Goal + UPS account → GOAL_SCOPE_MISMATCH（跨域保持拒绝）', async () => {
+    const goalId = await seedGoal(ORG);
+    const ups = await prisma.platformAccount.create({
+      data: { organizationId: ORG, platform: 'UPS', externalAccountId: 'ups-ga15', displayName: 'UPS' },
+      select: { id: true },
+    });
+    await grantAuthorizationFor(ORG, ups.id, planFor(), 'UPS', 'LOGISTICS');
+    const result = await admitAgentGoal(
+      prisma,
+      { organizationId: ORG, goalId, platformAccountId: ups.id, now: NOW },
+      deps(),
+    );
+    expect(result.kind).toBe('DENIED');
+    expect(result.reasonCodes).toContain('GOAL_SCOPE_MISMATCH');
+    expect(result.admitted).toEqual([]);
+  });
+
+  it('GA-16 FINAL5：泛 PLATFORM Goal（未指定 provider）+ Walmart account → 允许（domain-level；客户端 provider 只作断言）', async () => {
+    const intent = '帮我把平台上有多少可以追回的钱找出来';
+    const goalId = await seedGoalWithIntent(ORG, intent);
+    const walmart = await prisma.platformAccount.create({
+      data: { organizationId: ORG, platform: 'WALMART', externalAccountId: 'walmart-ga16', displayName: 'Walmart' },
+      select: { id: true },
+    });
+    await grantAuthorizationFor(ORG, walmart.id, planForIntent(intent), 'WALMART', 'PLATFORM');
+    const result = await admitAgentGoal(
+      prisma,
+      { organizationId: ORG, goalId, platformAccountId: walmart.id, now: NOW },
+      deps(),
+    );
+    expect(result.kind).toBe('ADMITTED');
+  });
+
+  it('GA-17 FINAL5：lineage 用 exact deterministic task membership（带正确 digest token 的伪造 suffix / 非计划 domain 一律拒绝）', async () => {
+    const goalId = await seedGoal(ORG);
+    const plan = planFor();
+    const token = plan.goalDigest.slice(0, 24);
+    const forgedKeys = [
+      'task:recovery:PLATFORM:forged-task:' + token,
+      'task:recovery:CUSTOMS:goal:' + token,
+    ];
+    for (const forged of forgedKeys) {
+      await expect(
+        recordGoalRunFromRuntime(prisma, {
+          organizationId: ORG,
+          goalId,
+          outcome: { claimed: [forged], completed: [], blocked: [] },
+          now: NOW,
+        }),
+      ).rejects.toMatchObject({ code: 'GOAL_RUNTIME_LINEAGE_MISMATCH' });
+    }
+    expect(await listAgentGoalRuns(prisma, { organizationId: ORG, goalId })).toEqual([]);
+    // exact membership 不是子串匹配：真计划内 task 仍必须被接受
+    const exact = plan.tasks[0]?.dedupeKey ?? '';
+    expect(exact.startsWith('task:recovery:')).toBe(true);
+    const accepted = await recordGoalRunFromRuntime(prisma, {
+      organizationId: ORG,
+      goalId,
+      outcome: { claimed: [exact], completed: [exact], blocked: [] },
+      now: NOW,
+    });
+    expect(accepted.created).toBe(true);
+    expect(accepted.status).toBe('COMPLETED');
+    expect(await listAgentGoalRuns(prisma, { organizationId: ORG, goalId })).toHaveLength(1);
+  });
+
+  it('GA-18 FINAL5：durable Goal identity 是 SSOT（identity 不可改写 + 带 approvalThreshold 的 Goal lineage 重建一致）', async () => {
+    // (a) durable identity 不可改写：DB 触发器直接拒绝重写 normalizedGoal
+    const goalId = await seedGoal(ORG);
+    const row = await prisma.agentGoal.findFirst({ where: { organizationId: ORG, id: goalId } });
+    expect(row).not.toBeNull();
+    const tampered = {
+      ...((row?.normalizedGoal ?? {}) as Record<string, unknown>),
+      approvalThreshold: { currency: 'USD', amount: 250000 },
+    };
+    await expect(
+      prisma.agentGoal.update({ where: { id: goalId }, data: { normalizedGoal: tampered as never } }),
+    ).rejects.toThrow(/AGENT_GOAL_IDENTITY_IMMUTABLE/);
+
+    // (b) lineage 重建必须还原 durable approvalThreshold（漏掉它 → 重建 digest 不一致 → 拒绝投影）
+    const thresholdIntent = INTENT + '，单笔超过 $1000 需要我批准';
+    const compiled = compileAgentGoal({ text: thresholdIntent });
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    expect(compiled.draft.approvalThreshold).not.toBeNull();
+    const validated = validateAgentGoalDraft({
+      draft: compiled.draft,
+      context: { organizationId: ORG, actorUserId: USER, now: NOW },
+    });
+    const thresholdGoalId = await seedGoalWithIntent(ORG, thresholdIntent);
+    const accountId = await seedAccount(ORG, 'ga-18');
+    await grantAuthorizationFor(ORG, accountId, planForIntent(thresholdIntent), 'AMAZON', 'PLATFORM');
+    const admission = await admitAgentGoal(
+      prisma,
+      { organizationId: ORG, goalId: thresholdGoalId, platformAccountId: accountId, provider: PROVIDER, now: NOW },
+      deps(),
+    );
+    expect(admission.kind).toBe('ADMITTED');
+    // durable identity 里的 threshold 与 intent 重建一致（单一事实源）
+    expect(validated.approvalThresholdPreference).toEqual({ currency: 'USD', amount: 1000 });
+    const projected = await recordGoalRunFromRuntime(prisma, {
+      organizationId: ORG,
+      goalId: thresholdGoalId,
+      outcome: { claimed: admission.admitted, completed: admission.admitted, blocked: [] },
+      now: NOW,
+    });
+    expect(projected.created).toBe(true);
+    expect(projected.status).toBe('COMPLETED');
   });
   it('GA-7 非可绕过 gate / 高风险动作不被准入放行（external write = HOLD）', () => {
     const plan = planFor();

@@ -517,7 +517,7 @@ export async function recordGoalRunFromRuntime(
         providers: Array.isArray(stored.providers) ? stored.providers : [],
         timeRange: stored.timeRange ?? { kind: 'LAST_N_MONTHS', months: 12 },
         executionMode: stored.executionMode ?? 'AUTO_WHEN_AUTHORIZED',
-        approvalThreshold: null,
+        approvalThreshold: stored.approvalThreshold ?? null,
         matchedSignals: [],
       },
       context: { organizationId: input.organizationId, actorUserId: goal.createdBy, now: input.now },
@@ -530,6 +530,20 @@ export async function recordGoalRunFromRuntime(
       context: { organizationId: input.organizationId, actorUserId: goal.createdBy, now: input.now },
     });
   }
+  // FINAL5 CHANGE 2: lineage 重建必须以 durable Goal identity 为准；重建 digest 与持久化 digest
+  // 不一致（例如 normalizedGoal 被篡改 / 字段丢失）即 fail-closed，禁止继续投影 run。
+  const storedLineageDigest = (goal.normalizedGoal as { goalDigest?: unknown } | null)?.goalDigest;
+  if (
+    typeof storedLineageDigest === 'string' &&
+    storedLineageDigest !== '' &&
+    storedLineageDigest !== lineageValidated.goalDigest
+  ) {
+    throw new GoalAdmissionError(
+      'GOAL_RUNTIME_LINEAGE_MISMATCH',
+      'runtime lineage 重建的 goal identity 与 durable Goal 不一致',
+    );
+  }
+
   const lineagePlan = planAgentGoal({
     goal: lineageValidated,
     capabilities: resolveGoalCapabilities({
