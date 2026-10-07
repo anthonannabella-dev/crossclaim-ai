@@ -126,6 +126,18 @@ export async function runJourney(input) {
   check('home.activeRecovery.visible', body.includes('CrossClaim 正在帮你做什么'), '');
   check('home.no.engineer.jargon', !body.includes('工程字段') && !body.includes('技术字段'), '');
   check('home.no.role.code', !body.includes('OWNER') && !body.includes('ADMIN'), '首页出现内部角色码');
+
+  /* ---------------- 4b. 追回进度（一级导航 route 真实可达，客户语言） ---------------- */
+  await open(page, webBase + '/recoveries');
+  const recoveriesBody = await text(page);
+  check('recoveries.page.title', recoveriesBody.includes('追回进度'), recoveriesBody.slice(0, 120));
+  check('recoveries.page.capability', recoveriesBody.includes('CrossClaim 正在帮你做什么'), '');
+  check(
+    'recoveries.no.raw.engineering',
+    !/PLATFORM|LOGISTICS|CUSTOMS|INDEPENDENT_SITE|task:recovery|ADMITTED|RUNNING/.test(recoveriesBody),
+    recoveriesBody.slice(0, 160),
+  );
+  await open(page, webBase + '/');
   await shot(page, '03-home-first-run');
 
   /* ---------------- 5. 自然语言目标（真实提交） ---------------- */

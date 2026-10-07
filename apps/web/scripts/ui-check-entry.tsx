@@ -690,6 +690,13 @@ check(
   'nav.no.route.removed',
   REQUIRED_HREFS.every((href) => shellHtml.includes('href="' + href + '"')),
 );
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P5：一级 5 项 + 更多 / 高级 顺序与 HOST 指令一致
+const navModel = buildCustomerNav(zhCN);
+check('nav.v2.primary.order', navModel[0]!.items.map((item) => item.href).join(',') === '/,/recoveries,/money,/#customer-tasks,/connections');
+check('nav.v2.more.order', navModel[1]!.items.map((item) => item.href).join(',') === '/opportunities,/cases,/customs,/upload,/accounts');
+check('nav.v2.advanced.order', navModel[2]!.items.map((item) => item.href).join(',') === '/authorizations,/billing,/plan');
+check('nav.v2.no.admin.entries', !navModel.some((group) => group.items.some((item) => item.href.startsWith('/admin') || item.href.startsWith('/operations'))));
+check('nav.v2.recoveries.route.page', zhCN.recoveriesPage.pageTitle.length > 0);
 check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
 
 // AGENT EXPERIENCE LAYER / P9：按需授权（目标等待授权 → Needs Your Attention → 去授权后继续原目标）

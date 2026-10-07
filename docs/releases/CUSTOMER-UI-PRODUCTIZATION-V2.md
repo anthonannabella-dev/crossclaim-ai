@@ -19,7 +19,7 @@
 | P2 黄金金额区 | DONE | 四张指标紧随 Hero：可追回 / 追回中 / 已到账 / 需要你处理（逐币种原样展示） |
 | P3 Active Recovery | DONE | 新增「CrossClaim 正在帮你做什么」，3–5 条，只消费已有后端事实 |
 | P4 Needs Attention | DONE | 仅当存在真实人工待办时渲染；每条含发生什么 / 影响 / 为什么需要你 / 下一步 |
-| P5 Navigation | QUEUED | 一级导航已由上一单元分层，本轮复核与文案对齐 |
+| P5 Navigation simplification | DONE | 一级 5 项客户语言对齐 + `/recoveries` 真实路由 + 更多/高级顺序按 HOST 指令 |
 | P6 Opportunity / Case 客户语言 | QUEUED | Opportunity→追回机会 / Case→追回任务 / Claim Package→提交材料 / Evidence→支持材料 |
 | P7 Authorization UX | QUEUED | 「CrossClaim 可以替你做什么」+「以下情况仍会先问你」+ 撤销入口显性化 |
 | P8 工程字段隔离 | QUEUED | 主 UI 去除「工程字段 / 技术字段」措辞，技术标识移入 Support/Admin diagnostics |
@@ -63,7 +63,33 @@
 
 * 仅在 `tasks.length > 0` 时渲染；复用既有 TaskCenter（单一待办模型，未新建第二套）。
 
-## 证据（exact HEAD 见提交）
+## P5 变更（第二批）
+
+### 一级导航（客户语言对齐 HOST 指令）
+
+| 位置 | 条目（zh-CN / en-US） |
+| --- | --- |
+| 一级 | 首页 / 追回进度（Recovery progress）/ 资金（Money）/ 需要我处理（Needs my attention）/ 连接（Connections） |
+| 更多 | 追回机会 / 追回任务 / 关税追回 / 数据导入 / 账户 |
+| 高级 | 自动追回授权 / 账单 / 套餐 |
+
+* href 顺序已在 ui-check 中固化为断言（`nav.v2.primary.order` / `nav.v2.more.order` / `nav.v2.advanced.order`），
+  且继续断言没有任何 `/admin*` / `/operations*` 进入客户导航，`/recoveries` 等 12 个既有 href 一个都不能少（`nav.no.route.removed`）。
+* 说明：HOST 指令 §五把 More 里的 cases 写作「案件」，§六的客户语言映射把 Case 定为「追回任务」。
+  两处冲突按 §六（明确的客户语言映射）执行，条目标签取「追回任务」；文案与顺序均记录在案，供 FINAL 审计核对。
+
+### 新增 `/recoveries` 客户页（修复一级导航 404）
+
+* 此前一级导航「追回进度」指向的 `/recoveries` 并没有 page 文件（路由缺失）。本批次补齐
+  `apps/web/app/recoveries/page.tsx`：只消费 `/agent-goals` 与 `/recovery-money` 的既有事实，
+  用 `buildActiveFlows()` 渲染客户语言列表 + 空状态 + 「去首页输入新目标 / 查看金额明细」入口；
+  未登录时显示登录提示（复用既有 recoveriesPage 命名空间 + 3 个新 sign-in 文案）。
+* 冻结区零改动：Goal / Authorization / Runtime / Guard / Queue / API contract 均未触碰。
+
+## 证据
+
+### 批次 1（P1–P4）
+
 
 | 项 | 结果 |
 | --- | --- |
@@ -74,10 +100,22 @@
 | 浏览器证据目录 | `reports/acceptance/2026-10-07T15-52-05-717Z/` |
 | api tsc | 0（本轮未改 `apps/api`） |
 
+### 批次 2（P5）
+
+| 项 | 结果 |
+| --- | --- |
+| web tsc | 0 |
+| i18n | OK：5 语言 / 854 键 parity / 客户硬编码 **0** |
+| UI render check | **153/153 OK**（新增 5 项导航顺序 / 无 admin 条目 / recoveries 路由字典断言） |
+| 浏览器客户旅程 | **68/68 PASS**（新增：`/recoveries` 页面标题、能力列表可见、无 raw engineering exposure） |
+| 浏览器证据目录 | `reports/acceptance/2026-10-07T16-00-29-549Z/` |
+| 回归说明 | 唯一一次失败是本批次首次运行：`/recoveries` 与既有 `recoveriesPage` 命名空间重名导致 TSC1117；已改为复用既有命名空间后重跑全绿 |
+
 边界：REAL_EXTERNAL_EXECUTION = NOT_EXECUTED；REAL_VALIDATION_COMPLETE = NO；PRODUCTION_READY = NO；
 SECOND_RUNTIME = 0 / SECOND_SCHEDULER = 0 / SECOND_GUARD = 0；全部 HOLD / FORBIDDEN 不变。
 
 ## 下一批
 
-P5–P8（导航复核与文案对齐、Opportunity/Case 客户语言降级、Authorization 产品化、工程字段隔离），
-每批同样执行：实现 → 定向测试 → 浏览器旅程 → commit → push。
+P6 → P7 → P8 → P9 → P10 → P11 → P12 → CUSTOMER-UI-PRODUCTIZATION-V2-FINAL。
+每个单元同样执行：IMPLEMENT → STATIC CHECK → web tsc → UI render check → i18n check →
+真实浏览器客户旅程 → 定向回归 → commit → push → 更新本记录。

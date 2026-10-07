@@ -48,16 +48,16 @@ export function buildCustomerNav(t: Messages): NavGroup[] {
         { href: '/opportunities', label: t.customerShell.navOpportunities },
         { href: '/cases', label: t.customerShell.navCases },
         { href: '/customs', label: t.customerShell.navCustoms },
-        { href: '/accounts', label: t.customerShell.navAccounts },
         { href: '/upload', label: t.customerShell.navUpload },
+        { href: '/accounts', label: t.customerShell.navAccounts },
       ],
     },
     {
       title: t.customerShell.groupAdvanced,
       items: [
+        { href: '/authorizations', label: t.customerShell.navAuthorizations },
         { href: '/billing', label: t.customerShell.navBilling },
         { href: '/plan', label: t.customerShell.navPlan },
-        { href: '/authorizations', label: t.customerShell.navAuthorizations },
       ],
     },
   ];
