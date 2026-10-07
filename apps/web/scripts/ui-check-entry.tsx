@@ -36,8 +36,10 @@ import {
   type RecoveryStateItem,
 } from '../app/lib/dashboard-view';
 import enUS from '../i18n/dictionaries/en-US';import GoalConsole from '../app/components/ui/goal-console';
+import AgentRunViewComponent from '../app/recoveries/runs/[id]/agent-run-view';
 import RecoveryHeadlineCards from '../app/components/ui/recovery-headline-cards';
 import zhCN from '../i18n/dictionaries/zh-CN';
+import { buildAgentRunView } from '../app/lib/agent-run-view';
 
 const failures: string[] = [];
 const results: string[] = [];
@@ -525,6 +527,58 @@ check('tasks.center.reauth.copy', taskCenterHtml.includes(zhCN.needsAttention.re
 check('tasks.center.kind.badge', taskCenterHtml.includes(zhCN.needsAttention.kindConnectionReauth));
 check('tasks.center.list.semantics', taskCenterHtml.includes('role="list"') && taskCenterHtml.includes('role="listitem"'));
 check('tasks.center.no.raw.code', !taskCenterHtml.includes('REAL_OAUTH_EXTERNAL_GATE') && !taskCenterHtml.includes('NEEDS_AUTH'));
+
+// AGENT EXPERIENCE LAYER / P6：执行详情（业务语言，不暴露内部实现）
+const agentRunPayload = {
+  goalId: 'agentgoal-demo',
+  status: 'PROPOSED',
+  intent: '检查我过去12个月所有可以追回的钱',
+  interpretation: {
+    goalType: 'DISCOVER_AND_RECOVER',
+    domains: ['PLATFORM', 'CUSTOMS'],
+    timeRange: { kind: 'LAST_N_MONTHS', months: 12 },
+    executionMode: 'AUTO_WHEN_AUTHORIZED',
+    approvalThreshold: { currency: 'USD', amount: 1000 },
+  },
+  createdAt: '2026-10-07T00:00:00.000Z',
+  runs: [] as Array<{ runId: string; status: string; startedAt: string; completedAt: string | null; summary: unknown }>,
+};
+const agentRunView = buildAgentRunView(agentRunPayload, zhCN);
+const agentRunHtml = render(<AgentRunViewComponent view={agentRunView} t={zhCN} />);
+check('agent.run.intent', agentRunHtml.includes(agentRunPayload.intent));
+check('agent.run.scope.business', agentRunHtml.includes(zhCN.agentRun.scopePlatform) && agentRunHtml.includes(zhCN.agentRun.scopeCustoms));
+check('agent.run.time.range', agentRunHtml.includes(zhCN.agentRun.lastNMonths.replace('{months}', '12')));
+check('agent.run.progress.steps', agentRunHtml.includes(zhCN.agentRun.stepRecorded) && agentRunHtml.includes(zhCN.agentRun.stepSummary));
+check('agent.run.results.empty.honest', agentRunHtml.includes(zhCN.agentRun.resultsEmpty));
+check('agent.run.hold.wording', agentRunHtml.includes(zhCN.agentRun.holdNote));
+check('agent.run.no.internals', !/runner|judge|policy engine|model router|task:recovery/.test(agentRunHtml));
+
+const agentRunWithSummary = buildAgentRunView(
+  {
+    ...agentRunPayload,
+    status: 'RUNNING',
+    runs: [
+      {
+        runId: 'run-1',
+        status: 'RUNNING',
+        startedAt: '2026-10-07T01:00:00.000Z',
+        completedAt: null,
+        summary: {
+          opportunitiesFound: 37,
+          needsApproval: 2,
+          waitingEvidence: 6,
+          recovered: 0,
+          estimatedRecoverableByCurrency: [{ currency: 'USD', amount: '18,420.00' }],
+        },
+      },
+    ],
+  },
+  zhCN,
+);
+const agentRunSummaryHtml = render(<AgentRunViewComponent view={agentRunWithSummary} t={zhCN} />);
+check('agent.run.results.rendered', agentRunSummaryHtml.includes('37') && agentRunSummaryHtml.includes('USD 18,420.00'));
+check('agent.run.no.cross.currency', agentRunWithSummary.results.filter((row) => row.key.startsWith('estimated:')).length === 1);
+check('agent.run.activity.timeline', agentRunSummaryHtml.includes(zhCN.agentRun.activityGoalRecorded) && agentRunSummaryHtml.includes(zhCN.agentRun.activityRunStarted));
 
 console.log(results.join('\n'));
 if (failures.length > 0) {

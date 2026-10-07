@@ -12,11 +12,19 @@ import type { PrismaClient } from '@prisma/client';
 
 import { compileAgentGoal } from './goal-compiler';
 import { resolveGoalCapabilities, type GoalCapabilityFacts } from './goal-capability-resolver';
-import { listAgentGoals, persistAgentGoal, type AgentGoalView } from './goal-store';
+import {
+  listAgentGoalRuns,
+  listAgentGoals,
+  loadAgentGoal,
+  persistAgentGoal,
+  type AgentGoalView,
+} from './goal-store';
 import { planAgentGoal } from './goal-task-planner';
 import { validateAgentGoalDraft } from './goal-validator';
 
-export const AGENT_GOAL_PATH = /^\/agent-goals$/;
+/** `/agent-goals` 与 `/agent-goals/:id`（P6 详情读取面） */
+export const AGENT_GOAL_PATH = /^\/agent-goals(?:\/[^/]+)?$/;
+export const AGENT_GOAL_DETAIL_PATH = /^\/agent-goals\/([^/]+)$/;
 
 export interface AgentGoalSession {
   userId: string;
@@ -96,6 +104,41 @@ export async function handleAgentGoalRequest(
 ): Promise<boolean> {
   const method = (req.method ?? 'GET').toUpperCase();
   const now = deps.now?.() ?? new Date();
+  const path = (req.url ?? '/').split('?')[0] ?? '/';
+  const detail = AGENT_GOAL_DETAIL_PATH.exec(path);
+
+  if (detail && method === 'GET') {
+    const goal = await loadAgentGoal(deps.prisma, {
+      organizationId: deps.session.organizationId,
+      goalId: detail[1],
+    });
+    if (goal === null) {
+      // 跨租户 / 不存在一律 404（不泄漏存在性）
+      sendJson(res, 404, { error: 'NOT_FOUND' });
+      return true;
+    }
+    const runs = await listAgentGoalRuns(deps.prisma, {
+      organizationId: deps.session.organizationId,
+      goalId: detail[1],
+    });
+    sendJson(res, 200, {
+      ...toCustomerGoalView(goal),
+      runs: runs.map((run) => ({
+        runId: run.runId,
+        status: run.status,
+        startedAt: run.startedAt,
+        completedAt: run.completedAt,
+        summary: run.summary,
+      })),
+      /** 恒为 false：本入口只读取（不执行、不推进状态） */
+      executionPerformed: false,
+    });
+    return true;
+  }
+  if (detail && method !== 'GET') {
+    sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+    return true;
+  }
 
   if (method === 'GET') {
     const goals = await listAgentGoals(deps.prisma, { organizationId: deps.session.organizationId });

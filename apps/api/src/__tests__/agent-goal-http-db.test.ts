@@ -189,4 +189,39 @@ describe('P4 · POST /agent-goals（编译 + 落库 + 计划预览，零执行�
       expect(await prisma.agentGoal.count()).toBe(1);
     });
   });
+
+  it('PG-AGH6 详情面：GET /agent-goals/:id 返回目标 + runs（零执行）；跨租户 / 不存在 → 404', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base, 'p4-owner@example.com');
+      const created = (await (await postGoal(base, cookie, { intent: INTENT })).json()) as { goalId: string };
+
+      const detail = await fetch(base + '/agent-goals/' + created.goalId, { headers: { cookie } });
+      expect(detail.status).toBe(200);
+      const body = (await detail.json()) as {
+        goalId: string;
+        status: string;
+        executionPerformed: boolean;
+        runs: unknown[];
+        interpretation: { goalType: string };
+      };
+      expect(body.goalId).toBe(created.goalId);
+      expect(body.status).toBe('PROPOSED');
+      expect(body.executionPerformed).toBe(false);
+      expect(body.runs).toEqual([]);
+      expect(body.interpretation.goalType).toBe('DISCOVER_AND_RECOVER');
+
+      // 跨租户：用 B 的会话读 A 的目标 → 404（不泄漏存在性）
+      const cookieB = await login(base, 'p4-owner-b@example.com');
+      const crossTenant = await fetch(base + '/agent-goals/' + created.goalId, { headers: { cookie: cookieB } });
+      expect(crossTenant.status).toBe(404);
+
+      // 不存在 → 404
+      const missing = await fetch(base + '/agent-goals/agentgoal-does-not-exist', { headers: { cookie } });
+      expect(missing.status).toBe(404);
+
+      // 详情面不接受写入
+      const write = await fetch(base + '/agent-goals/' + created.goalId, { method: 'POST', headers: { cookie } });
+      expect(write.status).toBe(405);
+    });
+  });
 });
