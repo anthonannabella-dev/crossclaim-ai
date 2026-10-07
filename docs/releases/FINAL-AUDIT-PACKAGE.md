@@ -4,6 +4,12 @@
 `EXACT_HEAD = a316749a`（本文件与最终收口同一提交；基线 `299b008a`）
 审计请求：**独立架构 / 安全 / 产品验收**。请只依据本文件与仓库实际内容判定。
 
+> **REVISION 2（AEL FINAL2）**：审计裁决 `MSG-20261007-01`（PASS WITH REVISE / NOT CLOSED）的三条 required CHANGE
+> 已做最小修订并推送 —— C1 `25bf985b`（Goal 单一执行准入面）、C2 `9d2d7c6b`（OAuth 成功必须经一次性消费 +
+> 原子 CAS + binding/血缘 + DB 状态机）、C3 `3c426361`（非可绕过 gate 缺证明即 DENY）。
+> 复审核查请以 **`docs/releases/AGENT-EXPERIENCE-FINAL2-REVISION-REPORT.md`** 为入口（含 exact HEAD 与回归证据）。
+> 本文件其余内容仍描述 REVISION 1 的受审面（`a316749a` / 基线 `299b008a`），未被本次修订推翻。
+
 ---
 
 ## 0. 一句话范围
