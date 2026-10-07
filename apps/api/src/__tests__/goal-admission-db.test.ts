@@ -279,6 +279,49 @@ describe('CUSTOMER-UX FINAL2 · Goal admission（真实 PostgreSQL）', () => {
     expect(fs.existsSync(tasksPath)).toBe(false);
   });
 
+  it('GA-8 同租户但账户域不匹配（Amazon Goal + UPS 账户）→ DENIED / GOAL_SCOPE_MISMATCH，零入队', async () => {
+    const goalId = await seedGoal(ORG);
+    const upsAccountId = await prisma.platformAccount.create({
+      data: { organizationId: ORG, platform: 'UPS', externalAccountId: 'ups-ga8', displayName: 'UPS' },
+      select: { id: true },
+    });
+    await grantAuthorization(ORG, upsAccountId.id, planFor());
+    const result = await admitAgentGoal(
+      prisma,
+      { organizationId: ORG, goalId, platformAccountId: upsAccountId.id, provider: 'UPS', now: NOW },
+      deps(),
+    );
+    expect(result.kind).toBe('DENIED');
+    expect(result.reasonCodes).toContain('GOAL_SCOPE_MISMATCH');
+    expect(result.admitted).toEqual([]);
+    expect(fs.existsSync(tasksPath)).toBe(false);
+  });
+
+  it('GA-9 客户端 provider 与账户事实不一致 → PROVIDER_SCOPE_MISMATCH', async () => {
+    const goalId = await seedGoal(ORG);
+    const accountId = await seedAccount(ORG, "ga-9");
+    await grantAuthorization(ORG, accountId, planFor());
+    const result = await admitAgentGoal(
+      prisma,
+      { organizationId: ORG, goalId, platformAccountId: accountId, provider: 'UPS', now: NOW },
+      deps(),
+    );
+    expect(result.kind).toBe('DENIED');
+    expect(result.reasonCodes).toContain('PROVIDER_SCOPE_MISMATCH');
+  });
+
+  it('GA-10 runtime claim 与 Goal 计划不符 → GOAL_RUNTIME_LINEAGE_MISMATCH，且不落投影', async () => {
+    const goalId = await seedGoal(ORG);
+    await expect(
+      recordGoalRunFromRuntime(prisma, {
+        organizationId: ORG,
+        goalId,
+        outcome: { claimed: ['task:recovery:PLATFORM:not-this-goals-task'], completed: [], blocked: [] },
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: 'GOAL_RUNTIME_LINEAGE_MISMATCH' });
+    expect(await listAgentGoalRuns(prisma, { organizationId: ORG, goalId })).toEqual([]);
+  });
   it('GA-7 非可绕过 gate / 高风险动作不被准入放行（external write = HOLD）', () => {
     const plan = planFor();
     const withExternalWrite: GoalPlan = {

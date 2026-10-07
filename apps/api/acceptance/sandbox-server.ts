@@ -245,7 +245,7 @@ async function main(): Promise<void> {
           for (const action of task.candidateActions) actions.add(action);
           for (const action of task.autoExecutableActions) actions.add(action);
         }
-        const allowedActionTypes = [...actions].filter((action) => action.trim() !== '');
+        const allowedActionTypes = [...actions].filter((action) => action.trim() !== '').sort();
         if (allowedActionTypes.length === 0) {
           sendJson(res, 409, { error: 'NO_AUTHORIZABLE_ACTION' });
           return;
@@ -253,7 +253,7 @@ async function main(): Promise<void> {
         const now = new Date();
         const persisted = await persistStandingAuthorization(prisma, {
           serverDerived: true,
-          authorizationId: 'sa-sandbox-' + goalId,
+          authorizationId: 'sa-sandbox-' + platformAccountId,
           organizationId: session.organizationId,
           platformAccountId,
           provider,
@@ -300,6 +300,26 @@ async function main(): Promise<void> {
         return;
       }
 
+      if (pathname === '/acceptance/sandbox-account' && req.method === 'POST') {
+        const platform = typeof body.platform === 'string' ? body.platform.trim().toUpperCase() : '';
+        if (platform === '') {
+          sendJson(res, 400, { error: 'INVALID_INPUT' });
+          return;
+        }
+        // sandbox：外部 provider 侧账户（真实 PlatformAccount 行），仅补事实，不做任何业务判定
+        const account = await prisma.platformAccount.create({
+          data: {
+            organizationId: session.organizationId,
+            platform,
+            externalAccountId: 'sandbox-' + platform.toLowerCase() + '-' + Date.now(),
+            displayName: 'Sandbox account (' + platform + ')',
+          },
+          select: { id: true, platform: true },
+        });
+        sendJson(res, 201, { platformAccountId: account.id, platform: account.platform, sandbox: true });
+        return;
+      }
+
       if (pathname === '/acceptance/run-si-runtime' && req.method === 'POST') {
         const goalId = typeof body.goalId === 'string' ? body.goalId : '';
         const raw = fs.existsSync(TASKS_PATH) ? fs.readFileSync(TASKS_PATH, 'utf8') : '[]';
@@ -308,19 +328,25 @@ async function main(): Promise<void> {
         const runtime = await composeRsiRuntime({
           readFile: (filePath: string) => fs.promises.readFile(filePath, 'utf8'),
           tasksPath: TASKS_PATH,
-          runner: { async run() { return { status: 'PASS' as const }; } },
           awaitVerdict: false,
         });
-        let outcomeCount = 0;
+        // FINAL3：真正驱动既有 controller claim（不再用 queue 内容冒充 claimed）
+        let claimedKey: string | null = null;
+        let proposalStatus: 'PASS' | 'REVISE' | 'BLOCK' | null = null;
         try {
-          const outcomes = await runtime.loop.pollOnce();
-          outcomeCount = outcomes.length;
+          const outcome = await runtime.controller.tick();
+          claimedKey = outcome.claimed === null ? null : outcome.claimed.dedupeKey;
+          proposalStatus = runtime.controller.proposal()?.status ?? null;
         } finally {
           runtime.loop.stop();
         }
-        const claimed = queued.map((task) => task.dedupeKey);
-        const completed = outcomeCount > 0 ? claimed : [];
-        const blocked = outcomeCount > 0 ? [] : claimed;
+        if (claimedKey === null) {
+          sendJson(res, 409, { error: 'RUNTIME_DID_NOT_CLAIM', queuedTasks: queued.length });
+          return;
+        }
+        const claimed = [claimedKey];
+        const completed = proposalStatus === 'PASS' ? [claimedKey] : [];
+        const blocked = proposalStatus === 'PASS' ? [] : [claimedKey];
         const projection = await recordGoalRunFromRuntime(prisma, {
           organizationId: session.organizationId,
           goalId,
@@ -338,8 +364,9 @@ async function main(): Promise<void> {
           created: projection.created,
           executedBy: 'ONE_SI_RUNTIME',
           runtimeOwner: 'apps/api/src/runtime/rsi-run.ts',
-          queuedTasks: claimed.length,
-          runtimeOutcomes: outcomeCount,
+          queuedTasks: queued.length,
+          runtimeClaimed: claimedKey,
+          runtimeProposal: proposalStatus,
           externalWritePerformed: false,
         });
         return;
@@ -361,6 +388,7 @@ async function main(): Promise<void> {
         signupEnabled: true,
         acceptanceRoutes: [
           '/acceptance/sandbox-authorization',
+          '/acceptance/sandbox-account',
           '/acceptance/run-si-runtime',
           '/acceptance/revoke-authorization',
         ],

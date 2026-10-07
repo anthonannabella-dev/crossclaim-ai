@@ -66,8 +66,9 @@ export async function handleAgentGoalAdmissionRequest(
   const goalId = path.split('/')[2] ?? '';
   const body = await readJsonBody(req);
   const platformAccountId = typeof body.platformAccountId === 'string' ? body.platformAccountId.trim() : '';
-  const provider = typeof body.provider === 'string' ? body.provider.trim().toUpperCase() : '';
-  if (goalId === '' || platformAccountId === '' || provider === '') {
+  // FINAL3：provider 是 server-owned 事实（取自 PlatformAccount.platform）；客户端字段只作断言
+  const clientProvider = typeof body.provider === 'string' ? body.provider.trim().toUpperCase() : '';
+  if (goalId === '' || platformAccountId === '') {
     sendJson(res, 400, { error: 'INVALID_INPUT' });
     return true;
   }
@@ -89,7 +90,7 @@ export async function handleAgentGoalAdmissionRequest(
       organizationId: deps.session.organizationId,
       goalId,
       platformAccountId,
-      provider,
+      ...(clientProvider === '' ? {} : { provider: clientProvider }),
       now,
     },
     deps.admission,

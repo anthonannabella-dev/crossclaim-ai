@@ -168,6 +168,44 @@ export async function runJourney(input) {
   const scopeConnection = items.find((item) => item.label === scopeLabel) ?? null;
   check('goal.scope.connection.created', scopeConnection !== null, JSON.stringify(connectionList).slice(0, 160));
 
+  // 负向（SECURITY_BOUNDARY）：Amazon 目标 + UPS（承运商）账户 → 必须拒绝，不得准入
+  const consoleErrorsBeforeProbe = consoleErrors.length;
+  const negativeAuth = await page.evaluate(async (payload) => {
+    const r = await fetch('/api/acceptance/sandbox-authorization', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (r.status !== 201) return { status: r.status, body: await r.json().catch(() => null) };
+    const body = await r.json();
+    const admit = await fetch('/api/agent-goals/' + encodeURIComponent(payload.goalId) + '/admit', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ platformAccountId: body.platformAccountId }),
+    });
+    return { status: admit.status, body: await admit.json().catch(() => null) };
+  }, { goalId, connectionId: scopeConnection?.id ?? '' });
+  // 该 403 是**预期**的安全拒绝（探针本身），从控制台断言中剔除；其他错误仍然计入。
+  const negativeProbeConsoleNoise = consoleErrors.splice(consoleErrorsBeforeProbe);
+  check('security.scope.mismatch.probe.noise.expected', negativeProbeConsoleNoise.length >= 0, '');
+  check(
+    'security.scope.mismatch.denied',
+    negativeAuth.body?.kind === 'DENIED' &&
+      (negativeAuth.body?.reasonCodes ?? []).includes('GOAL_SCOPE_MISMATCH'),
+    JSON.stringify(negativeAuth).slice(0, 240),
+  );
+
+  // sandbox 外部账户：Amazon（真实 PlatformAccount 行，仅补外部事实）
+  const sandboxAccount = await page.evaluate(async () => {
+    const r = await fetch('/api/acceptance/sandbox-account', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ platform: 'AMAZON' }),
+    });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  });
+  check('sandbox.amazon.account.ready', sandboxAccount.status === 201, JSON.stringify(sandboxAccount).slice(0, 160));
+
   // sandbox authorization provider：只模拟外部授权结果，durable authorization 走真实 store
   const authResult = await page.evaluate(async (payload) => {
     const r = await fetch('/api/acceptance/sandbox-authorization', {
@@ -176,7 +214,7 @@ export async function runJourney(input) {
       body: JSON.stringify(payload),
     });
     return { status: r.status, body: await r.json().catch(() => null) };
-  }, { goalId, connectionId: scopeConnection?.id ?? '' });
+  }, { goalId, platformAccountId: sandboxAccount.body?.platformAccountId ?? '', provider: 'AMAZON' });
   check('authorization.sandbox.completed', authResult.status === 201, JSON.stringify(authResult).slice(0, 200));
   const authorizedAccountId = authResult.body?.platformAccountId ?? '';
   const authorizedProvider = authResult.body?.provider ?? '';
@@ -187,7 +225,7 @@ export async function runJourney(input) {
     const r = await fetch(`/api/agent-goals/${encodeURIComponent(payload.goalId)}/admit`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ platformAccountId: payload.platformAccountId, provider: payload.provider }),
+      body: JSON.stringify({ platformAccountId: payload.platformAccountId }),
     });
     return { status: r.status, body: await r.json().catch(() => null) };
   }, { goalId, platformAccountId: authorizedAccountId, provider: authorizedProvider });
@@ -209,7 +247,7 @@ export async function runJourney(input) {
     const r = await fetch(`/api/agent-goals/${encodeURIComponent(payload.goalId)}/admit`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ platformAccountId: payload.platformAccountId, provider: payload.provider }),
+      body: JSON.stringify({ platformAccountId: payload.platformAccountId }),
     });
     return { status: r.status, body: await r.json().catch(() => null) };
   }, { goalId, platformAccountId: authorizedAccountId, provider: authorizedProvider });

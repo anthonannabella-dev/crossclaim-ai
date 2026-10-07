@@ -42,6 +42,19 @@ import { planAgentGoal, type GoalPlan } from './goal-task-planner';
 export const GOAL_ADMISSION_VERSION = 'agent-goal-admission/v1';
 export const GOAL_ADMISSION_PATH_SUFFIX = '/admit';
 
+/**
+ * 平台（PlatformAccount.platform，server-owned）→ Goal 域。
+ * 未知平台返回 null → 准入 fail closed（不猜测、不放行）。
+ */
+export function goalDomainOfPlatform(platform: string): 'PLATFORM' | 'LOGISTICS' | 'CUSTOMS' | 'INDEPENDENT_SITE' | null {
+  const value = platform.trim().toUpperCase();
+  if (['AMAZON', 'WALMART', 'TIKTOK', 'TIKTOK_SHOP', 'EBAY'].includes(value)) return 'PLATFORM';
+  if (['UPS', 'FEDEX', 'DHL', 'FREIGHT_FORWARDER', 'INSURANCE', 'CARRIER'].includes(value)) return 'LOGISTICS';
+  if (['CBP', 'CUSTOMS', 'CUSTOMS_BROKER', 'ABI'].includes(value)) return 'CUSTOMS';
+  if (['SHOPIFY', 'STRIPE', 'PAYPAL', 'INDEPENDENT_SITE'].includes(value)) return 'INDEPENDENT_SITE';
+  return null;
+}
+
 /** 只有这些 requiredGates 允许由 Standing Authorization（TIER_1 低风险）满足；其余一律不可绕过 */
 const AUTHORIZATION_SATISFIABLE_GATES: readonly string[] = ['humanApproval'];
 
@@ -92,7 +105,8 @@ export interface AdmitAgentGoalInput {
   goalId: string;
   /** 目标作用域（必须属于同一租户；跨租户一律 NOT_FOUND/拒绝） */
   platformAccountId: string;
-  provider: string;
+  /** FINAL3：仅作断言；真正使用的 provider 取自 PlatformAccount.platform（server-owned） */
+  provider?: string;
   now: Date;
 }
 
@@ -223,6 +237,41 @@ export async function admitAgentGoal(
     };
   }
 
+  // FINAL3：账户事实是 server-owned —— 必须属于本租户，provider 只能取自 PlatformAccount.platform
+  const account = await prisma.platformAccount.findFirst({
+    where: { organizationId: input.organizationId, id: input.platformAccountId },
+    select: { platform: true },
+  });
+  if (account === null) {
+    return {
+      ...base,
+      kind: 'NOT_FOUND',
+      goalId: goal.goalId,
+      runId: null,
+      goalStatus: goal.status,
+      admitted: [],
+      alreadyPresent: [],
+      requiresAuthorization: false,
+      requiredAuthorizationAction: null,
+      reasonCodes: ['ACCOUNT_NOT_FOUND'],
+    };
+  }
+  const serverProvider = String(account.platform).toUpperCase();
+  if (input.provider !== undefined && input.provider !== '' && input.provider.toUpperCase() !== serverProvider) {
+    return {
+      ...base,
+      kind: 'DENIED',
+      goalId: goal.goalId,
+      runId: null,
+      goalStatus: goal.status,
+      admitted: [],
+      alreadyPresent: [],
+      requiresAuthorization: false,
+      requiredAuthorizationAction: null,
+      reasonCodes: ['PROVIDER_SCOPE_MISMATCH'],
+    };
+  }
+
   // 用**确定性编译器**重建计划，并校验 durable lineage（digest 不一致即拒绝）。
   const compiled = compileAgentGoal({ text: goal.rawUserIntent });
   if (!compiled.ok) {
@@ -289,6 +338,21 @@ export async function admitAgentGoal(
     facts,
     now: input.now,
   });
+  const accountDomain = goalDomainOfPlatform(serverProvider);
+  if (accountDomain === null || !validated.domains.includes(accountDomain)) {
+    return {
+      ...base,
+      kind: 'DENIED',
+      goalId: goal.goalId,
+      runId: null,
+      goalStatus: goal.status,
+      admitted: [],
+      alreadyPresent: [],
+      requiresAuthorization: false,
+      requiredAuthorizationAction: null,
+      reasonCodes: ['GOAL_SCOPE_MISMATCH'],
+    };
+  }
   const plan = planAgentGoal({ goal: validated, capabilities, now: input.now });
 
   // 非可绕过 gate / 高风险动作：准入一律不放行（不猜测、不越权）。
@@ -316,7 +380,7 @@ export async function admitAgentGoal(
     const authorization = await deps.loadAuthorization({
       organizationId: input.organizationId,
       platformAccountId: input.platformAccountId,
-      provider: input.provider,
+      provider: serverProvider,
     });
     if (authorization === null) {
       return {
@@ -335,7 +399,7 @@ export async function admitAgentGoal(
     const request: StandingAuthorizationRequest = {
       organizationId: input.organizationId,
       platformAccountId: input.platformAccountId,
-      provider: input.provider,
+      provider: serverProvider,
       action: requiredAction,
       amountUsd: 0,
       currency: 'USD',
@@ -434,6 +498,35 @@ export async function recordGoalRunFromRuntime(
     now: Date;
   },
 ): Promise<{ runId: string; status: AgentGoalRunStatus; created: boolean }> {
+  // FINAL3：runtime 认领的 task 必须属于该 durable Goal 的确定性计划（禁止 caller 任意声称）
+  const goal = await loadAgentGoal(prisma, { organizationId: input.organizationId, goalId: input.goalId });
+  if (goal === null) throw new GoalAdmissionError('GOAL_NOT_FOUND', 'AgentGoal 不存在（或不属于该租户）。');
+  const lineageCompiled = compileAgentGoal({ text: goal.rawUserIntent });
+  if (!lineageCompiled.ok) throw new GoalAdmissionError('GOAL_NOT_COMPILABLE', '目标无法重建计划。');
+  const lineageValidated = validateAgentGoalDraft({
+    draft: lineageCompiled.draft,
+    context: { organizationId: input.organizationId, actorUserId: goal.createdBy, now: input.now },
+  });
+  const lineagePlan = planAgentGoal({
+    goal: lineageValidated,
+    capabilities: resolveGoalCapabilities({
+      organizationId: input.organizationId,
+      domains: lineageValidated.domains,
+      facts: defaultGoalCapabilityFacts(),
+      now: input.now,
+    }),
+    now: input.now,
+  });
+  const expectedTasks = new Set(lineagePlan.tasks.map((task) => task.dedupeKey));
+  const claimedKeys = [...input.outcome.claimed, ...input.outcome.completed, ...input.outcome.blocked];
+  const alien = claimedKeys.filter((key) => !expectedTasks.has(key));
+  if (alien.length > 0) {
+    throw new GoalAdmissionError(
+      'GOAL_RUNTIME_LINEAGE_MISMATCH',
+      'runtime claim 的 task 不属于该 goal 的计划：' + alien.join(','),
+    );
+  }
+
   const existing = await listAgentGoalRuns(prisma, {
     organizationId: input.organizationId,
     goalId: input.goalId,
