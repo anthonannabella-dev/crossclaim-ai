@@ -3836,3 +3836,38 @@ model ProviderCaseResponseInterpretation {
   @@unique([organizationId, id])
   @@index([organizationId, platformAccountId, providerCaseId, recordedAt])
 }
+
+// ============================================================
+// AGENT EXPERIENCE LAYER / P0（HOST 2026-10-07 授权）
+// Standing Authorization 耐久承载：追加式版本 + 撤销留痕 + tenant/account scoped
+// 最小 Delta 见 docs/releases/STANDING-AUTHORIZATION-PERSISTENCE-DELTA-REQUEST.md
+// ============================================================
+
+/// 长期授权（standing authorization）的耐久记录。只由 server-side 流程写入；
+/// 追加式版本（修改 = 新 authorizationVersion 行）；撤销留痕；不授予任何 external write。
+model StandingAuthorization {
+  id                   String    @id @default(uuid())
+  organizationId       String
+  platformAccountId    String
+  provider             String
+  allowedActionTypes   Json
+  monetaryLimitUsd     Decimal   @db.Decimal(18, 4)
+  currency             String
+  domain               String
+  jurisdiction         String
+  effectiveAt          DateTime
+  expiresAt            DateTime
+  authorizationVersion Int
+  termsPolicyVersion   String
+  consentEvidenceRef   String
+  revocationState      String    @default("ACTIVE")
+  revokedAt            DateTime?
+  revokedBy            String?
+  revocationReason     String?
+  scopeDigest          String
+  createdAt            DateTime
+
+  @@unique([organizationId, platformAccountId, provider, authorizationVersion])
+  @@unique([organizationId, id])
+  @@index([organizationId, platformAccountId, provider, revocationState, expiresAt])
+}

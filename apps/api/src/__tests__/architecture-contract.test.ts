@@ -175,7 +175,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'ProviderContactFact',
     'ProviderCaseProjection',
     // slice A-S4：AI 回复解读（advisory only；append-only）
-    'ProviderCaseResponseInterpretation',
+    'ProviderCaseResponseInterpretation',    // AGENT EXPERIENCE LAYER / P0（HOST 2026-10-07）：Standing Authorization 耐久承载
+    'StandingAuthorization',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -190,7 +191,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(83);
+    expect(CORE).toHaveLength(84);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -214,8 +215,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     }
   });
 
-  it('模型总数为 108（96 + 5 耐久底座 + 3 Scheduler + 3 Provider 事实层 + 1 AI 解读）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(108);
+  it('模型总数为 109（96 + 5 耐久底座 + 3 Scheduler + 3 Provider 事实层 + 1 AI 解读 + 1 Standing Authorization 持久化）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(109);
   });
 });
 
@@ -233,7 +234,8 @@ describe('租户归属（C-0002 CHANGE #2）', () => {
     'ProviderContactFact',
     'ProviderCaseProjection',
     // slice A-S4：AI 解读事实同样 tenant-owned
-    'ProviderCaseResponseInterpretation',
+    'ProviderCaseResponseInterpretation',    // AGENT EXPERIENCE LAYER / P0：Standing Authorization 为 tenant-owned
+    'StandingAuthorization',
     'SourceConnection',
     'FileAsset',
     'ImportBatch',
