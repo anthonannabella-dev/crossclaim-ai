@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "0a710d8b",
+  "head": "406d0433",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-07T04:16:33.401Z",
+  "updated_at": "2026-10-07T04:24:40.568Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "IN_PROGRESS（P0 CLOSED / P1–P9 排队）",
-  "next_execution_unit": "P1 — Agent Goal Domain（apps/api/src/services/agent-goal/*：goal-contract / goal-schema / goal-compiler / goal-validator / goal-capability-resolver / goal-task-planner / goal-runtime-adapter）",
+  "next_execution_unit": "P2 — Goal → 现有 ONE SI Runtime 适配（接线真实 createRsiDomainPackRunner；禁止第二 runtime；不得抢占 task:recovery:*；不得绕过 Recovery routing / Action Guard / Standing Authorization / HITL）",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T09:55:01.250Z",
   "state": "AGENT_EXPERIENCE_LAYER_IN_PROGRESS",
-  "last_action": "P0 CLOSED（0a710d8b）：Standing Authorization 耐久持久化 —— 1 表（StandingAuthorization：追加式版本 / 撤销留痕 / scope 不可改写 / tenant·account scoped）、migration 20261007090000_standing_authorization、standing-authorization-store（persist / load / list / revokeScope / createPrismaStandingAuthorizationResolverDeps）、standing-authorization-persistence-db 10/10（真实 PG）、定向安全 236/236、api tsc 0、prisma validate valid、89 migrations、触发器清单 114/91/68 全 OK。",
-  "last_action_at": "2026-10-07T04:16:33.401Z",
-  "next_action": "按队列推进 P1 → P9（每单元独立 commit/push/checkpoint；仅真实 HOST_ACTION_REQUIRED 时停止）。",
-  "current_head": "0a710d8b",
-  "last_completed_head": "0a710d8b",
+  "last_action": "P1 CLOSED（406d0433）：Agent Goal Domain 薄层落地 —— goal-contract / goal-schema / goal-compiler（确定性，0 模型调用）/ goal-validator（server truth + 白名单 + 拒绝 tenant·action·service 注入）/ goal-capability-resolver（复用 ACTION_GUARD_CATALOG；Production Gate·Kill Switch·POA 可 fail-closed）/ goal-task-planner（task:recovery:* 幂等）/ goal-runtime-adapter（只转发既有 runner，SECOND_RUNTIME=0）；agent-goal 29/29，api tsc exit 0。",
+  "last_action_at": "2026-10-07T04:24:40.568Z",
+  "next_action": "按队列推进 P2 → P9（每单元独立 commit/push/checkpoint）。",
+  "current_head": "406d0433",
+  "last_completed_head": "406d0433",
   "reviewed_head": "42161550",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -12225,7 +12225,7 @@
   "agent_experience_layer": {
     "authorization": "HOST 2026-10-07 AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION",
     "baseline_head": "96a26c29",
-    "program_head": "0a710d8b",
+    "program_head": "406d0433",
     "branch": "gate/7-commercial-validation",
     "units": {
       "P0": {
@@ -12247,10 +12247,36 @@
           "SCOPE_IMMUTABLE": "PASS",
           "TENANT_ISOLATION": "PASS"
         }
+      },
+      "P1": {
+        "name": "AGENT GOAL DOMAIN（薄层：compiler / schema / validator / capability / planner / runtime adapter）",
+        "status": "CLOSED / PUSHED",
+        "head": "406d0433",
+        "report": "docs/releases/AGENT-GOAL-DOMAIN-P1-REPORT.md",
+        "files": [
+          "apps/api/src/services/agent-goal/goal-contract.ts",
+          "apps/api/src/services/agent-goal/goal-schema.ts",
+          "apps/api/src/services/agent-goal/goal-compiler.ts",
+          "apps/api/src/services/agent-goal/goal-validator.ts",
+          "apps/api/src/services/agent-goal/goal-capability-resolver.ts",
+          "apps/api/src/services/agent-goal/goal-task-planner.ts",
+          "apps/api/src/services/agent-goal/goal-runtime-adapter.ts",
+          "apps/api/src/services/agent-goal/index.ts",
+          "apps/api/src/__tests__/agent-goal.test.ts"
+        ],
+        "tests": "agent-goal 29/29 PASS；api tsc exit 0；动作词汇全部来自 ACTION_GUARD_CATALOG；未新增 schema / migration",
+        "returns": {
+          "GOAL_COMPILER": "PASS（确定性优先，modelCallCount = 0）",
+          "GOAL_SCHEMA_ALLOWLIST": "PASS",
+          "GOAL_TENANT_FORGERY_REJECTED": "PASS",
+          "GOAL_ACTION_OR_SERVICE_INJECTION_REJECTED": "PASS",
+          "GOAL_CAPABILITY_RESOLUTION": "PASS（decisionOwner = services/action-guard）",
+          "GOAL_TASK_NAMESPACE": "task:recovery:*（保留路由，幂等）",
+          "SECOND_RUNTIME": "0"
+        }
       }
     },
     "safe_continuation_queue": [
-      "P1 — Agent Goal Domain（薄层：goal contract/schema/compiler/validator/capability-resolver/task-planner/runtime-adapter；白名单 goal type + 严格 schema；先复用现有 domain/action/capability 词汇）",
       "P2 — Goal → 现有 ONE SI Runtime 适配（禁止第二 runtime；不得抢占 task:recovery:*；不得绕过 Recovery routing / Action Guard / Standing Authorization / HITL）",
       "P3 — 最小 Goal 持久化（AgentGoal / AgentGoalRun：Customer Intent + Execution Projection，不是任何 SSOT）",
       "P4 — 首页升级 AI Recovery Manager / Goal Console（保留既有 Dashboard 全部内容）",

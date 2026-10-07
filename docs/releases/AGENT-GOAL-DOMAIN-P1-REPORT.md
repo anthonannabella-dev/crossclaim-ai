@@ -1,7 +1,7 @@
 # AGENT GOAL DOMAIN（P1）—— 交付与证据
 
 授权：HOST 2026-10-07「AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION」P1。
-`EXACT_HEAD = AGENT-GOAL-P1-HEAD`（基线 `ea1eb7c2`）
+`EXACT_HEAD = 406d0433`（基线 `ea1eb7c2`）
 
 结论：**P1 = CLOSED**。新增一层**极薄**的 Agent Goal 域，只表达「客户想得到什么结果」，
 不构成第二 runtime / 第二事实源 / 第二 guard / 第二 policy engine，也不授予任何权限与外写能力。
