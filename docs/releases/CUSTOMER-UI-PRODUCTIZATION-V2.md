@@ -325,3 +325,13 @@ SECOND_RUNTIME = 0 / SECOND_SCHEDULER = 0 / SECOND_GUARD = 0；全部 HOLD / FOR
 送入右侧独立 ChatGPT 审计通道（chatgpt-web-audit-bridge：先 durable 记录，再简短唤醒并校验送达，
 裁决逐字归档 `tools/verification/archive-verdict.mjs` + `FULL_COPY_OK`）。
 不复用上一轮 CUSTOMER ACCEPTANCE 的 CLOSED 作为本轮证据；未获外部 PASS / CLOSED 前不自行宣布完成。
+
+## FINAL 审计通道状态（HOST_ACTION_REQUIRED）
+
+* P1–P12 全部 COMPLETE / PUSHED（code HEAD `ca5678dd`，P12 证据提交 `9c9f324d`），本文档即自包含验收包。
+* 2026-10-07T16:35Z（本地 01:35 JST）：右侧独立 ChatGPT 审计标签页 renderer 崩溃，
+  页面显示 `This page crashed`（`chatgpt.com crashed unexpectedly`），会话 URL 仍是
+  `https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67`。
+* 按安全规则，未对该崩溃页面做任何绕过（不重载、不换标签、不走 CDP）：等待宿主重载 / 重新打开该标签页后，
+  再按 chatgpt-web-audit-bridge 流程投递 FINAL 审计请求。
+* 在此之前：`CUSTOMER-UI-PRODUCTIZATION-V2-FINAL` 保持 PENDING，watchdog 保持运行，**不自行宣布 CLOSED**。
