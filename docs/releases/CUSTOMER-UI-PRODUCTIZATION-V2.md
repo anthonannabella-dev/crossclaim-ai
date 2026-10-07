@@ -28,7 +28,7 @@
 | P11 i18n 终扫 | DONE | parity PASS / 0 硬编码 / raw enum 回落清零（新增 check-i18n 静态 guard）+ 未知状态客户语言回落 |
 | P12 全客户旅程回归 | DONE | 103 项真实浏览器旅程 + next build + api/web tsc + UI render + i18n 全绿；能力保全与 runtime freeze 证据见下 |
 | CUSTOMER-UI-PRODUCTIZATION-V2-FINAL | PASS WITH REVISE (MSG-20261007-08) | 18 项中 16 PASS；ACTIVE_RECOVERY_UX / CONNECTIONS_UX = REVISE |
-| CUSTOMER-UI-PRODUCTIZATION-V2-FINAL2 | SUBMITTED FOR RE-REVIEW | 最小修订：Active Case 语义 + 连接「能否继续」语义；等待外部裁决 |
+| CUSTOMER-UI-PRODUCTIZATION-V2-FINAL2 | PASS / CLOSED (MSG-20261007-09) | 最小修订：Active Case 语义 + 连接「能否继续」语义；复审 18/18 PASS，`FINAL3_REQUIRED = NO` |
 
 ## P1–P4 变更（首批）
 
@@ -456,3 +456,77 @@ PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / REAL_MODEL_NETWORK / PAID_MODEL
 
 `CUSTOMER-UI-PRODUCTIZATION-V2-FINAL2` = 已提交复审，等待外部裁决。
 在外部裁决 PASS / CLOSED 之前，本单元**不自行宣布 CLOSED**。
+
+## FINAL2 复审裁决与收口（CLOSED）
+
+**裁决归档（逐字，未改写）**
+
+| 项 | 值 |
+| --- | --- |
+| MSG-ID | `MSG-20261007-09` |
+| 归档位置 | `AI-ARCHITECT-INBOX.md` |
+| 完整性 | FNV-1a `34166a25` + `FULL_COPY_OK`（归档 221 行；逐行比对 153 非空行，缺失 0 / 多余 0） |
+| `REVIEWED_HEAD` | `199d4ac4f6a422a9e22d93b14dd8382bfaa3f250`（= `FINAL2_CODE_HEAD`） |
+| `CHANNEL_DOC_HEAD` | `7b0672940b3cc2890ae2875760f41ba5f878f5c9` |
+| 结论 | **CUSTOMER-UI-PRODUCTIZATION-V2 = PASS / CLOSED**；`FINAL3_REQUIRED = NO` |
+
+**逐项裁决（18/18 PASS）**
+
+| 门禁项 | 裁决 | 门禁项 | 裁决 |
+| --- | --- | --- | --- |
+| CUSTOMER_SIMPLICITY | PASS | GOAL_FIRST_UX | PASS |
+| MONEY_FIRST_UX | PASS | NEEDS_ATTENTION_MODEL | PASS |
+| ACTIVE_RECOVERY_UX | PASS | NAVIGATION_SIMPLICITY | PASS |
+| CUSTOMER_LANGUAGE | PASS | ENGINEERING_FIELD_ISOLATION | PASS |
+| AUTHORIZATION_UX | PASS | CONNECTIONS_UX | PASS |
+| CAPABILITY_PRESERVATION | PASS | MOBILE_USABILITY | PASS |
+| ACCESSIBILITY | PASS | I18N | PASS |
+| RUNTIME_FREEZE | PASS | AUTHORIZATION_FREEZE | PASS |
+| NO_SECOND_TRUTH_SOURCE | PASS | NO_FRONTEND_FINANCIAL_RECOMPUTATION | PASS |
+
+**裁决要点（摘要；逐字原文见 `AI-ARCHITECT-INBOX.md` 归档）**
+
+* `ACTIVE_RECOVERY_UX = PASS / CLOSED`：`ActiveFlowCaseItem` 带上后端 raw status，使用明确 allowlist；
+  `RECOVERED` / `REVERSED` 终态不再进入；不再通过 `statusLabel` 文案猜状态；首页与 `/recoveries` 共用
+  `buildActiveFlows()`，两页同时修正；渲染级断言覆盖 in-progress 可见 / RECOVERED·REVERSED absent / 仅终态 → 空状态。
+* `CONNECTIONS_UX = PASS / CLOSED`：`connectionContinueLabel()` 明确区分 ACTIVE / PAUSED / REVOKED / NEEDS_AUTH /
+  ERROR / UNKNOWN；ERROR 与未知状态不再落到「需要重新授权」；连接管理器删除原本地 helper；
+  断言覆盖真实 render 输出（「重新授权」只在 NEEDS_AUTH 行出现一次）。
+* `RUNTIME_FREEZE` / `AUTHORIZATION_FREEZE = PASS`：`e0e4a8a1 → 199d4ac4` 之间 `apps/api/**` 与 `prisma/**` 均为
+  0 changed files；未触碰 ONE SI Runtime / Standing Authorization / Action Guard / Queue / API contract /
+  persistence truth / financial backend。
+* `NO_FRONTEND_FINANCIAL_RECOMPUTATION` / `NO_SECOND_TRUTH_SOURCE = PASS`：首页直接消费
+  `/recovery-money.organization.byCurrency`，金额原样展示，无 FX / 跨币种求和 / 前端重算。
+* `ACCESSIBILITY = PASS` 是**本单元约定范围内的 smoke**（单一 h1 / 无横向溢出 / aria·labels / 基础键盘焦点 /
+  mobile viewport），**不是 WCAG 2.2 AA 完整认证**。
+
+**已登记的风险（非阻断，裁决原文）**
+
+1. `ACTIVE_CASE_STATUSES` 目前是 Web 侧白名单；若后端 `MoneyStatus` 之后新增「进行中」类状态，
+   Web 会 fail-safe 地不显示（安全但不完整），届时应同步更新产品映射。
+2. exact code head 的 GitHub Actions = `NOT_OBSERVED`；本单元全部测试结果只可表述为 **local / Codex evidence**，
+   不得写成「GitHub CI green」。
+
+**最终边界（不变）**
+
+```text
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+
+SECOND_RUNTIME = 0 / SECOND_SCHEDULER = 0 / SECOND_GUARD = 0 /
+SECOND_POLICY_ENGINE = 0 / SECOND_CONTROL_PLANE = 0
+```
+
+全部既有 HOLD / FORBIDDEN 不变（含 REAL_PROVIDER_WRITE / CUSTOMS_FILING / PAYMENT / AUTO_COMMISSION_CHARGE /
+PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE /
+TRANSPORT / P2_F / P2_G / L5_RELAXATION）。
+
+### 收口
+
+* `EXECUTION_ACTIVE = false`；`SAFE_CONTINUATION_QUEUE = []`（记录于 `.autopilot/STATE.json` →
+  `customer_ui_productization_v2_closure`）。
+* 工作树 clean；分支 `feat/customer-ui-productization-v2` 已 push，`origin` 同步。
+* watchdog `crossclaim-customer-ui-v2-watchdog-180s` = **DELETED**（停止条件全部满足）。
+* 验收单元终态：**`CUSTOMER_UI_PRODUCTIZATION_V2 = PASS / CLOSED`**（外部独立裁决，非自判）。
+* 本单元到此停止继续修改；后续若进入真实 API / provider / production enablement，必须开启**新的独立授权与验收单元**。

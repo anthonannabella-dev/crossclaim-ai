@@ -160876,3 +160876,229 @@ SECOND_GUARD = 0
 
 全部现有 HOLD / FORBIDDEN 不变。
 ```
+
+### [MSG-20261007-09] CUSTOMER-UI-PRODUCTIZATION-V2 FINAL2 独立复审 = PASS / CLOSED（ACTIVE_RECOVERY_UX 与 CONNECTIONS_UX 均 CLOSED；FINAL3_REQUIRED = NO）
+
+```text
+VERDICT: PASS / CLOSED
+
+REVIEWED_HEAD: 199d4ac4f6a422a9e22d93b14dd8382bfaa3f250
+CHANNEL_DOC_HEAD: 7b0672940b3cc2890ae2875760f41ba5f878f5c9
+
+我按仓库实际内容重新复核。199d4ac4 → 7b067294 之间只有 docs/releases/CUSTOMER-UI-PRODUCTIZATION-V2.md，没有后续业务代码变化，因此正式代码裁决锚点是 199d4ac4。
+
+最终 18 项：
+
+纯文本
+CUSTOMER_SIMPLICITY                  = PASS
+GOAL_FIRST_UX                        = PASS
+MONEY_FIRST_UX                       = PASS
+NEEDS_ATTENTION_MODEL                = PASS
+ACTIVE_RECOVERY_UX                   = PASS
+NAVIGATION_SIMPLICITY                = PASS
+CUSTOMER_LANGUAGE                    = PASS
+ENGINEERING_FIELD_ISOLATION          = PASS
+AUTHORIZATION_UX                     = PASS
+CONNECTIONS_UX                       = PASS
+CAPABILITY_PRESERVATION              = PASS
+MOBILE_USABILITY                     = PASS
+ACCESSIBILITY                        = PASS
+I18N                                 = PASS
+RUNTIME_FREEZE                       = PASS
+AUTHORIZATION_FREEZE                 = PASS
+NO_SECOND_TRUTH_SOURCE               = PASS
+NO_FRONTEND_FINANCIAL_RECOMPUTATION  = PASS
+
+CUSTOMER-UI-PRODUCTIZATION-V2        = PASS / CLOSED
+FINAL3_REQUIRED                      = NO
+ACTIVE_RECOVERY_UX = PASS
+
+上一轮的问题已真实闭合。
+
+ActiveFlowCaseItem 现在消费后端 raw status，并使用明确 allowlist：
+
+纯文本
+DISCOVERED
+IN_PROGRESS
+APPROVED
+PARTIALLY_RECOVERED
+DISPUTED
+
+终态：
+
+纯文本
+RECOVERED
+REVERSED
+
+不会再进入：
+
+CrossClaim 正在帮你做什么
+
+而且不是通过 statusLabel 文案猜状态。
+
+/ 与 /recoveries 两个页面仍共用同一 buildActiveFlows()，所以修复不是只覆盖某一个页面。
+
+渲染级测试也覆盖了：
+
+纯文本
+IN_PROGRESS  → visible
+RECOVERED    → absent
+REVERSED     → absent
+仅终态 case  → Active Recovery empty state
+
+因此：
+
+ACTIVE_RECOVERY_UX = PASS / CLOSED
+
+CONNECTIONS_UX = PASS
+
+原先：
+
+纯文本
+ERROR / unknown
+→ “需要重新授权”
+
+的错误语义已经删除。
+
+现在 connectionContinueLabel() 明确：
+
+纯文本
+ACTIVE      → 可以继续自动处理
+PAUSED      → 已暂停
+REVOKED     → 已停止
+NEEDS_AUTH  → 需要重新授权
+ERROR       → 当前连接有问题，暂时无法继续
+UNKNOWN     → 状态待确认，暂时不会继续
+
+这与后端状态机含义一致，不再把 provider/sync/data error 错说成授权过期。
+
+并且 ConnectionManager 已真正调用这个共享 helper。
+
+测试也不是只测 helper，还实际 render 了三个连接：
+
+纯文本
+NEEDS_AUTH
+ERROR
+UNKNOWN
+
+并断言“重新授权”只出现一次——只属于 NEEDS_AUTH。
+
+因此：
+
+CONNECTIONS_UX = PASS / CLOSED
+
+冻结区确认
+
+从本单元基线 e0e4a8a1 到 FINAL2 code head 199d4ac4：
+
+纯文本
+apps/api/** = 0 changed files
+prisma/**   = 0 changed files
+
+所以：
+
+纯文本
+RUNTIME_FREEZE       = PASS
+AUTHORIZATION_FREEZE = PASS
+
+成立。
+
+FINAL2 自上一轮只新增/修改：
+
+Active Recovery presentation
+Connection continuation presentation
+i18n
+UI checks
+reports/docs
+
+没有重开：
+
+Runtime
+Standing Authorization
+Action Guard
+Queue
+Financial backend
+API contract
+Persistence truth
+金额与事实源
+
+仍确认：
+
+纯文本
+首页黄金金额
+→ 直接消费 /recovery-money.organization.byCurrency
+→ 按币种原样展示
+
+没有新的 FX、跨币种求和或前端金额裁决。
+
+因此：
+
+纯文本
+NO_FRONTEND_FINANCIAL_RECOMPUTATION = PASS
+NO_SECOND_TRUTH_SOURCE              = PASS
+CHANGES
+
+无阻断性 CHANGE。
+
+不需要 FINAL3。
+
+这个单元现在应停止继续修改，避免在已封板 UI 上引入新的回归。
+
+RISKS
+
+只保留非阻断项。
+
+第一，ACTIVE_CASE_STATUSES 现在由 Web 层维护。如果未来后端 MoneyStatus 新增新的“进行中”状态，旧 Web 会 fail-safe 地不显示，而不是错误显示；安全方向是好的，但届时需要同步产品映射。
+
+第二，Accessibility 的 PASS 仍是本单元约定的 smoke 范围：
+
+单一 h1
+horizontal overflow
+aria/labels
+basic keyboard focus
+mobile viewport
+
+不等于 WCAG 2.2 AA 完整认证。
+
+第三，exact code head 的 GitHub Actions：
+
+NOT_OBSERVED
+
+所以这些继续应称为 local/Codex evidence：
+
+纯文本
+UI render              194/194
+browser journey        103/103
+web tsc                0
+api tsc                0
+next build             0
+i18n                    5 languages / 883 keys
+hardcoded customer copy 0
+RAW_ENUM_FALLBACK_HITS  0
+
+不要表述为 “GitHub CI green”。
+
+最终边界
+
+继续：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+
+并继续保持：
+
+纯文本
+SECOND_RUNTIME        = 0
+SECOND_SCHEDULER      = 0
+SECOND_GUARD          = 0
+SECOND_POLICY_ENGINE  = 0
+SECOND_CONTROL_PLANE  = 0
+
+全部既有 HOLD / FORBIDDEN 不变。
+
+最终裁决：CUSTOMER-UI-PRODUCTIZATION-V2 = PASS / CLOSED。
+
+这套 UI 现在达到了你这一轮真正想要的效果：客户第一眼只看到“我想追回什么、能追回多少钱、系统正在做什么、我现在需要做什么”，复杂能力仍然保留在第二层，没有为了简单而删功能。
+```
