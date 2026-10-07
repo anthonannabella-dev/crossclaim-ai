@@ -24,6 +24,36 @@ export type ActionRiskClass = (typeof ACTION_RISK_CLASSES)[number];
 
 type GateRequirement = 'humanApproval' | 'hostApproval' | 'platformEnablement' | 'productionGate';
 
+/**
+ * P9：受保护动作的**域分组** —— 由动作目录所有者（本文件）声明。
+ * 其他模块必须引用本常量；不得在自己的文件里散落受保护动作字面量
+ * （`action-guard-enforcement` 的静态约定检查会拒绝那种写法）。
+ */
+export const ACTION_DOMAIN_MEMBERSHIP: Record<
+  'PLATFORM' | 'LOGISTICS' | 'CUSTOMS' | 'INDEPENDENT_SITE',
+  readonly string[]
+> = {
+  PLATFORM: [
+    'evidence.read',
+    'claim.prepare',
+    'recovery.manual_submit',
+    'recovery.manual_submit_reference_recorded',
+    'claim.submit',
+    'appeal.submit',
+    'platform.write',
+    'billing.draft',
+  ],
+  LOGISTICS: [
+    'evidence.read',
+    'claim.prepare',
+    'carrier.manual_submission.record',
+    'carrier.claim_response.record',
+    'recovery.manual_submit',
+    'billing.draft',
+  ],
+  CUSTOMS: ['evidence.read', 'claim.prepare', 'customs.recovery.start', 'recovery.manual_submit', 'billing.draft'],
+  INDEPENDENT_SITE: ['evidence.read', 'claim.prepare', 'recovery.manual_submit', 'billing.draft'],
+};
 export const ACTION_GUARD_CATALOG: Record<string, { risk: ActionRiskClass; requires: GateRequirement[] }> = {
   'evidence.read': { risk: 'READ_ONLY', requires: [] },
   'claim.prepare': { risk: 'INTERNAL_WRITE', requires: [] },

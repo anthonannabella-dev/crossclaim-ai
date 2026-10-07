@@ -6,38 +6,23 @@
 //     最终执行权仍在既有 Action Guard（+ Standing Authorization / HITL）。
 //   * 任何外部写 / 资金动作在 Production Gate 未满足时一律 blocked（fail-closed）。
 
-import { ACTION_GUARD_CATALOG, type ActionRiskClass } from '../action-guard/action-guard';
+import {
+  ACTION_DOMAIN_MEMBERSHIP,
+  ACTION_GUARD_CATALOG,
+  type ActionRiskClass,
+} from '../action-guard/action-guard';
 import { digestOf } from '../config-execution-durability/digests';
 import type { GoalDomain } from './goal-contract';
 
 export const GOAL_CAPABILITY_RESOLVER_VERSION = 'agent-goal-capability/v1';
 
 /**
- * 域 → 可参与规划的动作（全部必须是 `ACTION_GUARD_CATALOG` 的键，模块加载时断言）。
- * 注意：这里只是「候选」，是否放行由 Action Guard 决定。
+ * 域 → 可参与规划的动作。
+ * P9 架构收口：分组由**动作目录所有者**声明（`ACTION_DOMAIN_MEMBERSHIP`），
+ * 本模块只引用、不再散落受保护动作字面量（`action-guard-enforcement` 静态约定检查要求）。
+ * 这里只是「候选」，是否放行仍由既有 Action Guard 决定。
  */
-export const GOAL_DOMAIN_ACTIONS: Record<GoalDomain, readonly string[]> = {
-  PLATFORM: [
-    'evidence.read',
-    'claim.prepare',
-    'recovery.manual_submit',
-    'recovery.manual_submit_reference_recorded',
-    'claim.submit',
-    'appeal.submit',
-    'platform.write',
-    'billing.draft',
-  ],
-  LOGISTICS: [
-    'evidence.read',
-    'claim.prepare',
-    'carrier.manual_submission.record',
-    'carrier.claim_response.record',
-    'recovery.manual_submit',
-    'billing.draft',
-  ],
-  CUSTOMS: ['evidence.read', 'claim.prepare', 'customs.recovery.start', 'recovery.manual_submit', 'billing.draft'],
-  INDEPENDENT_SITE: ['evidence.read', 'claim.prepare', 'recovery.manual_submit', 'billing.draft'],
-};
+export const GOAL_DOMAIN_ACTIONS: Record<GoalDomain, readonly string[]> = ACTION_DOMAIN_MEMBERSHIP;
 
 // 模块加载即断言：规划面不得出现目录外的动作名（防止静默引入第二套动作词汇）
 for (const [domain, actions] of Object.entries(GOAL_DOMAIN_ACTIONS)) {
