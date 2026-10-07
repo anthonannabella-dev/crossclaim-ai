@@ -160231,3 +160231,268 @@ FINAL6_REQUIRED = NO
 
 目前仍是 PASS WITH REVISE / NOT CLOSED。
 ```
+
+### [MSG-20261007-07] CUSTOMER-UX FINAL5 复审裁决 = PASS / CLOSED（SECURITY_BOUNDARY 三项全部闭合；FINAL6_REQUIRED = NO）
+
+```text
+SECURITY_BOUNDARY: PASS
+
+VERDICT: PASS / CLOSED
+
+REVIEWED_CODE_HEAD: b71ae5d7db47af9819bd59afa5988ce716c829b1
+REVIEWED_PACKAGE_HEAD: fbd785db39b444d98fb01d055e782a5f4ddf3617
+
+b71ae5d7 → fbd785db 之间只有验收文档变化，没有后续业务代码变化。因此功能裁决以 b71ae5d7 为代码锚点、fbd785db 为最终封包锚点。
+
+逐项最终状态：
+
+纯文本
+CUSTOMER_USABILITY          = PASS
+SANDBOX_END_TO_END          = PASS
+AUTHORIZATION_RESUME        = PASS
+FIRST_RUN_GUIDANCE          = PASS
+NO_API_FAIL_CLOSED          = PASS
+EXTERNAL_BOUNDARY_HONESTY   = PASS
+SECURITY_BOUNDARY           = PASS
+PRODUCTION_GATE             = PASS
+
+CUSTOMER-UX-SANDBOX-E2E
+FINAL ACCEPTANCE            = PASS / CLOSED
+
+FINAL6_REQUIRED             = NO
+三项 FINAL5 修订均已 CLOSED
+
+1. Exact deterministic task membership = PASS
+
+recordGoalRunFromRuntime() 已恢复真正的：
+
+TypeScript
+expectedTasks.has(key)
+
+并同时要求 task:recovery: namespace。
+
+FINAL4 的危险逻辑：
+
+纯文本
+只要包含 goal digest token 就接受
+
+已经删除。
+
+因此现在：
+
+纯文本
+计划内 exact task               → 接受
+伪造 suffix + 正确 digest       → 拒绝
+错误 domain + 正确 digest       → 拒绝
+另一个 Goal 的真实 task         → 拒绝
+
+全部在创建 AgentGoalRun 之前 fail-closed。
+
+GA-17 与现有 GA-10 对上了。
+
+2. Durable Goal identity reconstruction = PASS
+
+现在 runtime lineage 重建确实包括：
+
+纯文本
+goalType
+domains
+providers
+timeRange
+executionMode
+approvalThreshold
+
+特别是上一轮漏掉的：
+
+TypeScript
+approvalThreshold:
+  stored.approvalThreshold ?? null
+
+已经恢复。
+
+随后还会执行：
+
+纯文本
+reconstructed goalDigest
+===
+durable stored goalDigest
+
+不一致直接：
+
+纯文本
+GOAL_RUNTIME_LINEAGE_MISMATCH
+
+不会再继续 projection。
+
+GA-18 还确认了两层：
+
+DB AGENT_GOAL_IDENTITY_IMMUTABLE 阻止原地改写 normalizedGoal；
+带 $1000 approvalThreshold 的 Goal 能重建同一 identity 并接受自己的 exact task。
+
+所以 durable Goal 已经可以作为 runtime lineage SSOT。
+
+3. Canonical provider→domain mapping = PASS
+
+现在存在唯一：
+
+纯文本
+GOAL_PROVIDER_DOMAINS
+
+compiler 与 admission 都引用这一份映射，不再维护两套独立判断。
+
+例如实际代码：
+
+纯文本
+AMAZON             → PLATFORM
+WALMART            → PLATFORM
+TIKTOK             → PLATFORM
+EBAY               → PLATFORM
+SHOPIFY            → PLATFORM
+STRIPE / PAYPAL    → INDEPENDENT_SITE
+UPS / FEDEX / DHL  → LOGISTICS
+FREIGHT_FORWARDER  → LOGISTICS
+INSURANCE          → LOGISTICS
+CBP / ABI          → CUSTOMS
+
+另外 admission aliases 也归一后再进入同一表，未知 provider 仍 fail-closed。
+
+关键安全语义维持：
+
+纯文本
+Amazon Goal + Amazon Account
+→ ADMITTED
+
+Amazon Goal + Walmart Account
+→ GOAL_SCOPE_MISMATCH
+
+Amazon Goal + UPS Account
+→ GOAL_SCOPE_MISMATCH
+
+generic PLATFORM Goal + Walmart
+→ 可走 domain-level admission
+
+因此上一轮唯一 SECURITY_BOUNDARY blocker 已经闭合。
+
+CHANGES
+
+无阻断性 CHANGE。
+
+这轮不需要 FINAL6。
+
+不要继续为了本验收单元修改已经稳定的 Goal / Authorization / Runtime 代码。
+
+RISKS
+
+有两项仍需登记，但都不阻断当前 sandbox customer acceptance。
+
+第一，已知 production debt 仍存在：
+
+纯文本
+createJsonTaskQueuePort()
+= JSON read-modify-write
+= 无跨 worker lock/CAS
+
+所以 production enablement 前必须：
+
+替换成 durable/atomic queue admission；或
+有可证明的 single-writer deployment invariant。
+
+这不是当前 sandbox CLOSED 的 blocker，但是真实生产前置条件。
+
+第二，provider-domain taxonomy 现在已经“单源一致”，但 SHOPIFY → PLATFORM 是一个产品域建模选择。它现在不会再因为 compiler/admission 不一致而误拒；不过如果后续你希望 Shopify 的 recovery 工作严格归入 INDEPENDENT_SITE 域，应作为单独的业务域建模变更统一修改 canonical map 与相关 planner/tests，不要在本次封板后零散修改。
+
+TEST / EVIDENCE
+
+我确认的代码级证据包括：
+
+纯文本
+GA-13 Amazon→Amazon              = allowed
+GA-14 Shopify canonical mapping  = allowed
+GA-15 Amazon→UPS                 = denied
+GA-16 generic PLATFORM→Walmart   = allowed
+GA-17 forged task membership     = denied
+GA-18 durable threshold identity = preserved
+
+Codex/local evidence：
+
+纯文本
+goal-admission-db        18/18
+agent-goal               50/50
+targeted                 352 + 233 PASS
+browser                  59/59
+api/web tsc              0 / 0
+next build               0
+UI render                138/138
+i18n                     5 locales / 839 keys / 0 hardcodes
+prisma validate          valid
+API full regression      4568/4569
+
+唯一 full-regression failure 仍是既有 P2E-DB5 parallel test-isolation debt，单跑通过。
+
+GitHub Actions 对 final package head：
+
+NOT_OBSERVED
+
+所以仍不要写成 “GitHub CI green”；应写 local/Codex regression evidence。
+
+PRODUCTION
+
+最终再次确认：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+
+全部 HOLD 保持不变，包括：
+
+纯文本
+REAL_PROVIDER_WRITE
+CUSTOMS_FILING
+PAYMENT
+AUTO_COMMISSION_CHARGE
+PRODUCTION_CREDENTIALS
+PRODUCTION_ENABLEMENT
+REAL_MODEL_NETWORK
+PAID_MODEL_CALLS
+EXTERNAL_WRITE
+TRANSPORT
+P2_F
+P2_G
+
+全部既有 FORBIDDEN 不变：
+
+纯文本
+SECOND_RUNTIME
+SECOND_SCHEDULER
+SECOND_GUARD
+SECOND_POLICY_ENGINE
+SECOND_CONTROL_PLANE
+SECOND_MODEL_GATEWAY
+SECOND_COST_LEDGER
+SECOND_META_EVIDENCE_STORE
+L5_RELAXATION
+
+SECOND_* = 0 保持。
+
+最终裁决：CUSTOMER-UX-SANDBOX-E2E = PASS / CLOSED。
+
+这条链现在已经真实证明了：
+
+纯文本
+首次访问
+→ 注册/验证/登录
+→ 自然语言 Goal
+→ server-owned provider/account scope
+→ durable authorization
+→ product admission
+→ existing queue
+→ ONE SI Runtime actual claim
+→ exact task↔Goal lineage
+→ honest BLOCKED/run projection
+→ same-goal resume
+→ 重放不产生第二次执行
+→ 零真实外部写
+
+可以停止继续修这个验收单元。下一步若进入真实 API/provider 或 production enablement，应开启新的独立授权与验收单元。
+```

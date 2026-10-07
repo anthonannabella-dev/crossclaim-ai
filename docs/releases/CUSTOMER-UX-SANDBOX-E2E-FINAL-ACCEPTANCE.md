@@ -486,3 +486,70 @@ production enablement 前必须替换为 durable / atomic 准入写者。
 **本单元仍未 CLOSED** —— 已按本节重跑证据并以 exact HEAD 再次提交右侧 ChatGPT 复审；只有
 CUSTOMER_USABILITY / SANDBOX_END_TO_END / AUTHORIZATION_RESUME / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED /
 EXTERNAL_BOUNDARY_HONESTY / SECURITY_BOUNDARY / PRODUCTION_GATE 全部 PASS / CLOSED 才关闭本验收单元。
+
+---
+
+## 16. FINAL CLOSURE — CUSTOMER-UX-SANDBOX-E2E = PASS / CLOSED
+
+外部独立审计最终裁决 = **MSG-20261007-07**（逐字归档 AI-ARCHITECT-INBOX.md：FNV1A_MATCH `ee1fa223`、FULL_COPY_OK 182 行逐行一致）：
+
+```text
+SECURITY_BOUNDARY: PASS
+VERDICT: PASS / CLOSED
+REVIEWED_CODE_HEAD: b71ae5d7db47af9819bd59afa5988ce716c829b1
+REVIEWED_PACKAGE_HEAD: fbd785db39b444d98fb01d055e782a5f4ddf3617
+```
+
+裁决要点：
+
+* FINAL5 三项全部 PASS：① exact deterministic task membership（`expectedTasks.has(key)`，伪造 suffix / 错误 domain / 其它 Goal 的 task 全部 fail-closed）；
+  ② durable Goal identity 完整重建（`approvalThreshold` 不再丢失，重建 digest 与持久化 digest 不一致即 `GOAL_RUNTIME_LINEAGE_MISMATCH`）；
+  ③ canonical provider→domain 单源（`GOAL_PROVIDER_DOMAINS` 同时被 compiler 与 admission 引用；Shopify 正常通过，Amazon→Walmart 仍拒绝）。
+* CHANGES：**无阻断性 CHANGE**；FINAL6_REQUIRED = NO；裁决明确要求停止继续修改已稳定的 Goal / Authorization / Runtime 代码。
+* 已登记非阻断 production debt：`createJsonTaskQueuePort()` 为 JSON read-modify-write，无跨 worker lock/CAS；
+  production enablement 前必须替换为 durable/atomic 准入写者，或证明 single-writer 部署不变量。
+* 已登记产品域建模待定项：`SHOPIFY → PLATFORM` 是当前 canonical 选择；若未来要把 Shopify 严格归入 INDEPENDENT_SITE，
+  必须作为独立业务域建模变更统一修改 canonical map 与相关 planner/tests，不得在封板后零散修改。
+* GitHub Actions 对 package head 仍为 NOT_OBSERVED，因此本单元全部证据记为 **local/Codex acceptance evidence**，不得写成 GitHub CI green。
+
+### 16.1 封板时最终状态
+
+| 项 | 值 |
+| --- | --- |
+| CUSTOMER_ACCEPTANCE | **PASS / CLOSED** |
+| CUSTOMER_USABILITY / SANDBOX_END_TO_END / AUTHORIZATION_RESUME | PASS / PASS / PASS |
+| FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED / EXTERNAL_BOUNDARY_HONESTY | PASS / PASS / PASS |
+| SECURITY_BOUNDARY / PRODUCTION_GATE | PASS / PASS |
+| FINAL6_REQUIRED | NO |
+| 被审代码 HEAD | b71ae5d7 |
+| 验收包 HEAD | fbd785db |
+| 浏览器客户旅程（真实 Edge + HTTP + PostgreSQL，desktop + mobile） | 59/59 PASS（`reports/acceptance/2026-10-07T13-38-19-797Z/`） |
+| goal-admission-db（真实 PostgreSQL） | 18/18 PASS（GA-13…GA-18） |
+| API 全量回归（exact HEAD b71ae5d7） | 4568/4569（唯一失败 = 既有 P2E-DB5 并行隔离 flake，单跑 20/20，如实记录不掩盖） |
+| api tsc / web tsc | 0 / 0 |
+| next build | exit 0 |
+| UI render check | 138/138 OK |
+| i18n | 5 语言 / 839 键 parity / 客户硬编码 0 |
+| prisma validate | valid（本单元无 schema delta） |
+| REAL_EXTERNAL_EXECUTION | NOT_EXECUTED |
+| REAL_VALIDATION_COMPLETE | NO |
+| PRODUCTION_READY | **NO** |
+| SECOND_RUNTIME / SECOND_SCHEDULER / SECOND_GUARD | 0 / 0 / 0 |
+
+全部 HOLD（REAL_PROVIDER_WRITE / CUSTOMS_FILING / PAYMENT / AUTO_COMMISSION_CHARGE / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / TRANSPORT / P2_F / P2_G）与
+全部 FORBIDDEN（SECOND_RUNTIME / SECOND_SCHEDULER / SECOND_GUARD / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE /
+SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE / L5_RELAXATION）保持不变。
+高金额 HITL 阈值（>1000 OWNER/ADMIN、≥10000 ADMIN）KEEP；Standing Authorization ≠ Broker POA；Customs 15-gate readiness 不变。
+
+### 16.2 已闭环的客户链路（均有真实证据）
+
+首次访问 → 注册 / sandbox 邮件验证 / 登录 → 自然语言 Goal → server-owned provider/account scope →
+durable Standing Authorization → product admission → 既有队列 → ONE SI Runtime actual claim →
+exact task↔Goal lineage → honest BLOCKED / run projection → same-goal resume → 重放不产生第二次执行 → 零真实外部写。
+
+### 16.3 单元状态
+
+**CUSTOMER-UX-SANDBOX-E2E-FINAL-ACCEPTANCE = CLOSED（PASS）。**
+本单元不再继续修改；下一步若进入真实 API/provider、外部写、支付或 production enablement，
+必须开启新的独立授权与验收单元，并保持新的 HOST 授权。
