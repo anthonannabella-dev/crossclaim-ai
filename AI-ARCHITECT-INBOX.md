@@ -158980,3 +158980,485 @@ post-create jargon cleanup + real Goal runtime sandbox admission + authorization
 
 做完这三项，再送终审即可。
 ```
+
+### [MSG-20261007-04] CUSTOMER-UX FINAL2 复审裁决 = PASS WITH REVISE / NOT CLOSED（CUSTOMER_USABILITY / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED / EXTERNAL_BOUNDARY_HONESTY / PRODUCTION_GATE = PASS；SANDBOX_END_TO_END / AUTHORIZATION_RESUME / SECURITY_BOUNDARY = REVISE），reviewed HEAD eca33732；FINAL3 只修三点：①acceptance runtime driver 必须真正驱动既有 controller claim（禁止把 queue 内容伪装成 claimed；未 claim 则不得创建 AgentGoalRun）②runtime→AgentGoalRun 需 task→durable Goal plan lineage（不一致 GOAL_RUNTIME_LINEAGE_MISMATCH fail closed）③授权范围必须 server-owned：provider 取自 PlatformAccount.platform 并与 Goal provider/domain 匹配（Amazon Goal + UPS account → SCOPE_MISMATCH），补同租户跨 provider / 错域账户 / 跨租户 / 匹配 provider 的 PG 回归；非阻断登记项：createJsonTaskQueuePort 为 JSON read-modify-write，production enablement 前需 durable/atomic 准入；PRODUCTION_READY = NO、全部 HOLD/FORBIDDEN 不变
+
+```text
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: eca33732dbc9a8a96dcacdbe73f42fa29b40904b
+
+逐项重裁：
+
+纯文本
+CUSTOMER_USABILITY          = PASS
+SANDBOX_END_TO_END          = REVISE
+AUTHORIZATION_RESUME        = REVISE
+FIRST_RUN_GUIDANCE          = PASS
+NO_API_FAIL_CLOSED          = PASS
+EXTERNAL_BOUNDARY_HONESTY   = PASS
+SECURITY_BOUNDARY           = REVISE
+PRODUCTION_GATE             = PASS
+
+CUSTOMER-UX-SANDBOX-E2E
+FINAL ACCEPTANCE            = PASS WITH REVISE / NOT CLOSED
+已 CLOSED：CUSTOMER_USABILITY
+
+上一轮 CHANGE 1 已经闭合。
+
+实际代码确认：
+
+纯文本
+默认连接卡：
+raw kind             → 已移除
+credentialRef 编辑    → 已移入高级信息
+OWNER / ADMIN / OPS  → 已映射为客户语言
+HOLD 字面量           → 客户默认文案已清理
+
+最新浏览器旅程也增加了 post-create 扫描，不再只检查创建前。
+
+移动端 overflow 也从上一版无效的：
+
+纯文本
+body.length > 0
+
+改成真实：
+
+纯文本
+scrollWidth <= clientWidth
+
+所以：
+
+CUSTOMER_USABILITY = PASS
+
+CHANGE 1 — 现在的 ONE SI Runtime E2E 仍没有真正证明 runtime claim
+
+这是 FINAL2 最大的剩余问题。
+
+acceptance 路由当前：
+
+纯文本
+composeRsiRuntime()
+→ runtime.loop.pollOnce()
+
+但 pollOnce() 的真实职责是读取：
+
+纯文本
+CI
+tests
+verdict
+
+等事件源。
+
+没有事件时，它明确：
+
+纯文本
+return []
+
+并不会因为 task queue 里有 Goal task 就自动 claim。
+
+而你本轮最新真实证据自己显示：
+
+纯文本
+runtimeOutcomes = 0
+runStatus = BLOCKED
+
+因此实际情况是：
+
+纯文本
+Goal task 已入 queue
+↓
+pollOnce() 没产生任何 runtime outcome
+↓
+acceptance 路由自己读取 queue
+↓
+把 queue 中全部 dedupeKey 当成 claimed
+↓
+手工调用 recordGoalRunFromRuntime()
+
+对应代码：
+
+纯文本
+const claimed = queued.map(task => task.dedupeKey)
+
+这不是 runtime claim evidence。
+
+而浏览器断言：
+
+纯文本
+runtime.claimed.and.projected
+
+实际只要求：
+
+纯文本
+typeof runId === 'string'
+
+所以这个测试名称比实际证明更强。
+
+最小修订
+
+acceptance driver 必须真正驱动 controller，例如：
+
+纯文本
+runtime.controller.tick()
+
+或注入真实 event 后：
+
+纯文本
+controller.emit(...)
+
+然后必须只使用runtime 返回的真实 outcome.claimed。
+
+禁止：
+
+纯文本
+queue contents
+→ 直接伪装成 claimed
+
+如果 runtime 没 claim：
+
+纯文本
+claimed === null
+→ 不得创建 AgentGoalRun
+→ acceptance FAIL
+
+对于 task:recovery:* 还要注意：现有 FINAL-7 规则明确规定 recovery namespace 不会调用 caller supplied runner。
+
+没有正式 Recovery product pack 时会：
+
+纯文本
+BLOCK
+
+所以当前：
+
+纯文本
+runner: { run() => PASS }
+
+实际上不能证明 Recovery task 被这个 runner 执行。
+
+最小验收可以接受：
+
+纯文本
+actual runtime claim
+→ Recovery mux
+→ BLOCK（因为 product pack 未注入）
+→ 真实 BLOCKED projection
+
+如果你要证明 read-only recovery 真执行，则需要在 acceptance 中装配真正的 productRecoveryPack + Shared Action Guard，仍然保持所有 external-write gates 关闭。
+
+CHANGE 2 — runtime → AgentGoalRun 缺可信 lineage
+
+recordGoalRunFromRuntime() 当前接受：
+
+纯文本
+organizationId
+goalId
+outcome.claimed[]
+outcome.completed[]
+outcome.blocked[]
+
+但没有证明：
+
+这些 runtime task 真的是这个 goal 生成的 task。
+
+调用方只要传一个 goalId 和任意 claimed 数组，就能给该 goal 生成 run projection。
+
+当前 acceptance 正好就在这么做：
+
+纯文本
+queue 中任务
++
+body.goalId
+→ recordGoalRunFromRuntime()
+
+应该收紧为：
+
+纯文本
+Durable Goal
+→ deterministic plan
+→ expected task dedupeKeys
+
+actual runtime claimed task
+→ 必须属于 expected task set
+
+不一致：
+
+纯文本
+GOAL_RUNTIME_LINEAGE_MISMATCH
+→ fail closed
+→ 不创建 AgentGoalRun
+
+然后浏览器应真正验证：
+
+纯文本
+Goal A
+→ authorization
+→ admission
+→ runtime claims A's task
+→ AgentGoalRun.goalId === Goal A
+→ exactly one run
+→ 不存在 Goal B
+
+这做完后：
+
+SANDBOX_END_TO_END 才能 PASS。
+
+CHANGE 3 — Amazon Goal 当前可以被 UPS 授权推进
+
+这是本轮最重要的 SECURITY_BOUNDARY 问题。
+
+浏览器真实旅程：
+
+纯文本
+Goal A:
+“帮我把 Amazon 上可以追回的钱找回来”
+
+但接下来建立的连接是：
+
+纯文本
+CARRIER_BILL
+→ UPS
+
+acceptance sandbox provider 随后从这个连接派生：
+
+纯文本
+PlatformAccount.platform = UPS
+StandingAuthorization.provider = UPS
+
+然后把：
+
+纯文本
+provider = UPS
+platformAccountId = UPS account
+
+交给：
+
+纯文本
+POST /agent-goals/:amazonGoal/admit
+
+而 admission 成功了。
+
+也就是说当前实际上证明的是：
+
+纯文本
+Amazon Goal
++
+UPS Authorization
+→ ADMITTED
+
+而不是：
+
+纯文本
+Amazon Goal
++
+Amazon Authorization
+→ ADMITTED
+
+根因有两个。
+
+产品 goal-admission-http.ts 从客户端 body 接受：
+
+纯文本
+platformAccountId
+provider
+
+虽然它检查 platformAccountId 属于当前 tenant，但没有检查：
+
+纯文本
+provider === PlatformAccount.platform
+
+Standing Authorization store 本身也以：
+
+纯文本
+organizationId
+platformAccountId
+provider
+
+为 scope，并没有在这里证明 provider 与 PlatformAccount.platform 一致。
+
+更重要的是 admission 没证明：
+
+纯文本
+account/provider
+
+与 Goal 本身的 provider/domain 意图相匹配。
+
+最小修订
+
+产品 admission 必须把 provider 改为 server-owned truth。
+
+例如读取：
+
+纯文本
+PlatformAccount {
+  id
+  platform
+}
+
+然后：
+
+纯文本
+provider = account.platform
+
+客户端 provider 最好直接删掉；若为了兼容保留，只能作为 assertion：
+
+纯文本
+client.provider !== account.platform
+→ PROVIDER_SCOPE_MISMATCH
+→ fail closed
+
+还需要把 Goal scope 和 Account scope 做一次匹配。
+
+至少本例必须做到：
+
+纯文本
+Amazon Goal
++ UPS account
+→ DENIED / SCOPE_MISMATCH
+
+而：
+
+纯文本
+Amazon Goal
++ Amazon account
++ matching durable Standing Authorization
+→ 可继续 admission
+
+新增真实 PG 回归至少覆盖：
+
+纯文本
+same tenant / wrong provider
+same tenant / wrong domain account
+cross tenant
+matching provider
+
+当前 GA-6 只验证跨 tenant，还没有验证同 tenant 跨 provider。
+
+AUTHORIZATION_RESUME
+
+这一项相比上一轮已经前进很多。
+
+现在确实已经有真实：
+
+纯文本
+Goal A
+→ durable Standing Authorization
+→ POST /agent-goals/A/admit
+→ Goal A: PROPOSED → ADMITTED
+
+而且没有创建 Goal B。
+
+所以“授权之后恢复的是原 goal”这一半是真实的。
+
+但是你请求的口径包含：
+
+纯文本
+ADMITTED/RUNNING + AgentGoalRun
+
+其中 AgentGoalRun 当前仍来自前面所述的 synthetic runtime projection。
+
+因此：
+
+AUTHORIZATION_RESUME = REVISE
+
+不是授权 store 有问题，而是：
+
+authorization → same Goal admission 已 PASS；same Goal → actual runtime claim → trusted run projection 还没闭合。
+
+其余 PASS
+
+FIRST_RUN_GUIDANCE = PASS
+
+注册 → sandbox 邮件验证 → 登录 → 首页 → Goal Console 的浏览器路径依然成立。
+
+NO_API_FAIL_CLOSED = PASS
+
+真实 provider/filing/payment 未接入时仍明确停机，没有 fake success。
+
+EXTERNAL_BOUNDARY_HONESTY = PASS
+
+最新 run 页面也没有宣称“已真实提交 / 已报关 / 已扣款”。
+
+PRODUCTION_GATE = PASS
+
+acceptance-only 路由仍在：
+
+纯文本
+apps/api/acceptance/
+
+没有加入 production server。
+
+确认继续：
+
+纯文本
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY = NO
+CHANGES
+
+FINAL3 不需要再动 UI 大结构，也不需要重做 Standing Authorization。
+
+只修三个很窄的点：
+
+纯文本
+1. acceptance runtime driver
+   pollOnce(fake proof)
+   → actual controller claim outcome
+
+2. runtime → goal projection lineage
+   caller-supplied claimed[]
+   → actual claimed task must belong to durable Goal plan
+
+3. goal authorization scope lineage
+   client provider / arbitrary tenant account
+   → server-derived PlatformAccount.platform
+   → must match Goal provider/domain
+
+修完后浏览器链应该变成真正的：
+
+纯文本
+Amazon Goal A
+→ Amazon sandbox connection/account
+→ durable Amazon Standing Authorization
+→ product admission
+→ existing queue
+→ ONE SI Runtime ACTUALLY claims A's task
+→ actual outcome
+→ verified AgentGoalRun(A)
+→ repeat = no second run
+→ refresh = same Goal A
+
+这样我才会给：
+
+纯文本
+SANDBOX_END_TO_END   = PASS
+AUTHORIZATION_RESUME = PASS
+SECURITY_BOUNDARY    = PASS
+
+VERDICT              = PASS / CLOSED
+RISKS
+
+另外有两个非本轮最终 blocker、但建议登记的后续风险。
+
+createJsonTaskQueuePort() 是 JSON 文件的 read-modify-write，目前没有跨 worker lock/CAS；真实多 worker admission 可能发生 lost update。因为 PRODUCTION_READY=NO，我不把它作为这次 sandbox acceptance 的阻断项，但 production enablement 前必须换成 durable/atomic queue admission 或证明单 writer。
+
+另外 exact HEAD eca33732：
+
+GitHub Actions = NOT_OBSERVED
+
+所以：
+
+纯文本
+browser 55/55
+goal-admission 7/7
+352 targeted
+4557/4558 full API
+
+仍只能记为 local/Codex evidence，不能记“GitHub CI green”。
+
+最终裁决
+
+CUSTOMER-UX FINAL2 仍是 PASS WITH REVISE / NOT CLOSED。
+
+这次 UI 问题已经修完；剩下的不是“大改”，而是把最后一段证据从“看起来像 runtime 跑过”改成真实 runtime claim + task→goal lineage，同时封住 Amazon Goal 被 UPS 授权这个 scope 错配。修完这三点，就适合正式封板 CUSTOMER-UX-SANDBOX-E2E。
+```
