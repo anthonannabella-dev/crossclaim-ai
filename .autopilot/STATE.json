@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "25bf985b",
+  "head": "b0e9400f",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-07T06:24:39.559Z",
+  "updated_at": "2026-10-07T07:03:49.073Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,16 +49,16 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "IN_PROGRESS（P0 CLOSED / P1–P9 排队）",
-  "next_execution_unit": "AEL FINAL2 / C2 —— durable OAuth transition CAS",
+  "continuous_execution": "AEL FINAL2（P0–P9 CLOSED / PUSHED；三条 CHANGE 已修订，等待外部复审裁决）",
+  "next_execution_unit": "FINAL —— AEL FINAL2 复审裁决（等待独立审计）",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T09:55:01.250Z",
-  "state": "AGENT_EXPERIENCE_LAYER_FINAL2_IN_PROGRESS",
-  "last_action": "AEL FINAL2 / C1 CLOSED（25bf985b）：关闭 Goal direct-runner 旁路 —— barrel 不再导出 goal-runtime-adapter（标注 INTERNAL/TEST-ONLY，断言改由 goal-runtime-binding 提供）；P2 测试只认可 createGoalRuntimeBinding() 为产品执行准入；architecture-contract 新增 3 条断言。architecture-contract 170/170、agent-goal 29/29、agent-goal-runtime-wiring 7/7、api tsc 0。C2（OAuth durable transition CAS）与 C3（gate 缺失/UNKNOWN → DENY）待做。",
-  "last_action_at": "2026-10-07T06:24:39.559Z",
-  "next_action": "下一 tick 立即实施 C2，然后再做 C3 与复审送审。",
-  "current_head": "25bf985b",
-  "last_completed_head": "25bf985b",
+  "last_tick_at": "2026-10-07T07:03:49.073Z",
+  "state": "AGENT_EXPERIENCE_LAYER_FINAL2_AWAITING_REAUDIT",
+  "last_action": "AEL FINAL2 三条 CHANGE 全部 CLOSED / PUSHED：C1 25bf985b（Goal 单一执行准入面：barrel 不再导出 goal-runtime-adapter，adapter 降为 INTERNAL/TEST-ONLY，断言归 goal-runtime-binding，architecture-contract +3 断言）；C2 9d2d7c6b（OAuth 成功必须经一次性消费 + 原子 CAS + binding 冲突 + connection·goal 同租户血缘 + DB 状态机迁移 20261007200000；PG-P9-3 修正并新增 PG-P9-7..PG-P9-11）；C3 3c426361（非可绕过 gate 必须有显式满足证明，缺失/UNKNOWN → DENY；新增 evaluateGateProof/assessNonBypassableGates 与 NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE）；报告 b0e9400f（docs/releases/AGENT-EXPERIENCE-FINAL2-REVISION-REPORT.md）。全量回归 4550/4551（唯一失败 = 既有 P2E-DB5 并行隔离 flake，单跑 20/20）；api tsc 0；web tsc 0；prisma validate valid；92 migrations；触发器清单 73 OK。",
+  "last_action_at": "2026-10-07T07:03:49.073Z",
+  "next_action": "三条 CHANGE 已最小修订并推送（C1 25bf985b / C2 9d2d7c6b / C3 3c426361；报告 b0e9400f）。下一步：向右侧 ChatGPT 同一审计会话发送简短复审请求（指向 docs/releases/AGENT-EXPERIENCE-FINAL2-REVISION-REPORT.md + 新 exact HEAD），等生成结束后逐字归档并按裁决行动。",
+  "current_head": "b0e9400f",
+  "last_completed_head": "b0e9400f",
   "reviewed_head": "42161550",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -12508,8 +12508,8 @@
       },
       "AEL-FINAL2": {
         "name": "AEL FINAL2 —— 按 MSG-20261007-01 的三条 CHANGE 最小修订",
-        "status": "IN_PROGRESS（C1 CLOSED；C2 / C3 待做）",
-        "head": "25bf985b",
+        "status": "REVISIONS_CLOSED / AWAITING_EXTERNAL_REAUDIT（C1 / C2 / C3 均 CLOSED / PUSHED）",
+        "head": "b0e9400f",
         "verdictRef": "AI-ARCHITECT-INBOX.md ### [MSG-20261007-01]",
         "changes": {
           "C1": {
@@ -12520,20 +12520,23 @@
           },
           "C2": {
             "name": "durable OAuth transition CAS（成功必须经 CONSUMED + 原子 CAS + binding 冲突 + connection·goal 血缘）",
-            "status": "NOT_STARTED"
+            "status": "CLOSED / PUSHED",
+            "head": "9d2d7c6b",
+            "migration": "20261007200000_oauth_session_transition_guard（DB 状态机 + 终态绑定不可改写 + append-only-triggers 登记）",
+            "evidence": "succeedOAuthAuthorizationSession 要求 status=CONSUMED 且用原子 CAS(WHERE id AND organizationId AND status='CONSUMED') 获取终态；SUCCEEDED 重入仅 connectionId+credentialRef 完全相同才幂等，不同 binding → OAUTH_SESSION_BINDING_CONFLICT；connectionId 必须同租户 SourceConnection（否则 OAUTH_SESSION_CONNECTION_NOT_FOUND）；resumeGoalId 必须同租户既有 AgentGoal（否则 OAUTH_SESSION_GOAL_NOT_FOUND）；fail 同样走 CAS；PG-P9-3 修正（成功前必须一次性 take）；PG-P9-1/PG-P9-3 改用真实 AgentGoal；新增 PG-P9-7..PG-P9-11（PENDING 不得直接成功 / binding 冲突 / 跨租户连接拒绝 / resumeGoal 血缘 / DB 状态机与绑定不可改写）；oauth-session-connection-sync-db 11/11；定向回归 235/235；api tsc 0；migrate deploy OK；触发器清单 73 OK"
           },
           "C3": {
             "name": "complete non-bypassable gate proof（缺失/UNKNOWN → DENY）",
-            "status": "NOT_STARTED"
+            "status": "CLOSED / PUSHED",
+            "head": "3c426361",
+            "evidence": "新增 evaluateGateProof / computeRequiredNonBypassableGates / assessNonBypassableGates：required = 核心三项（productionGate / killSwitch / tenantAccountIsolation）∪ 由 action 的 guard.requiredGates 派生的非可绕过 gate；collectBlockingGates 返回 blocking ∪ incomplete（fail-closed，undefined 不再当通过）；evaluateAutonomousExecution 结果新增 requiredNonBypassableGates / incompleteGateProofs，reason code 拆为 NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE:<gate> 与 NON_BYPASSABLE_GATE_BLOCKED:<gate>；boundary 增 requiresExplicitGateProof / gateProofFailClosed / coreRequiredNonBypassableGates；既有宽松快照用例改为显式提供 gate 证明（未削弱断言）；新增 ⑩c 与 resolver missing-proof 用例；standing-authorization 20/20、standing-authorization-resolver 15/15、standing-authorization-persistence-db 10/10；定向回归 308/308；api tsc 0"
           }
         }
       }
     },
     "safe_continuation_queue": [
-      "AEL FINAL2 / C2 —— durable OAuth transition CAS：succeedOAuthAuthorizationSession 必须要求 status=CONSUMED 且原子 CAS；SUCCEEDED 重入仅当 connectionId+credentialRef 相同才幂等，不同 binding → OAUTH_SESSION_BINDING_CONFLICT；connectionId 必须同租户 SourceConnection；resumeGoalId 非空时校验同租户 AgentGoal；补状态迁移 DB 触发器；修正把旁路固定下来的 PG-P9-3 测试并补缺失用例",
-      "AEL FINAL2 / C3 —— complete non-bypassable gate proof：collectBlockingGates 按 action+requiredGates 要求显式 SATISFIED 证明，缺失/UNKNOWN → DENY（至少 productionGate / killSwitch / tenantAccountIsolation），新增 NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE 与 missing-field 测试，并修正在宽松 gate 快照上断言 ALLOW 的既有测试",
-      "AEL FINAL2 收口 —— 定向测试 + api tsc + 相关回归 → commit/push → 向同一会话发简短复审请求（指向 docs/releases/FINAL-AUDIT-PACKAGE.md + 新 exact HEAD）",
-      "FINAL —— 等待 AEL FINAL2 复审裁决（PASS → 最终 closure 并删除 watchdog；REVISE/FAIL → 继续最小修订）"
+      "FINAL —— AEL FINAL2 复审送审 + 等待独立审计裁决（PASS → 写最终 closure：EXECUTION_ACTIVE=false、队列清空、state=AGENT_EXPERIENCE_LAYER_CLOSED 并删除 watchdog；REVISE/FAIL → 继续最小修订后重新送审）",
+      "FINAL（可选）—— 若复审要求补证：按裁决最小修订 + 定向回归 + commit/push + 重新送审；不得解锁任何 HOLD/FORBIDDEN 项"
     ],
     "hard_boundaries": [
       "REAL_PROVIDER_WRITE",
