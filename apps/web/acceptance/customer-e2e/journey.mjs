@@ -155,6 +155,14 @@ export async function runJourney(input) {
   check('opportunities.page.no.engineering.wording', !/工程字段|技术字段/.test(opportunitiesBody), '');
   await open(page, webBase + '/');
 
+  /* ---------------- 4d. 授权中心（P7 产品化） ---------------- */
+  await open(page, webBase + '/authorizations');
+  const authPageBody = await text(page);
+  check('authorizations.capabilities.visible', authPageBody.includes('CrossClaim 可以替你做什么'), authPageBody.slice(0, 120));
+  check('authorizations.always.ask.visible', authPageBody.includes('以下情况仍会先问你'), '');
+  check('authorizations.no.raw.audit.in.main', !/[0-9a-f]{32}/i.test(authPageBody.split('以下情况仍会先问你')[0] ?? ''), '');
+  await open(page, webBase + '/');
+
   /* ---------------- 5. 自然语言目标（真实提交） ---------------- */
   const goalInput = page.getByLabel('今天想让 CrossClaim 帮你追回什么？');
   await goalInput.fill('帮我把 Amazon 上可以追回的钱找回来');

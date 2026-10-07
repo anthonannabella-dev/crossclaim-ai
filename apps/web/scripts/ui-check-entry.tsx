@@ -723,6 +723,20 @@ check(
     enUS.caseDetail.evidence === 'Supporting materials' &&
     enUS.caseDetail.claimText.includes('Submission materials'),
 );
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P7：授权中心产品化（先能力、后边界、再列表与撤销）
+check('p7.authz.capabilities.title', zhCN.authorizationPage.capabilitiesTitle === 'CrossClaim 可以替你做什么');
+check('p7.authz.capabilities.copy', zhCN.authorizationPage.capability1.includes('读取') && zhCN.authorizationPage.capability5.includes('自动'));
+check('p7.authz.always.ask.title', zhCN.authorizationPage.alwaysAskTitle === '以下情况仍会先问你');
+check('p7.authz.always.ask.customs.poa', zhCN.authorizationPage.alwaysAsk3.includes('POA'));
+check('p7.authz.revoke.kept', authHtml.includes(zhCN.authorizationPage.revokeCta));
+const authMainCopy = authHtml.split(zhCN.authorizationPage.advancedLabel)[0] ?? '';
+check('p7.authz.no.uuid.or.digest.in.main', !/[0-9a-f]{8}-[0-9a-f]{4}|[0-9a-f]{32}/i.test(authMainCopy));
+check('p7.authz.account.ref.in.details', authHtml.includes(zhCN.authorizationPage.accountRefLabel));
+check(
+  'p7.authz.en.parity',
+  enUS.authorizationPage.capabilitiesTitle.includes('CrossClaim') && enUS.authorizationPage.alwaysAskTitle.length > 0,
+);
 check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
 
 // AGENT EXPERIENCE LAYER / P9：按需授权（目标等待授权 → Needs Your Attention → 去授权后继续原目标）

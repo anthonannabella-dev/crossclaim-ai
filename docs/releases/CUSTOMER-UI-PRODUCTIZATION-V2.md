@@ -21,7 +21,7 @@
 | P4 Needs Attention | DONE | 仅当存在真实人工待办时渲染；每条含发生什么 / 影响 / 为什么需要你 / 下一步 |
 | P5 Navigation simplification | DONE | 一级 5 项客户语言对齐 + `/recoveries` 真实路由 + 更多/高级顺序按 HOST 指令 |
 | P6 Opportunity / Case 客户语言 | DONE | 追回机会 / 追回任务 / 提交材料 / 支持材料；案件详情按 HOST 顺序重排，raw 字段折叠进「处理详情」 |
-| P7 Authorization UX | QUEUED | 「CrossClaim 可以替你做什么」+「以下情况仍会先问你」+ 撤销入口显性化 |
+| P7 Authorization UX | DONE | 「CrossClaim 可以替你做什么」+「以下情况仍会先问你」+ 撤销入口保留；账户引用 / 版本折叠进「授权详情」 |
 | P8 工程字段隔离 | QUEUED | 主 UI 去除「工程字段 / 技术字段」措辞，技术标识移入 Support/Admin diagnostics |
 | P9 Connections 简化 | QUEUED | 客户主视图只答：连了什么 / 是否正常 / 最近同步 / 是否要重新授权 |
 | P10 Mobile / a11y | QUEUED | 390×844 首屏 Goal + Money + Needs Attention 优先 |
@@ -99,6 +99,27 @@
 | 浏览器客户旅程（真实 Edge + HTTP + PostgreSQL；desktop 1440×900 + mobile 390×844） | **65/65 PASS**（新增：hero-first、Hero 在金额之前、Active Recovery 可见、无「工程字段/技术字段」、首页无内部角色码、目标结果区无 raw code / 任务计数） |
 | 浏览器证据目录 | `reports/acceptance/2026-10-07T15-52-05-717Z/` |
 | api tsc | 0（本轮未改 `apps/api`） |
+
+### 批次 4（P7）
+
+**授权中心（客户表达重做，后端事实不变）**
+
+* 主标题改为「CrossClaim 可以替你做什么」，下面 5 条能力：读取已授权账户数据 / 检查可能追回的金额 /
+  整理支持材料 / 准备追回申请 / 在已授权低风险范围内自动继续。
+* 单独区域「以下情况仍会先问你」6 条：新平台授权 / 高金额动作 / 报关与 POA / 法规要求的人工确认 /
+  超出原授权范围 / 需要真实签署的事项。
+* 撤销入口保持可见（`revokeCta` 仍在每张生效卡上）；`/connections` 与海关授权复用入口保留。
+* 审计字段折叠：`platformAccountId`（UUID）与 `authorizationVersion / termsPolicyVersion` 从卡片主文案
+  移入「授权详情」折叠内（新增 `accountRefLabel`），主文案不再出现 UUID / digest。
+* 未触碰：Standing Authorization 表 / resolver / scope 语义 / API contract（本批次只改 `apps/web/**`）。
+
+| 项 | 结果 |
+| --- | --- |
+| web tsc | 0 |
+| i18n | OK：5 语言 / 872 键 parity / 客户硬编码 **0** |
+| UI render check | **171/171 OK**（新增 8 项：能力/边界文案、撤销仍在、主文案无 UUID 与 digest、账户引用在折叠内） |
+| 浏览器客户旅程 | **75/75 PASS**（新增：授权页能力区可见、边界区可见、主文案无 raw 审计） |
+| 浏览器证据目录 | `reports/acceptance/2026-10-07T16-12-09-074Z/` |
 
 ### 批次 3（P6）
 
