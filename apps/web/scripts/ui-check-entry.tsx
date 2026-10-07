@@ -750,6 +750,13 @@ check(
 );
 check('p8.advanced.labels.renamed', zhCN.authorizationPage.advancedLabel === '授权详情' && zhCN.dashboardPage.opportunityAdvancedFields === '详细信息');
 check('p8.en.advanced.labels.renamed', enUS.authorizationPage.advancedLabel === 'Authorization details' && enUS.dashboardPage.opportunityAdvancedFields === 'Details');
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P9：连接页五问（客户语言）
+check('p9.connections.summary.copy', zhCN.connectionsPage.summaryLabel.includes('CrossClaim') && zhCN.connectionsPage.summaryCanContinue.length > 0);
+check('p9.connections.reauth.copy', zhCN.connectionsPage.summaryNeedsReauth.includes('重新授权'));
+check('p9.connections.lastSync.copy', zhCN.connectionsPage.lastSyncLabel.length > 0 && zhCN.connectionsPage.lastSyncNever.length > 0);
+check('p9.connections.lastError.customer.copy', !/code|error/i.test(zhCN.connectionsPage.lastErrorNotice));
+check('p9.en.parity', enUS.connectionsPage.summaryLabel.includes('CrossClaim') && enUS.connectionsPage.lastSyncLabel.length > 0);
 check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
 
 // AGENT EXPERIENCE LAYER / P9：按需授权（目标等待授权 → Needs Your Attention → 去授权后继续原目标）

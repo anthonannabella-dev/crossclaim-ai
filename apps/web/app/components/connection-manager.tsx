@@ -44,6 +44,8 @@ export interface ConnectionItem {
   hasCredentialRef: boolean;
   platform: string | null;
   lastError: string | null;
+  /** P9：后端已有的最近同步时间（缺失时以「暂无同步记录」如实展示） */
+  lastSyncAt?: string | null;
 }
 
 /**
@@ -81,6 +83,21 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
         return table.statusNeedsAuth ?? code;
       default:
         return code;
+    }
+  };
+
+  /** P9：CrossClaim 能否继续工作（由既有连接状态派生，未知状态回落到「需要重新授权」）。 */
+  const continueLabel = (code: string): string => {
+    const table = copy as unknown as Record<string, string>;
+    switch (code) {
+      case 'ACTIVE':
+        return table.summaryCanContinue ?? code;
+      case 'PAUSED':
+        return table.summaryPaused ?? code;
+      case 'REVOKED':
+        return table.summaryStopped ?? code;
+      default:
+        return table.summaryNeedsReauth ?? code;
     }
   };
 
@@ -205,13 +222,17 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                   <StatusBadge tone={statusTone(item.status)}>{statusLabel(item.status)}</StatusBadge>
                 </div>
 
-                {item.lastError ? <p className="mt-2 text-xs text-red-600">{item.lastError}</p> : null}
+                {item.lastError ? <p className="mt-2 text-xs text-amber-700">{copy.lastErrorNotice}</p> : null}
 
-                <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
                   <div>
-                    <dt className="text-slate-500">{copy.colCredentialRef}</dt>
-                    <dd className="mt-0.5 font-medium text-slate-800">
-                      {item.hasCredentialRef ? copy.configured : copy.notConfigured}
+                    <dt className="text-slate-500">{copy.summaryLabel}</dt>
+                    <dd className="mt-0.5 font-medium text-slate-800">{continueLabel(item.status)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500">{copy.lastSyncLabel}</dt>
+                    <dd className="mt-0.5 text-slate-800">
+                      {item.lastSyncAt ? String(item.lastSyncAt).slice(0, 10) : copy.lastSyncNever}
                     </dd>
                   </div>
                 </dl>
@@ -267,6 +288,9 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                       </button>
                     </div>
                   ) : null}
+                  <p className="mt-2">
+                    {copy.colCredentialRef}: {item.hasCredentialRef ? copy.configured : copy.notConfigured}
+                  </p>
                   <ul className="mt-1 space-y-0.5 font-mono">
                     <li>kind={item.kind}</li>
                     <li>domain={item.domain}</li>
@@ -274,6 +298,8 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                     <li>status={item.status}</li>
                     <li>platform={item.platform ?? '-'}</li>
                     <li>credentialRef={item.hasCredentialRef ? 'SET' : 'UNSET'}</li>
+                    <li>lastSyncAt={item.lastSyncAt ?? '-'}</li>
+                    <li>lastError={item.lastError ?? '-'}</li>
                   </ul>
                 </details>
               </li>

@@ -23,7 +23,7 @@
 | P6 Opportunity / Case 客户语言 | DONE | 追回机会 / 追回任务 / 提交材料 / 支持材料；案件详情按 HOST 顺序重排，raw 字段折叠进「处理详情」 |
 | P7 Authorization UX | DONE | 「CrossClaim 可以替你做什么」+「以下情况仍会先问你」+ 撤销入口保留；账户引用 / 版本折叠进「授权详情」 |
 | P8 工程字段隔离 | DONE | 5 语言「工程/技术字段」措辞清零（字典级 guard）；深层详情统一为「详细信息 / 授权详情」 |
-| P9 Connections 简化 | QUEUED | 客户主视图只答：连了什么 / 是否正常 / 最近同步 / 是否要重新授权 |
+| P9 Connections 简化 | DONE | 卡片主视图回答五问（含「CrossClaim 能否继续工作」与「最近同步」）；credentialRef / raw 字段与原始错误下沉到「详细信息」 |
 | P10 Mobile / a11y | QUEUED | 390×844 首屏 Goal + Money + Needs Attention 优先 |
 | P11 i18n parity + hardcode scan | 持续 | 每个单元都跑；P1–P4 已加入 5 语言并 0 硬编码 |
 | P12 全客户旅程回归 | QUEUED | 每批次跑真实浏览器旅程 |
@@ -99,6 +99,31 @@
 | 浏览器客户旅程（真实 Edge + HTTP + PostgreSQL；desktop 1440×900 + mobile 390×844） | **65/65 PASS**（新增：hero-first、Hero 在金额之前、Active Recovery 可见、无「工程字段/技术字段」、首页无内部角色码、目标结果区无 raw code / 任务计数） |
 | 浏览器证据目录 | `reports/acceptance/2026-10-07T15-52-05-717Z/` |
 | api tsc | 0（本轮未改 `apps/api`） |
+
+### 批次 6（P9）
+
+**连接页客户视图（只答五问）**
+
+| 客户问题 | 呈现（由既有事实派生，未新增事实源） |
+| --- | --- |
+| 连接了什么 | 连接名称 + 客户语言渠道名（既有） |
+| 当前是否正常 | 状态徽标（客户语言，既有） |
+| 最近同步 | 新增「最近同步」行：有 `lastSyncAt` 显示日期，缺失时如实显示「暂无同步记录」（不伪造） |
+| 是否需要重新授权 | 「CrossClaim 能否继续工作」行：可继续 / 需要你重新授权后才会继续 / 已暂停 / 已停止 |
+| CrossClaim 能否继续工作 | 同上；由既有连接状态派生，未知状态回落到「需要重新授权」（fail-safe，不吹哨） |
+
+下沉到「详细信息」折叠：`credentialRef` 配置状态与更新入口、`kind / domain / channel / status / platform` 原始值、
+`lastSyncAt` / `lastError` 原始值；原始错误串不再直接出现在客户主视图（主视图改为业务语言提示）。
+底层事实与 `/connections` API contract 未改动（只在 web 侧增加可选读取 `lastSyncAt`，缺失时降级）。
+
+| 项 | 结果 |
+| --- | --- |
+| web tsc | 0 |
+| i18n | OK：5 语言 / 880 键 parity / 客户硬编码 **0** |
+| UI render check | **179/179 OK**（新增 5 项 P9 字典/客户语言断言） |
+| 浏览器客户旅程 | **78/78 PASS**（新增：能否继续工作可见、最近同步可见、主视图无 raw binding） |
+| 浏览器证据目录 | `reports/acceptance/2026-10-07T16-22-18-295Z/` |
+| 可靠性记录 | 本批次一次运行因上一轮残留的 dev server 占用 3011 端口失败（EADDRINUSE）；清理监听进程后重跑全绿，失败目录未入库 |
 
 ### 批次 5（P8）
 

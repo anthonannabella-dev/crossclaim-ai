@@ -369,6 +369,14 @@ export async function runJourney(input) {
   await open(page, webBase + '/connections');
   body = await text(page);
   check('connections.wizard.present', body.includes('你想连接什么？'), body.slice(0, 200));
+  // CUSTOMER-UI-PRODUCTIZATION-V2 / P9：客户主视图只答五问，raw binding 只在「详细信息」折叠内
+  check('connections.can.continue.visible', body.includes('CrossClaim 能否继续工作'), '');
+  check('connections.lastSync.visible', body.includes('最近同步'), '');
+  check(
+    'connections.primary.no.raw.binding',
+    !/credentialRef=|kind=|domain=|status=/.test(body.split('详细信息')[0] ?? ''),
+    body.slice(0, 160),
+  );
   check('connections.wizard.customerLanguage', body.includes('上传承运商账单'), '');
   check(
     'connections.raw.enums.not.primary',
