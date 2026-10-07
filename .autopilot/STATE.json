@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "8356549c",
+  "head": "d4194cf3",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-07T04:56:58.581Z",
+  "updated_at": "2026-10-07T05:02:08.405Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "IN_PROGRESS（P0 CLOSED / P1–P9 排队）",
-  "next_execution_unit": "P7 — Authorization 管理 UI（/authorizations：状态全部来自后端 Standing Authorization；前端不得生成 scopeDigest、不得指定 server-only 权限字段；需要把 P0 durable store 暴露为只读 HTTP 面）",
+  "next_execution_unit": "P8 — Navigation Progressive Disclosure（一级 Home/Recoveries/Money/Needs Attention/Connections；其余进 More/Advanced；不删任何 route、不破坏 API contract）",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T09:55:01.250Z",
   "state": "AGENT_EXPERIENCE_LAYER_IN_PROGRESS",
-  "last_action": "P6 CLOSED（8356549c）：Agent Run 页面 /recoveries/runs/:id 落地 —— 新增 GET /agent-goals/:id（目标 + runs，零执行；跨租户/不存在 404；写方法 405）与业务语言投影 buildAgentRunView（进度按真实状态推进、结果无事实即空状态、金额仅逐币种）；自动断言无 runner/judge/policy engine/model router/task:recovery 外泄。HTTP 6/6、i18n 741 键硬编码 0、UI render 113/113、api/web tsc 0、next build 0。",
-  "last_action_at": "2026-10-07T04:56:58.581Z",
-  "next_action": "按队列推进 P7 → P9（每单元独立 commit/push/checkpoint）。",
-  "current_head": "8356549c",
-  "last_completed_head": "8356549c",
+  "last_action": "P7 CLOSED（d4194cf3）：Authorization 管理 UI —— 新增 GET /standing-authorizations（列表 + 边界声明）与 POST /:id/revoke（只接受 reason、服务端解析 scope、跨租户 404）以及 /authorizations 页面（状态全部来自后端、允许动作客户语言、原始 code 只进高级区、撤销留痕、已撤销无 CTA、空状态诚实）；刻意不提供静默改范围（需重新同意条款）。HTTP 4/4、SA 回归 14/14、i18n 783 键硬编码 0、UI render 126/126、api/web tsc 0、next build 0。",
+  "last_action_at": "2026-10-07T05:02:08.405Z",
+  "next_action": "按队列推进 P8 → P9（每单元独立 commit/push/checkpoint）。",
+  "current_head": "d4194cf3",
+  "last_completed_head": "d4194cf3",
   "reviewed_head": "42161550",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -12225,7 +12225,7 @@
   "agent_experience_layer": {
     "authorization": "HOST 2026-10-07 AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION",
     "baseline_head": "96a26c29",
-    "program_head": "8356549c",
+    "program_head": "d4194cf3",
     "branch": "gate/7-commercial-validation",
     "units": {
       "P0": {
@@ -12415,10 +12415,32 @@
           "FABRICATED_PROGRESS": "NONE",
           "CROSS_CURRENCY_SUMMING": "FORBIDDEN_AND_ENFORCED"
         }
+      },
+      "P7": {
+        "name": "AUTHORIZATION 管理 UI（/authorizations；只读 + 撤销）",
+        "status": "CLOSED / PUSHED",
+        "head": "d4194cf3",
+        "report": "docs/releases/AGENT-EXPERIENCE-P7-AUTHORIZATION-UI-REPORT.md",
+        "files": [
+          "apps/api/src/services/standing-authorization/http-request.ts",
+          "apps/api/src/__tests__/standing-authorization-http-db.test.ts",
+          "apps/web/app/authorizations/page.tsx",
+          "apps/web/app/authorizations/authorization-list.tsx",
+          "apps/web/app/authorizations/revoke-authorization-button.tsx",
+          "apps/web/i18n/dictionaries/*.ts (authorizationPage ×5)"
+        ],
+        "tests": "standing-authorization-http-db 4/4；SA 相关回归 14/14；api tsc 0；i18n OK（783 键 / 硬编码 0）；UI render 126/126；web tsc 0；next build 0",
+        "returns": {
+          "AUTHORIZATION_UI": "PASS",
+          "STATE_SOURCE": "backend Standing Authorization only",
+          "CLIENT_SCOPE_DIGEST": "FORBIDDEN（请求体只有 reason）",
+          "SERVER_ONLY_FIELDS_FROM_CLIENT": "IGNORED_AND_REJECTED_BY_DESIGN",
+          "SILENT_SCOPE_EDIT": "NOT_PROVIDED（改范围需重新同意条款）",
+          "REVOKE_TRACED": "PASS"
+        }
       }
     },
     "safe_continuation_queue": [
-      "P7 — Authorization 管理 UI（/authorizations，状态全部来自后端 Standing Authorization）",
       "P8 — Navigation Progressive Disclosure（不删 route、不破坏 API contract）",
       "P9 — OAuthAuthorizationSession / ConnectionSyncState 最小补强（B2 PARTIAL 的真实缺口）",
       "FINAL — 全量回归 + 验收报告（exact HEAD / test counts / CAPABILITY_LOSS = 0 / PRODUCTION_READY = NO）"

@@ -1,7 +1,7 @@
 # AUTHORIZATION 管理 UI（P7）—— 交付与证据
 
 授权：HOST 2026-10-07「AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION」P7。
-`EXACT_HEAD = AGENT-EXPERIENCE-P7-HEAD`（基线 `68d225c4`）
+`EXACT_HEAD = d4194cf3`（基线 `68d225c4`）
 
 结论：**P7 = CLOSED**。`/authorizations` 的状态**全部**来自后端 durable Standing Authorization（P0 表）；
 前端不生成 `scopeDigest`、不提交任何 server-only 字段；本单元提供**只读 + 撤销**。
