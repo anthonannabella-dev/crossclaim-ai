@@ -220,7 +220,24 @@ export async function handleAuthRequest(
           typeof body.organizationName === 'string' ? body.organizationName : '',
         displayName: typeof body.displayName === 'string' ? body.displayName : undefined,
       });
-      // G：未验证邮箱不发放 session；明确告知下一步是邮箱验证（PC-01B）。
+      // CUSTOMER-UX（acceptance P0）：注册成功后立即**尝试**发出验证邮件。
+      // best-effort：不改变鉴权语义；邮件通道未接入时 delivered=false，由响应如实告知，
+      // 前端不得假装已经发出（外部通道仍是 EXTERNAL_GATE / HOLD）。
+      let verificationEmailRequested = false;
+      let verificationEmailDelivered = false;
+      if (deps.lifecycle) {
+        try {
+          const issued = await requestEmailVerification(
+            { userId: result.userId, ip: req.socket.remoteAddress ?? undefined },
+            deps.lifecycle,
+          );
+          verificationEmailRequested = issued.issued;
+          verificationEmailDelivered = issued.delivery?.delivered === true;
+        } catch {
+          verificationEmailRequested = false;
+        }
+      }
+      // G：未验证邮箱不发放 session；明确告知下一步是邮箱验证。
       sendJson(res, 201, {
         userId: result.userId,
         organizationId: result.organizationId,
@@ -228,6 +245,10 @@ export async function handleAuthRequest(
         emailVerified: result.emailVerified,
         sessionIssued: false,
         nextStep: 'EMAIL_VERIFICATION_REQUIRED',
+        verificationEmail: {
+          requested: verificationEmailRequested,
+          delivered: verificationEmailDelivered,
+        },
       });
       return true;
     } catch (error) {

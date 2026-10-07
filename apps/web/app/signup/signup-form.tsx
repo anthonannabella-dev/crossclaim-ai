@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 
 import type { Messages } from '../../i18n/dictionaries/zh-CN';
@@ -16,7 +17,8 @@ export default function SignupForm({ enabled, t }: { enabled: boolean; t: Messag
   const [organizationName, setOrganizationName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<null | { organizationId: string }>(null);
+  const [done, setDone] = useState<null | { organizationId: string; emailDelivered: boolean | null }>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   if (!enabled) {
@@ -33,7 +35,26 @@ export default function SignupForm({ enabled, t }: { enabled: boolean; t: Messag
       <div className="rounded border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
         <h1 className="text-base font-semibold">{copy.createdTitle}</h1>
         <p className="mt-2">{copy.createdNote}</p>
-        <p className="mt-1 text-xs text-amber-800">organizationId: {done.organizationId}</p>
+        <p className="mt-2">{copy.verifyNextStep}</p>
+        {done.emailDelivered === false ? <p className="mt-2">{copy.verifyChannelUnavailable}</p> : null}
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={resend}
+            className="rounded bg-amber-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+          >
+            {copy.resendVerification}
+          </button>
+          <Link href="/login" className="text-xs underline">
+            {t.common.goToLogin}
+          </Link>
+        </div>
+        {notice ? <p className="mt-2 text-xs">{notice}</p> : null}
+        <details className="mt-3 text-xs">
+          <summary>{copy.advancedInfo}</summary>
+          <p className="mt-1 break-all">organizationId: {done.organizationId}</p>
+        </details>
       </div>
     );
   }
@@ -52,18 +73,46 @@ export default function SignupForm({ enabled, t }: { enabled: boolean; t: Messag
         message?: string;
         error?: string;
         organizationId?: string;
+        verificationEmail?: { requested?: boolean; delivered?: boolean };
       };
       if (!response.ok) {
         setError(body.message ?? body.error ?? copy.failed);
         return;
       }
-      setDone({ organizationId: String(body.organizationId ?? '') });
+      setDone({
+        organizationId: String(body.organizationId ?? ''),
+        emailDelivered:
+          body.verificationEmail === undefined ? null : body.verificationEmail.delivered === true,
+      });
     } catch {
       setError(t.common.networkError);
     } finally {
       setBusy(false);
     }
   }
+
+  /** 重发验证邮件：无论邮件通道是否已接入，都给客户一个明确、诚实的下一步。 */
+  async function resend() {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const response = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (!response.ok) {
+        setError(t.common.requestFailed.replace('{status}', String(response.status)));
+        return;
+      }
+      setNotice(copy.resendAccepted);
+    } catch {
+      setError(t.common.networkError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
 
   return (
     <div>

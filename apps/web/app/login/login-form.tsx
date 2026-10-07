@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
@@ -72,6 +73,18 @@ export default function LoginForm({ t }: { t: Messages }) {
           {busy ? t.login.submitting : t.login.submit}
         </button>
       </form>
+      <p className="mt-4 text-sm text-slate-600">
+        {t.login.noAccount}{' '}
+        <Link href="/signup" className="text-slate-900 underline">
+          {t.common.createAccount}
+        </Link>
+      </p>
+      <p className="mt-4 text-sm text-slate-600">
+        {t.login.noAccount}{' '}
+        <Link href="/signup" className="text-slate-900 underline">
+          {t.common.createAccount}
+        </Link>
+      </p>
     </div>
   );
 }

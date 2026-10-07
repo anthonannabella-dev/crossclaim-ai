@@ -24,6 +24,8 @@ const CHANNELS = [
 ] as const;
 
 /** 允许的迁移，仅用于按钮可见性；权威状态机在服务端。 */
+/** CUSTOMER-UX：客户语言向导 —— 内部字段由客户端推断，客户不需要先懂数据模型。 */
+type WizardKey = 'PLATFORM_AMAZON' | 'CARRIER_BILL' | 'CUSTOMS_DOC' | 'ADVANCED';
 const NEXT_STATUSES: Record<string, string[]> = {
   NEEDS_AUTH: ['ACTIVE', 'REVOKED'],
   ACTIVE: ['PAUSED', 'REVOKED'],
@@ -56,9 +58,10 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [label, setLabel] = useState('');
-  const [kind, setKind] = useState<(typeof KINDS)[number]>('FILE_UPLOAD');
-  const [domain, setDomain] = useState<(typeof DOMAINS)[number]>('LOGISTICS');
-  const [channel, setChannel] = useState<(typeof CHANNELS)[number]>('UPS');
+  const [wizard, setWizard] = useState<WizardKey>('PLATFORM_AMAZON');
+  const [kind, setKind] = useState<(typeof KINDS)[number]>('API');
+  const [domain, setDomain] = useState<(typeof DOMAINS)[number]>('PLATFORM');
+  const [channel, setChannel] = useState<(typeof CHANNELS)[number]>('AMAZON_FBA');
   const [platform, setPlatform] = useState('');
   const [credentialRef, setCredentialRef] = useState('');
   const [refDraft, setRefDraft] = useState<Record<string, string>>({});
@@ -79,6 +82,42 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
       default:
         return code;
     }
+  };
+
+  /** 客户语言：渠道码 → 客户可读名称（未知码原样显示，不做猜测）。 */
+  const channelLabel = (code: string): string => {
+    const table = copy as unknown as Record<string, string>;
+    const suffix = code
+      .split('_')
+      .map((word) => (word === '' ? '' : word[0] + word.slice(1).toLowerCase()))
+      .join('');
+    return table['channel' + suffix] ?? code;
+  };
+
+  /** 向导：选择「想连接什么」→ 自动推导内部 kind / domain / channel。 */
+  function applyWizard(next: WizardKey) {
+    setWizard(next);
+    if (next === 'PLATFORM_AMAZON') {
+      setKind('API');
+      setDomain('PLATFORM');
+      setChannel('AMAZON_FBA');
+    } else if (next === 'CARRIER_BILL') {
+      setKind('FILE_UPLOAD');
+      setDomain('LOGISTICS');
+      setChannel('UPS');
+    } else if (next === 'CUSTOMS_DOC') {
+      setKind('FILE_UPLOAD');
+      setDomain('CUSTOMS');
+      setChannel('CUSTOMS_BROKER');
+    }
+  }
+
+  const wizardHint = (): string => {
+    const table = copy as unknown as Record<string, string>;
+    if (wizard === 'PLATFORM_AMAZON') return table.wizardHintPlatform ?? '';
+    if (wizard === 'CARRIER_BILL') return table.wizardHintCarrier ?? '';
+    if (wizard === 'CUSTOMS_DOC') return table.wizardHintCustoms ?? '';
+    return table.wizardHintAdvanced ?? '';
   };
 
   const statusTone = (code: string): BadgeTone => {
@@ -161,7 +200,7 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{item.channel}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{channelLabel(item.channel)}</p>
                   </div>
                   <StatusBadge tone={statusTone(item.status)}>{statusLabel(item.status)}</StatusBadge>
                 </div>
@@ -248,8 +287,24 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-base font-semibold text-slate-900">{copy.formTitle}</h2>
-        <p className="mt-1 text-xs text-slate-500">{copy.formHint}</p>
+        {wizard === 'ADVANCED' ? (
+          <p className="mt-1 text-xs text-slate-500">{copy.formHint}</p>
+        ) : null}
         <form onSubmit={create} className="mt-4 space-y-3">
+          <label className="block text-sm">
+            {copy.wizardTitle}
+            <select
+              value={wizard}
+              onChange={(event) => applyWizard(event.target.value as WizardKey)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5"
+            >
+              <option value="PLATFORM_AMAZON">{copy.wizardAmazon}</option>
+              <option value="CARRIER_BILL">{copy.wizardCarrier}</option>
+              <option value="CUSTOMS_DOC">{copy.wizardCustoms}</option>
+              <option value="ADVANCED">{copy.wizardAdvanced}</option>
+            </select>
+            <span className="mt-1 block text-xs text-slate-500">{wizardHint()}</span>
+          </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
               {copy.name}
@@ -260,6 +315,7 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                 placeholder={copy.namePlaceholder}
               />
             </label>
+            <div className={wizard === 'ADVANCED' ? 'text-sm' : 'hidden'}>
             <label className="text-sm">
               {copy.kind}
               <select
@@ -322,6 +378,7 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                 placeholder={copy.refPlaceholder}
               />
             </label>
+            </div>
           </div>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
           {notice ? <p className="text-sm text-emerald-700">{notice}</p> : null}

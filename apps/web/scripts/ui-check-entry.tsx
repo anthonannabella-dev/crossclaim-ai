@@ -422,7 +422,10 @@ check('case.status.localized', caseStatusLabel('COLLECTING_EVIDENCE', zhCN) === 
 // ⑫ UI-5b：Claim 材料包客户视图（SSR 首屏 = 骨架屏 + HOLD 文案来自字典）
 const packageHtml = render(<ClaimPackageView caseId="case-1" t={zhCN} locale="zh-CN" />);
 check('claim.package.loading.skeleton', packageHtml.includes('animate-pulse'));
-check('claim.package.hold.wording.dictionary', zhCN.claimPackagePage.readyToSubmitBody.includes('External Write = HOLD'));
+check(
+  'claim.package.hold.wording.customer',
+  zhCN.claimPackagePage.readyToSubmitBody.includes('对外提交通道尚未开放'),
+);
 
 // ⑬ UI-6a：金额与收益客户视图
 const moneyHtml = render(<RecoveryMoneyView t={zhCN} locale="zh-CN" />);
@@ -436,13 +439,16 @@ check('money.advanced.detail.key', zhCN.moneyPage.advancedDetails.length > 0);
 // ⑭ UI-7：关税追回客户视图（字典口径 + 预计/确认区分 + HOLD 文案）
 check('customs.estimated.vs.confirmed', zhCN.customsPage.estimatedLabel !== zhCN.customsPage.confirmedLabel);
 check('customs.confirmed.per.currency', zhCN.customsPage.confirmedNote.includes(zhCN.dashboardPage.currencyLabel) || zhCN.customsPage.confirmedNote.length > 0);
-check('customs.submit.hold.wording', zhCN.customsPage.submitNote.includes('HOLD') && zhCN.customsPage.holdBadge.length > 0);
+check(
+  'customs.submit.hold.wording.customer',
+  zhCN.customsPage.submitNote.includes('提交通道尚未接入') && zhCN.customsPage.holdBadge.length > 0,
+);
 check('customs.refund.no.custody', zhCN.customsPage.refundNote.includes('CrossClaim'));
 check('customs.advanced.basis.key', zhCN.customsPage.calculationBasis.length > 0 && zhCN.customsPage.advancedNote.includes('DUTY_TRUTH'));
 check('customs.no.blocker.code.as.primary', !zhCN.customsPage.subtitle.includes('BROKER_POA_REQUIRED') && !zhCN.customsPage.actionNote.includes('IOR_'));
 check(
   'customs.en.dictionary',
-  enUS.customsPage.estimatedLabel !== enUS.customsPage.confirmedLabel && enUS.customsPage.submitNote.includes('HOLD'),
+  enUS.customsPage.estimatedLabel !== enUS.customsPage.confirmedLabel && enUS.customsPage.submitNote.includes('submission channel is not connected yet'),
 );
 
 // ⑮ UI-8a：全局状态页 + a11y 语义

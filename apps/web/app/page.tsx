@@ -67,14 +67,29 @@ async function apiGet<T>(path: string): Promise<{ ok: boolean; status: number; b
 function LoginPrompt({ t }: { t: Awaited<ReturnType<typeof getServerMessages>> }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6">
-      <h1 className="text-xl font-semibold text-slate-900">{t.common.loginRequired}</h1>
-      <p className="mt-2 text-sm text-slate-600">{t.footerNote}</p>
-      <Link
-        href="/login"
-        className="mt-4 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
-      >
-        {t.common.goToLogin}
-      </Link>
+      <h1 className="text-xl font-semibold text-slate-900">{t.firstRun.title}</h1>
+      <p className="mt-2 text-sm text-slate-600">{t.firstRun.whatItIs}</p>
+      <ol className="mt-4 space-y-2 text-sm text-slate-700">
+        <li>1. {t.firstRun.step1}</li>
+        <li>2. {t.firstRun.step2}</li>
+        <li>3. {t.firstRun.step3}</li>
+      </ol>
+      <p className="mt-3 text-xs text-slate-500">{t.firstRun.pricingNote}</p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Link
+          href="/signup"
+          className="inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
+        >
+          {t.common.createAccount}
+        </Link>
+        <Link
+          href="/login"
+          className="inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-800"
+        >
+          {t.common.goToLogin}
+        </Link>
+      </div>
+      <p className="mt-3 text-xs text-slate-500">{t.footerNote}</p>
     </div>
   );
 }
