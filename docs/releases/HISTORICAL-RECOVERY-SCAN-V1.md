@@ -382,3 +382,24 @@ claimRecoveryScanRun + loadScanScopeForClaimedTask（caller 自报范围被忽�
   domain step 不得抢在 proposal 裁决之前直接完成 scan。
 * 下一步：按上述两条实现（不改 guard / policy / claim / reserved namespace 语义），再送 AUDIT-2R3。
 
+### 13.9 CHANGE 2 分析（park-for-judge）与实现决策
+
+**实测事实**：`composeRsiRuntime` 在存在 domain pack（含 `productRecoveryPack`）时**强制**
+`awaitVerdict = true`（`rsi-run.ts` 组装处），既有 `rsi-si-runtime-e2e` 也断言
+`composition.controller.state().waitingForVerdict === true`（claim → proposal → park）。
+
+**由此推论**：在同一个 `tick()` 里、claim 之后立刻执行 `historicalScanDomainStep`，
+语义上就是**绕过 park-for-judge**（评审 CHANGE 2 指出的问题）。因此正确实现不是加一个 gate 条件，
+而是把 domain step 放到**裁决/续跑之后**的既有路径上：
+
+```text
+claim → Recovery pack proposal → park-for-judge → verdict 收口（既有续跑路径）
+      → historical scan domain step（execution port → runHistoricalBackfill）
+      → durable scan COMPLETED → customs/summary
+```
+
+**决策**：不采用「同 tick 直接跑 backfill」的让步实现（那正是被指出的旁路）。
+下一步需要先读既有续跑接口（`rsi-controller-continuation` / `attachContinuationToController` +
+verdict watcher 的收口回调）确定最小接线点，再实现；同时补齐 CHANGE 1 的 loop 驱动用例。
+在接线点确定前不改 runtime 语义，避免引入「裁决前即完成 scan」的新旁路。
+
