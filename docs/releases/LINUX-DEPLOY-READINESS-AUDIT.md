@@ -240,7 +240,8 @@
 | Web `GET /` `/login` `/recoveries` | 200 / 200 / 200（`/` 首次请求 500 为 Next dev 首编译抖动，复测稳定 200） |
 | Web `npm run typecheck` | exit 0 |
 | Next.js `npm run build` | exit 0 |
-| api 全量回归 | **4668/4669**（唯一失败 = 已登记 P2E-DB5 隔离 flake，单跑 20/20 全绿） |
+| api 全量回归（基线树） | 4668/4669（唯一失败 = 已登记 P2E-DB5 隔离 flake，单跑 20/20 全绿） |
+| api 全量回归（**RC 树 `32e28e94`**） | **4670/4672**（2 失败均为满负载 flake：P2E-DB5 隔离 + `customs-broker-authorization-session-db` hook 超时；两文件单跑 **30/30**） |
 | 定向：RSI + 历史扫描 + 架构契约 | 65 文件 / **576/576** |
 | `readiness` 套件（含新增布局回归） | **11/11** |
 | i18n 门禁 | 5 locales / 904 keys / 硬编码 0 |
@@ -264,6 +265,9 @@
 3. **GAP-05** RSI 生产入口未接 durable reconcile；`PRODUCTION_DURABLE_QUEUE_REQUIRED` 未解。
 4. 六项生产启用债（`REAL_EXTERNAL_EXECUTION=NOT_EXECUTED`、`REAL_VALIDATION_COMPLETE=NO`、`PRODUCTION_READY=NO`、
    `PRODUCTION_DURABLE_QUEUE_REQUIRED`、scan fencing 无独立 `leaseEpoch`、unfenced `runHistoricalBackfill` 仅 test 路径、P2E-DB5 隔离债）**继续跟踪，不因本 RC 关闭**。
+   > 本次另观察到一项**测试健壮性**问题（非产品缺陷、非本 RC 引入）：`customs-broker-authorization-session-db.test.ts`
+   > 每个用例约 1.0s，其 `beforeAll` 钩子默认 10s 超时，在满负载全量回归下会偶发 `Hook timed out in 10000ms`；
+   > 单跑 10/10 通过。建议调大该套件 `hookTimeout` 或拆小 fixture 初始化。**登记为独立测试债，不并入上述六项。**
 5. 真实模型调用未接通（见 `MODEL-PROVIDER-REAL-CALL-READINESS.md`）。
 6. 生产密钥 / 生产数据库迁移 / 公开流量切换 / 外部自动提交 / 支付扣佣：全部 `HOST APPROVAL REQUIRED`。
 

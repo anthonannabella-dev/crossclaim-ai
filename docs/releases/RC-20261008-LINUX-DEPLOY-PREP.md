@@ -14,7 +14,7 @@
 | 分支 | `release/rc-20261008-linux-deploy` |
 | 来源分支 | `feat/historical-recovery-scan-v1`（AUDIT-1/2/3/4 全 PASS，`HISTORICAL_RECOVERY_SCAN_V1 = PASS / CLOSED`） |
 | 基线 commit | `77b584e2` |
-| RC 代码树锚点 | _（见 §9 回填）_ |
+| RC 代码树锚点（送审/部署锚点） | **`32e28e94`** |
 | 封板对照（**未修改**） | `release/integration-20261008` = `190d57a6` |
 | `main` | **未使用**（本地 `444a246c` 已过时，落后 `origin/main` 1320 个提交） |
 | 部署方式 | systemd（Alibaba Cloud Linux），无 Docker |
@@ -62,7 +62,8 @@
 | web `tsc --noEmit` | exit 0 |
 | web `next build` | exit 0 |
 | Web 真实 HTTP | `/` `/login` `/recoveries` = 200 / 200 / 200 |
-| api 全量回归 | **4668/4669**（唯一失败 = 既存 P2E-DB5 隔离 flake；单跑 **20/20**） |
+| api 全量回归（基线树 `77b584e2`+工作区） | 4668/4669（唯一失败 = 既存 P2E-DB5 隔离 flake；单跑 20/20） |
+| api 全量回归（**RC 代码树 `32e28e94`**） | **4670/4672**（2 失败均为满负载 flake：P2E-DB5 隔离 + broker hook 超时；两个文件单跑 **30/30**） |
 | 定向（RSI + 历史扫描 + 架构契约） | 65 文件 / **576/576** |
 | readiness（含新增回归） | **11/11** |
 | i18n / API 契约 / 审计覆盖 / autopilot / 许可证 / OSS | 全部 OK |
@@ -142,7 +143,11 @@ HOST_APPROVAL_REQUIRED        = 生产部署 / 生产迁移 / 生产密钥 / 公
 
 ## 9. RC 代码树锚点（回填）
 
-_（本文件所在提交的 commit SHA 在此回填，作为部署目标锚点。）_
+**`32e28e94`** —— `fix(deploy): RC-20261008 部署准备 —— 修复 3 个部署硬缺陷 + 保留 DeepSeek/Qwen 配置字段 + 就绪审计`
+
+- 该 commit 含全部 D1/D2/D3 修复、新增回归断言、`.env.example` 字段、以及 §2.3 三份文档；
+- 本文件的**回填提交只改文档，不改代码树**，因此部署/送审锚点固定为 `32e28e94`（双写口径）；
+- 一切验证结果（本机 staging HTTP、全量回归 4670/4672、定向 576/576、实体 203/203）均在该代码树上测得。
 
 ---
 
