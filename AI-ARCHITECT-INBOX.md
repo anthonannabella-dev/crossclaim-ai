@@ -162288,3 +162288,269 @@ SECOND_*                 = 0
 
 结论：runtime claim + scanScope wiring 已经 PASS；只差把同一次 runtime claim 真正接到 historical backfill executor，再一路跑到 Customs + summary。做到这一点，PHASE 10 才能正式 CLOSED。
 ```
+
+### [MSG-20261008-06] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-2R2 窄复审（REVIEWED_HEAD 06d596c8）= PASS WITH REVISE（CHANGE 1：真实 event loop 未经过 domain step，需先包装 controller 再建 loop；CHANGE 2：domain step 不得绕过 park-for-judge / runner proposal）
+
+```text
+SYNTHETIC_5Y_E2E = REVISE
+
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 06d596c8f8c8a043d9fb9caed1c85cfb77988de9
+
+这轮比上一版前进了一大步：scan-execution-port.ts 确实复用了 durable scope + 既有 runHistoricalBackfill()，没有第二 runtime / scheduler；测试也确实做到：
+
+纯文本
+controller.tick()
+→ claimed historical task
+→ runtime scanScope load
+→ historicalScanDomainStep
+→ execution port
+→ durable backfill
+→ COMPLETED
+
+但我发现 两个真实 runtime blocker，所以还不能把 PHASE 10 判 CLOSED。
+
+CHANGE 1 — production event loop 没有经过 historicalScanDomainStep
+
+现在顺序是：
+
+纯文本
+const controller = attachContinuationToController(...)
+const loop = createRsiEventLoop({
+  controller,          ← 原始 controller 已经被捕获
+  ...
+})
+
+const controllerWithDomainSteps = {
+  ...controller,
+  async tick() {
+    const outcome = await controller.tick()
+    ...
+    await domainStep(...)
+  }
+}
+
+return {
+  loop,
+  controller: controllerWithDomainSteps
+}
+
+所以：
+
+纯文本
+测试手动调用 composition.controller.tick()
+→ domainStep 会运行
+
+但是实际：
+
+纯文本
+composition.start()
+→ loop.start()
+→ createRsiEventLoop 内部持有原始 controller
+→ options.controller.tick()
+→ 不经过 controllerWithDomainSteps
+→ historicalScanDomainStep 不运行
+
+事件路径 controller.emit() 也一样绕过 wrapper。
+
+因此当前证明的是：
+
+手动调用返回 controller 的 tick 可以跑完整链
+
+还不是：
+
+真实 ONE SI Runtime event/watchdog loop 可以跑完整链
+
+这正是 PHASE 10 最关键的 production composition 语义。
+
+最小修复：先组装 wrapped/domain-step-aware controller，再把它传给 createRsiEventLoop()。不要在 loop 创建后才包一层。
+
+并补一条真正：
+
+纯文本
+composition.start()
+或 loop watchdog/event 驱动
+→ claimed historical scan
+→ domain step invoked exactly once
+→ durable scan completed
+CHANGE 2 — domain step 绕过 park-for-judge / runner proposal
+
+这个更重要。
+
+当前 domain pack 存在时，原架构明确：
+
+纯文本
+awaitVerdict = true
+
+也就是：
+
+纯文本
+task claimed
+→ Recovery pack produces proposal
+→ controller marks waitingForVerdict
+→ 不得继续执行
+→ 等真实 Judge verdict
+
+但现在 wrapper 是：
+
+TypeScript
+const outcome = await controller.tick();
+
+if (outcome.claimed?.dedupeKey.includes('scan:v1:')) {
+  await domainStep(...)
+}
+
+它只检查：
+
+纯文本
+claimed task exists
+
+没有检查：
+
+runner proposal 是 PASS 还是 BLOCK
+Action Guard 是否 DENY
+Policy 是否 BLOCK
+当前是否 AWAITING_VERDICT
+Judge 是否已经给 PASS
+
+因此存在：
+
+纯文本
+Recovery pack proposal = BLOCK
+或
+任务已经 park-for-judge
+↓
+outcome.claimed 仍存在
+↓
+historicalScanDomainStep 照样执行
+↓
+runHistoricalBackfill() 写数据库、推进 checkpoint
+
+这实际上绕过了你之前已经封板的：
+
+纯文本
+proposal != verdict
+SELF_JUDGE_FORBIDDEN
+park-for-judge
+
+尤其当前 runHistoricalBackfill() 明确是内部写操作，不再是 read-only pack。
+
+所以不能只在“claimed”之后直接执行。
+
+正确语义应该是
+
+至少要变成：
+
+纯文本
+runtime claims task
+→ Recovery domain pack
+→ policy / shared guard
+→ proposal
+→ park-for-judge
+→ external Judge verdict PASS
+→ historical execution domain step
+
+或者，如果这个 historical backfill 被架构定义为无需 Judge 的内部 deterministic action，那就必须明确建立已有 Policy/Guard 中的正式授权路径，而不是在 controller.tick() 外层旁路执行。
+
+当前实现没有做到这一点。
+
+已确认正确的部分
+
+scan-execution-port.ts 本身设计是好的：
+
+纯文本
+taskKey
+→ loadScanScopeForClaimedTask()
+→ tenant/digest/type fail-closed
+→ durable scanId
+→ existing runHistoricalBackfill()
+
+负向也正确：
+
+纯文本
+non-scan task → BLOCKED
+cross-tenant → BLOCKED + scanId=null
+
+并且没有第二套：
+
+纯文本
+runtime
+scheduler
+scope truth
+backfill engine
+Customs engine
+
+所以：
+
+纯文本
+NO_SECOND_RUNTIME = PASS   （维持上一轮）
+
+没有变化。
+
+CHANGES
+
+建议 AUDIT-2R3 只修两件事，不要动 backfill/Customs：
+
+纯文本
+1. controller domain-step wrapping 必须发生在 createRsiEventLoop() 之前
+   → loop / event / watchdog 全部走同一 wrapped controller
+
+2. historical domain step 不得在“仅 claimed”时执行
+   → 必须服从已有 proposal→verdict / policy / guard 生命周期
+   → BLOCK / REVISE / awaiting verdict 时不得运行 backfill
+
+最低回归矩阵：
+
+纯文本
+A. loop/watchdog 实际驱动
+   → historical domain step exactly once
+   → scan COMPLETED
+
+B. Recovery pack proposal = BLOCK
+   → domain step call count = 0
+   → scan checkpoint 不变化
+
+C. waitingForVerdict=true, 尚无 PASS verdict
+   → domain step call count = 0
+
+D. PASS verdict 到达
+   → domain step exactly once
+   → 同一 durable scanId
+
+E. 重复 verdict / tick
+   → 不重复 backfill
+RISKS
+
+当前最大的风险不是外部写，而是内部执行时序绕过：
+
+已经被设计成“等待独立 Judge”的任务，在 verdict 之前就推进 durable historical scan。
+
+这会破坏此前已经封板的 runtime governance。
+
+另外 GitHub Actions 对该 exact HEAD：
+
+NOT_OBSERVED
+
+所以：
+
+纯文本
+historical-scan-5y-e2e 2/2
+runtime-scope           8/8
+rsi-si-runtime-e2e      5/5
+agent-goal-runtime      7/7
+api tsc                 0
+
+仍只能记为 local/Codex evidence。
+
+边界继续：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+SECOND_*                 = 0
+全部 HOLD                = unchanged
+
+结论：execution port 本身 PASS，但 runtime composition 时序还没完全正确。当前 PHASE 10 仍是 PASS WITH REVISE / NOT CLOSED。
+```

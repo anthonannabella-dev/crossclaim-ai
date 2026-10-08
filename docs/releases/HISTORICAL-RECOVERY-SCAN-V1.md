@@ -366,3 +366,19 @@ claimRecoveryScanRun + loadScanScopeForClaimedTask（caller 自报范围被忽�
 `agent-goal-runtime-wiring` 7/7（合计 22/22）；api tsc 0。
 **送审**：`AUDIT-2R2`，REVIEWED_HEAD = `06d596c8`。
 
+### 13.8 AUDIT-2R2 裁决（已归档）与两条待办 CHANGE
+
+* `MSG-20261008-06`：`VERDICT = PASS WITH REVISE`（`REVIEWED_HEAD 06d596c8`），
+  FNV-1a `8838d7a8` / `FULL_COPY_OK` 184/184。评审确认 `scan-execution-port.ts` 确实复用 durable scope +
+  既有 `runHistoricalBackfill()`，没有第二 runtime / scheduler。
+* **CHANGE 1（关键）**：`controllerWithDomainSteps` 是在 `createRsiEventLoop({ controller })` **之后**才包的，
+  因此 `composition.start()` → `loop.start()` → 内部持有的是**原始 controller**（`controller.emit()` 同理），
+  domain step 不会运行；目前只证明了「手动 `composition.controller.tick()` 能跑完整链」，
+  而不是「真实 ONE SI Runtime event/watchdog loop 能跑完整链」。
+  **最小修复**：**先**组装 domain-step-aware controller，**再**把它传给 `createRsiEventLoop()`；
+  并补一条由 `composition.start()` / loop 驱动的用例（断言 domain step 恰好执行一次、durable scan completed）。
+* **CHANGE 2（更重要）**：domain step 当前绕过 park-for-judge / runner proposal 语义；需按既有
+  `awaitVerdict = true` 路径处理（task claimed → Recovery pack 产出 proposal → `waitingForVerdict`），
+  domain step 不得抢在 proposal 裁决之前直接完成 scan。
+* 下一步：按上述两条实现（不改 guard / policy / claim / reserved namespace 语义），再送 AUDIT-2R3。
+
