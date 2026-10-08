@@ -224,7 +224,18 @@ Drawback 的 1825 天（exportDate 锚点）被明确定位为**合格窗口**�
   `services/historical-scan/summary.ts`（server/UI 同一覆盖判据）、
   `__tests__/customs-historical-pipeline.test.ts`（+3 条评审点名回归）。
 * 证据：11/11（该套件）；定向批次 215/215；api tsc 0；web tsc 0。
-* 裁决（等待中）：VERDICT = PENDING。
+* 裁决（已归档）：**VERDICT = PASS WITH REVISE**（`MSG-20261008-02`，FNV-1a `4e0b9084` / `FULL_COPY_OK` 87/87）：
+  上一轮「缺 jurisdiction → 默认 US → CLAIM_READY」旁路已 **CLOSED**，3 条回归与代码一致，`COVERAGE_NOT_FULL` 硬化正确；
+  最后一条极窄 CHANGE = `historicalWindow` gate 必须**必填**（缺失即阻断），不得作为可选 advisory metadata。
+
+### 12.3 AUDIT-1R / CHANGE（已实现）
+
+* `CustomsHistoricalCandidateInput.historicalWindow` 由可选改为**必填**；
+* 运行时兜底：即使调用方（JS / 反序列化）省略该字段，也一律
+  `NEEDS_MANUAL_REVIEW` + `HISTORICAL_WINDOW_GATE_MISSING`（`gateMissing` 与 `gate.blocksClaimReady` 同为阻断条件），
+  绝不回落到「只看 drawback route」；
+* 新增回归：等价的完美 US candidate 但省略 `historicalWindow` → **永不 CLAIM_READY**（保留 blocking reason）；
+* 证据：`customs-historical-pipeline` **12/12**；api tsc **0**。
 
 * `SECOND_RUNTIME = 0`、`SECOND_POLICY_ENGINE = 0`、`SECOND_GUARD = 0`、`SECOND_FACT_SOURCE = 0`
   （本单元新增的只是 durable scan scope + 纯函数解析器 + 领域步骤执行器；未新增调度器/运行时/政策引擎/守卫）。

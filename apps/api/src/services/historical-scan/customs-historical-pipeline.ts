@@ -26,7 +26,12 @@ export interface CustomsHistoricalWindowGate {
 }
 
 export type CustomsHistoricalCandidateInput = DrawbackCandidateRouteInput & {
-  readonly historicalWindow?: CustomsHistoricalWindowGate | null;
+  /**
+   * AUDIT-1R / CHANGE（MSG-20261008-02）：该 gate **必须提供**。
+   * 它是 PHASE 4 的唯一事实来源（jurisdiction / policy 核验 / anchor / 政策窗口交集），
+   * 不得作为可选 advisory metadata —— 缺失即阻断（见下方 HISTORICAL_WINDOW_GATE_MISSING）。
+   */
+  readonly historicalWindow: CustomsHistoricalWindowGate;
 };
 
 export const CUSTOMS_HISTORICAL_OUTCOMES = [
@@ -67,7 +72,9 @@ export function evaluateCustomsHistoricalCandidate(
     // 历史扫描永远不申报；显式拒绝而不是静默忽略
     throw new CustomsHistoricalBoundaryError('CUSTOMS_HISTORICAL_CANNOT_REQUEST_FILING');
   }
-  const { historicalWindow, ...routeInput } = input;
+  const { historicalWindow: gateInput, ...routeInput } = input;
+  // 运行时兜底：即使调用方（JS / 反序列化）省略了必填 gate，也必须阻断，绝不回落到"只看 drawback route"
+  const gateMissing = gateInput === null || gateInput === undefined;
   const route = evaluateDrawbackCandidateRoute({ ...routeInput, requestFiling: false });
 
   if (route.filingPerformed !== false || route.billable !== false || route.autoFilingAllowed !== false) {
@@ -79,15 +86,16 @@ export function evaluateCustomsHistoricalCandidate(
 
   // AUDIT-1 / CHANGE 1：consumption of the historical window gate（缺 jurisdiction / blocksClaimReady → 降级）
   const jurisdictionMissing = input.jurisdiction === null || input.jurisdiction === undefined || String(input.jurisdiction).trim() === '';
-  const gateBlocks = historicalWindow?.blocksClaimReady === true;
+  const gateBlocks = gateMissing || gateInput?.blocksClaimReady === true;
   const gateReasonCodes = [
     ...(jurisdictionMissing ? ['MISSING_JURISDICTION'] : []),
+    ...(gateMissing ? ['HISTORICAL_WINDOW_GATE_MISSING'] : []),
     ...(gateBlocks ? ['HISTORICAL_WINDOW_BLOCKS_CLAIM_READY'] : []),
-    ...(historicalWindow?.reasonCodes ?? []),
+    ...(gateInput?.reasonCodes ?? []),
   ];
   const disposition = route.disposition;
   const outcome: CustomsHistoricalOutcome =
-    (jurisdictionMissing || gateBlocks) && disposition === 'CLAIM_READY'
+    (jurisdictionMissing || gateMissing || gateBlocks) && disposition === 'CLAIM_READY'
       ? 'NEEDS_MANUAL_REVIEW'
       : (disposition as CustomsHistoricalOutcome);
 

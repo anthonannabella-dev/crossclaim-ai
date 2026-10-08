@@ -45,6 +45,8 @@ function candidate(
     verifiedDeadlinePolicy: VERIFIED_POLICY,
     requestFiling: false,
     now: NOW,
+    // AUDIT-1R：historicalWindow 为必填 gate；默认给出"未阻断"的 PHASE 4 结果
+    historicalWindow: { blocksClaimReady: false, reasonCodes: ['FULL_COVERAGE'] },
     ...overrides,
   };
 }
@@ -148,5 +150,18 @@ describe('PHASE 8 · customs historical pipeline（复用既有链）', () => {
     );
     expect(result.outcome).toBe('CLAIM_READY');
     expect(result.reasonCodes).not.toContain('MISSING_JURISDICTION');
+  });
+
+  // ============================================================
+  // AUDIT-1R / CHANGE（MSG-20261008-02）：gate 必填，缺失即阻断（不得回落到只看 drawback route）
+  // ============================================================
+  it('CHANGE 1R-①：等价的完美 US candidate 但**省略** historicalWindow → 永不 CLAIM_READY（HISTORICAL_WINDOW_GATE_MISSING）', () => {
+    const withoutGate = candidate();
+    delete (withoutGate as { historicalWindow?: unknown }).historicalWindow;
+    const result = evaluateCustomsHistoricalCandidate(withoutGate);
+    expect(result.outcome).not.toBe('CLAIM_READY');
+    expect(result.outcome).toBe('NEEDS_MANUAL_REVIEW');
+    expect(result.reasonCodes).toContain('HISTORICAL_WINDOW_GATE_MISSING');
+    expect(result.filingPerformed).toBe(false);
   });
 });

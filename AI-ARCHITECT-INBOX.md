@@ -161437,3 +161437,139 @@ SECOND_FACT_SOURCE       = 0
 
 只要把 Historical Window 的 blocksClaimReady 真正接入 PHASE 8，封住“缺 jurisdiction 默认 US 后仍可能 CLAIM_READY” 这一条，再送一次窄复审即可；UI_RESULT_VIEW 这部分本轮可以视为通过。
 ```
+
+### [MSG-20261008-02] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-1R 窄复审（REVIEWED_HEAD 1a0cb42b）= PASS WITH REVISE（最后一条窄 CHANGE：historicalWindow gate 必须为必填/缺失即阻断；缺 jurisdiction 旁路已 CLOSED）
+
+```text
+CUSTOMS_CLAIM_READY_FAIL_CLOSED = REVISE
+
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 1a0cb42b4a226a660fec2409302934e9d3779ff3
+
+这次修订已经把上一轮最直接的问题修掉了：缺 jurisdiction 的“默认 US → CLAIM_READY”旁路已关闭。你点名的 3 条回归也都与实际代码一致：
+
+纯文本
+jurisdiction missing
++ otherwise perfect candidate
+→ NEEDS_MANUAL_REVIEW
+→ MISSING_JURISDICTION
+
+blocksClaimReady = true
++ underlying route = CLAIM_READY
+→ NEEDS_MANUAL_REVIEW
+→ historical gate reasons preserved
+
+blocksClaimReady = false
++ complete verified US candidate
+→ CLAIM_READY
+
+另外 buildScanSummaryView() 的 COVERAGE_NOT_FULL 已改成与 UI 相同的“FULL 且实际 coverage 包住 requested range”判据，这个 hardening 是正确的。
+
+但还剩一个很窄的契约旁路，因此我不能把 CUSTOMS_CLAIM_READY_FAIL_CLOSED 正式判 PASS。
+
+CHANGE
+
+当前定义仍是：
+
+TypeScript
+historicalWindow?: CustomsHistoricalWindowGate | null
+
+也就是说 PHASE 8 目前的语义其实是：
+
+纯文本
+传 historicalWindow
+→ 消费 blocksClaimReady
+
+不传 historicalWindow
+→ 继续完全依赖 drawback route
+
+而上一轮要求的是：
+
+PHASE 8 必须消费 Historical Window gate。
+
+现在还是“如果传了就消费”。
+
+这很重要，因为 PHASE 4 的 blocksClaimReady 不只覆盖 jurisdiction，还覆盖：
+
+纯文本
+RULE_UNVERIFIED
+MISSING_ANCHOR
+policy window 无有效交集
+
+其中部分场景可以被底层 drawback route 独立挡住，但 PHASE 8 的类型契约并没有保证：
+
+纯文本
+Historical Window
+和
+verifiedDeadlinePolicy / candidate dates
+
+一定来自同一个 server-owned 解析结果。
+
+因此理论上仍可以构造：
+
+纯文本
+PHASE 4 本应 blocksClaimReady = true
+但调用 PHASE 8 时省略 historicalWindow
++ 给底层 route 一个足以 CLAIM_READY 的 verified policy/candidate
+→ PHASE 8 仍可能 CLAIM_READY
+
+这不是第二引擎问题，而是 gate 可省略。
+
+最小修订建议二选一，优先第一种：
+
+纯文本
+A. historicalWindow 改为必填
+   CustomsHistoricalCandidateInput {
+     historicalWindow: CustomsHistoricalWindowGate
+   }
+
+或者：
+
+纯文本
+B. historicalWindow 缺失/null
+   → NEEDS_MANUAL_REVIEW
+   → reason = HISTORICAL_WINDOW_GATE_MISSING
+   → never CLAIM_READY
+
+然后补一条即可：
+
+纯文本
+otherwise-perfect US candidate
++ historicalWindow omitted
+→ NOT CLAIM_READY
+
+做到这里，PHASE 8 才真正是：
+
+纯文本
+Historical Window gate
+→ mandatory
+→ existing drawback chain
+→ CLAIM_READY only when both agree
+
+而不是可选 advisory metadata。
+
+RISKS
+
+除此之外，本轮没有发现新的 blocker。
+
+requestFiling=true 仍直接拒绝；filingPerformed / billable / autoFilingAllowed 仍被复核为 false；没有第二套 eligibility/evidence/deadline engine。
+
+GitHub Actions 对 exact HEAD 仍是：
+
+NOT_OBSERVED
+
+因此 11/11、215/215、tsc 结果继续只能记为 local/Codex evidence。
+
+边界继续：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+SECOND_*                 = 0
+
+全部 HOLD 不变。
+
+结论：上一轮“缺 jurisdiction 默认 US”的具体漏洞已经 CLOSED；但 historicalWindow 仍可省略，因此完整的 CUSTOMS_CLAIM_READY_FAIL_CLOSED 还差最后一个极窄修订。
+```
