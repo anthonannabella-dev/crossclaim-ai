@@ -337,3 +337,32 @@ claimRecoveryScanRun + loadScanScopeForClaimedTask（caller 自报范围被忽�
 * 另需补强 runtime leg 证据（评审指出 `domainDispatchLog().length` 断言偏弱）。
 * 下一步：实现该 execution port + composition 连线 + 单条连续 E2E，再送 AUDIT-2 窄复审。
 
+### 13.7 AUDIT-2R CHANGE 完成 —— PHASE 10 成为单条连续链
+
+**① execution port（`9dd5c954`）**
+
+* 新增 `services/historical-scan/scan-execution-port.ts`：
+  `createHistoricalScanExecutionPort(prisma).run({ organizationId, taskKey, pagePort, ingestPort })`
+  先经 `loadScanScopeForClaimedTask()` 装载 durable scope（非扫描任务 / 缺失 / 跨租户 / digest 异常 →
+  `BLOCKED` 且 `scanId = null`），再驱动既有 `runHistoricalBackfill()`；
+  `HISTORICAL_SCAN_EXECUTION_PORT_BOUNDARY`：`secondRuntime/secondScheduler=false`、
+  `insideExistingOneSiRuntime=true`、`readOnlyPackUntouched=true`、`scopeFromDurableScanOnly=true`、
+  `externalWritePerformed=false`（**没有**把 backfill 塞进 read-only pack）。
+
+**② runtime 连线（`06d596c8`）**
+
+* `composeRsiRuntime` 新增可选 `historicalScanDomainStep`；仅当 claimed task 的 `dedupeKey` 含 `scan:v1:` 时，
+  由 **server-owned composition** 在既有 `controller.tick()` **之后**调用该步骤。
+  它不是第二 runtime / 第二 scheduler；claim / lease / park-for-judge / reserved namespace 语义未改。
+
+**③ E2E 单条连续链**
+
+同一次 `tick()` 内：认领 `task:recovery:CUSTOMS:scan:v1:...` → runtime 装载 durable scope
+（`loadedRefs === [taskKey]`）→ domain step 驱动 execution port → 断言 `scanId === 该 scan`、
+`status = COMPLETED`、`ok = true`；负向断言：非扫描任务 key → BLOCK、跨租户 → BLOCK 且 `scanId = null`。
+（评审指出的「仅断言 dispatch log 非空」偏弱问题已替换为上述强断言。）
+
+**证据**：`historical-scan-5y-e2e` 2/2、`historical-scan-runtime-scope` 8/8、`rsi-si-runtime-e2e` 5/5、
+`agent-goal-runtime-wiring` 7/7（合计 22/22）；api tsc 0。
+**送审**：`AUDIT-2R2`，REVIEWED_HEAD = `06d596c8`。
+
