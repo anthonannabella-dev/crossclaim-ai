@@ -524,6 +524,15 @@ export async function runJourney(input) {
   check('scan.result.seeded', scanId !== null, 'acceptance seeder 未返回 SCAN_ID');
   if (scanId !== null) {
     await open(page, webBase + '/recoveries/scans/' + scanId);
+    // 诊断：用 Playwright 的 Node 侧请求（带同一 context 的 cookie，无 CORS 限制）记录真实状态码
+    let probe = { status: -1, head: '' };
+    try {
+      const apiResponse = await page.request.get(apiBase + '/recovery-scans/' + scanId);
+      probe = { status: apiResponse.status(), head: (await apiResponse.text()).slice(0, 160) };
+    } catch (error) {
+      probe = { status: -1, head: String(error) };
+    }
+    check('scan.result.api.probe', probe.status === 200, 'status=' + probe.status + ' body=' + probe.head);
     const scanBody = await text(page);
     check('scan.result.title.visible', scanBody.includes('历史追回扫描'), scanBody.slice(0, 160));
     check('scan.result.coverage.notice', scanBody.includes('数据源未覆盖完整请求区间'), scanBody.slice(0, 200));

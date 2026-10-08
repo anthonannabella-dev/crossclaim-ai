@@ -25,7 +25,12 @@ import { evaluateCustomsHistoricalBatch } from '../src/services/historical-scan/
 
 const prisma = new PrismaClient();
 
-const INTENT = '检查我过去 5 年的关税损失，能追回的全部处理';
+/**
+ * 每次运行使用**唯一** Goal 文本 → 唯一 goalDigest / goalId / scan 身份，
+ * 避免上一次验收运行的 durable 行（属于上一个临时组织）与本轮组织冲突。
+ */
+const RUN_STAMP = Date.now().toString(36);
+const INTENT = '检查我过去 5 年的关税损失，能追回的全部处理（验收 ' + RUN_STAMP + '）';
 const NOW = new Date();
 const SOURCE_FROM = '2025-10-08';
 
@@ -74,6 +79,7 @@ async function main(): Promise<void> {
   const membership = await prisma.membership.findFirst({ where: { userId: user.id } });
   if (membership === null) throw new Error('SEED_RECOVERY_SCAN_MEMBERSHIP_NOT_FOUND');
   const organizationId = membership.organizationId;
+  console.log('SEED_ORG=' + organizationId + ' ROLE=' + membership.role + ' EMAIL=' + email);
 
   const compiled = compileAgentGoal({ text: INTENT });
   if (!compiled.ok) throw new Error('SEED_RECOVERY_SCAN_COMPILE_FAILED');
@@ -82,11 +88,11 @@ async function main(): Promise<void> {
     context: { organizationId, actorUserId: user.id, now: NOW },
   });
 
-  const goalId = 'seed-' + validated.goalId.slice(-24);
-  await prisma.agentGoal.upsert({
-    where: { id: goalId },
-    update: {},
-    create: {
+  // Goal 行必须落在**本组织**内：`validated.goalId` 是确定性 id（不含组织），跨运行会命中上一轮的旧行，
+  // 因此这里追加本次运行 stamp 生成唯一 id（AgentGoal.id 为 String，允许显式赋值）。
+  const goalId = validated.goalId + '-acc-' + RUN_STAMP;
+  await prisma.agentGoal.create({
+    data: {
       id: goalId,
       organizationId,
       createdBy: user.id,

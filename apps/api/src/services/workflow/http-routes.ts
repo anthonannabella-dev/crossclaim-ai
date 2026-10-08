@@ -648,6 +648,8 @@ export async function handleWorkflowRequest(
                 accountsPath ||
                 recoveryStates ||
                 recoveryMoney ||
+                // HISTORICAL_RECOVERY_SCAN_V1：结果页只读投影 `GET /recovery-scans/:id`（此前漏列 → 落到 POST → 405）
+                recoveryScan !== null ||
                 caseClaimPackage !== null ||
                 insightList ||
                 insightCsv ||
