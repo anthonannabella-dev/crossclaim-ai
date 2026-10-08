@@ -1,5 +1,11 @@
 # P2-3 SECRET ROTATION DESIGN（设计 + 实现交付，v1）
 
+> ⚠️ **SUPERSEDED（历史归档）** —— 自 2026-10-08 起，CrossClaim 唯一正式部署入口为仓库根目录 `DEPLOYMENT.md`
+> （配合 `deploy/release-manifest.json` 与 `node deploy/verify-release.mjs` 门禁）。
+> 本文仅作历史记录保留，**不得作为部署流程依据**；内容冲突时以 `DEPLOYMENT.md` + manifest 为准。
+> 归档索引：`docs/archive/DEPLOYMENT-HISTORY.md`
+
+
 > 依据架构方 **MSG-20260929-72**（`P2-3 SECRET ROTATION` = GO，范围冻结）。
 > **性质**：Design + Implementation（**不执行任何真实轮换**）；真实轮换 = **HOST APPROVAL REQUIRED**。
 

@@ -1,5 +1,11 @@
 # PHASE1 VALIDATION RUNBOOK（P2-4）
 
+> ⚠️ **SUPERSEDED（历史归档）** —— 自 2026-10-08 起，CrossClaim 唯一正式部署入口为仓库根目录 `DEPLOYMENT.md`
+> （配合 `deploy/release-manifest.json` 与 `node deploy/verify-release.mjs` 门禁）。
+> 本文仅作历史记录保留，**不得作为部署流程依据**；内容冲突时以 `DEPLOYMENT.md` + manifest 为准。
+> 归档索引：`docs/archive/DEPLOYMENT-HISTORY.md`
+
+
 > 依据：**MSG-20260929-73**（P2-4 = GO，验收标准冻结）
 > 边界：**CODE READY ≠ PRODUCTION VALIDATED**；真实数据 **WAITING_HOST_DATA**（不得用真实客户数据做测试）
 > 本 Runbook 只做**只读验证与报告**：不提交 Claim/Appeal、不扣佣、不收费、不承诺金额、不调用平台

@@ -1,5 +1,11 @@
 # PRODUCTION READINESS CHECKLIST — CrossClaim AI
 
+> ⚠️ **SUPERSEDED（历史归档）** —— 自 2026-10-08 起，CrossClaim 唯一正式部署入口为仓库根目录 `DEPLOYMENT.md`
+> （配合 `deploy/release-manifest.json` 与 `node deploy/verify-release.mjs` 门禁）。
+> 本文仅作历史记录保留，**不得作为部署流程依据**；内容冲突时以 `DEPLOYMENT.md` + manifest 为准。
+> 归档索引：`docs/archive/DEPLOYMENT-HISTORY.md`
+
+
 > 依据宿主指令（2026-09-29）与架构方 **MSG-20260929-20**：状态三轨化 `CODE PASS` / `INTEGRATION PENDING` / `PRODUCTION VALIDATION PENDING`。
 > 本清单是「能否进入 Production Candidate」的判据；**勾选 ≠ 已上线**，真实数据与真实平台验证统一在最后执行。
 >

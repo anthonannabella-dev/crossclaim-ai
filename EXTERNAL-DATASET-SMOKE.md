@@ -1,5 +1,11 @@
 # EXTERNAL-DATASET-SMOKE — 外部公开数据集（结构冒烟记录）
 
+> ⚠️ **SUPERSEDED（历史归档）** —— 自 2026-10-08 起，CrossClaim 唯一正式部署入口为仓库根目录 `DEPLOYMENT.md`
+> （配合 `deploy/release-manifest.json` 与 `node deploy/verify-release.mjs` 门禁）。
+> 本文仅作历史记录保留，**不得作为部署流程依据**；内容冲突时以 `DEPLOYMENT.md` + manifest 为准。
+> 归档索引：`docs/archive/DEPLOYMENT-HISTORY.md`
+
+
 > 状态：**STOPPED（宿主 2026-09-30 指示「暂时先过」）**
 > 本文件只是记录：**不产生任何 Phase 1 结论**，不进入 `PHASE1-RESULT.md`，不参与 Decision Gate。
 > 数据与报告均落在本地（gitignore 范围内），**不入库、不上传**。

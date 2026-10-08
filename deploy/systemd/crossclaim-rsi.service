@@ -10,7 +10,7 @@
 
 [Unit]
 Description=CrossClaim RSI Controller (bounded recursive self-improvement runtime)
-Documentation=file:/opt/crossclaim/docs/releases/RSI-DEPLOYMENT.md
+Documentation=file:/opt/crossclaim/DEPLOYMENT.md
 After=network-online.target postgresql.service
 Wants=network-online.target
 

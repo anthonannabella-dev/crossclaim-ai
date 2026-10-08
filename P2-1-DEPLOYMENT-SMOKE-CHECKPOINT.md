@@ -1,5 +1,11 @@
 # P2-1 DEPLOYMENT SMOKE CHECKPOINT
 
+> ⚠️ **SUPERSEDED（历史归档）** —— 自 2026-10-08 起，CrossClaim 唯一正式部署入口为仓库根目录 `DEPLOYMENT.md`
+> （配合 `deploy/release-manifest.json` 与 `node deploy/verify-release.mjs` 门禁）。
+> 本文仅作历史记录保留，**不得作为部署流程依据**；内容冲突时以 `DEPLOYMENT.md` + manifest 为准。
+> 归档索引：`docs/archive/DEPLOYMENT-HISTORY.md`
+
+
 > 类型：**IMPLEMENTATION CHECKPOINT**（P2-1 Deployment Smoke）
 > 依据：**MSG-20260929-70**（`GO_WITH_MINOR_REVISE`：D1 /readyz、D2 合成数据 CI 边界、D3 secret.rotated、D4 docker smoke、D5 验证门槛、D6 逐项交付）
 > 分支：`gate/7-commercial-validation` @ **35fc56b**（实现 `40a3f60` / 修复 `35fc56b`）；main = `9f6461e`

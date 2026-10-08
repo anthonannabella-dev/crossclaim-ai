@@ -9,8 +9,10 @@
  *   · 时间窗内重启次数达阈值 → 停止自动重启并进入 DEGRADED（需 OWNER 介入）；
  *   · 长期稳定运行后自动清零历史（避免历史旧崩溃永久压制）。
  *
- * 注意：本仓库没有 docker-compose / PM2 / systemd 配置，部署以 `DEPLOYMENT.md` 描述的方式手工执行，
- * 且**生产部署是 HOST APPROVAL REQUIRED**。因此这里只提供策略，不新增第二套部署体系。
+ * 注意：本仓库**没有** docker-compose / PM2；Linux 部署由 `deploy/systemd/` 下的 systemd unit 承担
+ * （crossclaim-api / crossclaim-web / crossclaim-rsi），流程以根目录 `DEPLOYMENT.md`（唯一正式入口）为准，
+ * 部署前必须通过 `node deploy/verify-release.mjs` 门禁（锁定 releaseCommit + 工作树 clean）。
+ * **生产部署是 HOST APPROVAL REQUIRED**。因此这里只提供策略，不新增第二套部署体系。
  */
 
 export interface RsiRestartPolicy {

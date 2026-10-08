@@ -1,5 +1,11 @@
 # FINAL-PRODUCTION-GATE-REVIEW
 
+> ⚠️ **SUPERSEDED（历史归档）** —— 自 2026-10-08 起，CrossClaim 唯一正式部署入口为仓库根目录 `DEPLOYMENT.md`
+> （配合 `deploy/release-manifest.json` 与 `node deploy/verify-release.mjs` 门禁）。
+> 本文仅作历史记录保留，**不得作为部署流程依据**；内容冲突时以 `DEPLOYMENT.md` + manifest 为准。
+> 归档索引：`docs/archive/DEPLOYMENT-HISTORY.md`
+
+
 > 依据架构方 **MSG-20260929-74**：`NEXT: FINAL PRODUCTION GATE PREPARATION = GO`（要求汇总 G1–G10 状态、P2-1~P2-4 证据索引、CODE COMPLETE Matrix、HOST APPROVAL Matrix、Production Candidate 判定、上线前 Checklist、Phase 1 Real Data Entry Point）。
 > 仓库状态：`gate/7-commercial-validation` @ **fa8cf0e**；`main` @ **fc4e18f**（CI 五作业 SUCCESS）
 > 结论口径：**CODE STATUS = PRODUCTION CANDIDATE READY**；**BUSINESS VALIDATION = WAITING_HOST_DATA**；**PRODUCTION ENABLEMENT = HOLD**

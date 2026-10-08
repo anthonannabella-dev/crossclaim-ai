@@ -1,0 +1,174 @@
+{
+  "manifestVersion": 1,
+  "releaseId": "rc-20261008-linux-deploy-v1",
+  "releaseCommit": "PENDING_SEAL",
+  "releaseBranch": "release/rc-20261008-linux-deploy-v1",
+  "sealedAt": "2026-10-08",
+  "deploymentEntryDoc": "DEPLOYMENT.md",
+  "supersedes": {
+    "branch": "release/rc-20261008-linux-deploy",
+    "tipWhenSuperseded": "7357641d7c154d09a6a650b7965d75840c3e6866",
+    "note": "历史 RC 分支保留只读；正式部署来源以本 manifest 的 releaseBranch + releaseCommit 为准"
+  },
+  "sealedReferencesDoNotDeploy": {
+    "release/integration-20261008": "190d57a6",
+    "main(origin)": "5a340bc0",
+    "main(local, stale)": "444a246c"
+  },
+  "forbiddenDeploymentBranches": [
+    "main",
+    "release/integration-20261008",
+    "release/integration-20261006",
+    "gate/*",
+    "feat/*",
+    "fix/*",
+    "acceptance/*",
+    "codex/*"
+  ],
+  "sealingCommitPolicy": {
+    "mode": "DOCS_ONLY_DESCENDANT",
+    "description": "releaseCommit 是代码锚点；允许 releaseBranch 的 tip 是它的后代，且两者之间的变更仅限 allowedPaths（即 manifest 自身的回填提交）。除此之外任何差异一律判失败。",
+    "allowedPaths": [
+      "deploy/release-manifest.json",
+      "DEPLOYMENT.md",
+      "docs/**",
+      "*.md"
+    ],
+    "exactMatchPreferred": true
+  },
+  "runtime": {
+    "node": "22.x",
+    "database": "PostgreSQL 16",
+    "processManager": "systemd",
+    "deployRoot": "/opt/crossclaim"
+  },
+  "services": [
+    {
+      "name": "crossclaim-api",
+      "unit": "deploy/systemd/crossclaim-api.service",
+      "execStart": "/usr/bin/node /opt/crossclaim/apps/api/dist/src/server.js",
+      "buildArtifact": "apps/api/dist/src/server.js",
+      "user": "crossclaim-api",
+      "environmentFile": "/etc/crossclaim/api.env",
+      "ports": [3000],
+      "dependsOn": ["network-online.target", "postgresql.service"],
+      "healthCheck": "GET http://127.0.0.1:3000/health (200)"
+    },
+    {
+      "name": "crossclaim-web",
+      "unit": "deploy/systemd/crossclaim-web.service",
+      "execStart": "/usr/bin/node /opt/crossclaim/apps/web/node_modules/next/dist/bin/next start -p 3001",
+      "buildArtifact": "apps/web/.next",
+      "user": "crossclaim-web",
+      "environmentFile": "/etc/crossclaim/web.env",
+      "ports": [3001],
+      "dependsOn": ["network-online.target", "crossclaim-api.service"],
+      "healthCheck": "GET http://127.0.0.1:3001/ (200)"
+    },
+    {
+      "name": "crossclaim-rsi",
+      "unit": "deploy/systemd/crossclaim-rsi.service",
+      "execStart": "/usr/bin/node /opt/crossclaim/apps/api/dist/src/runtime/rsi-run.js",
+      "buildArtifact": "apps/api/dist/src/runtime/rsi-run.js",
+      "user": "crossclaim-rsi",
+      "environmentFile": "/etc/crossclaim/rsi.env",
+      "ports": [4319],
+      "dependsOn": ["network-online.target", "postgresql.service"],
+      "healthCheck": "GET http://127.0.0.1:4319/health (loopback only)",
+      "installScript": "deploy/install-rsi-service.sh"
+    }
+  ],
+  "installScripts": {
+    "apiAndWeb": "deploy/install-services.sh",
+    "rsi": "deploy/install-rsi-service.sh"
+  },
+  "requiredEnvVarNames": {
+    "/etc/crossclaim/api.env": [
+      "DATABASE_URL",
+      "STORAGE_URL_SECRET",
+      "AUDIT_IP_SALT",
+      "NODE_ENV",
+      "PORT",
+      "LOG_LEVEL",
+      "STORAGE_DRIVER",
+      "STORAGE_LOCAL_ROOT",
+      "METRICS_ENABLED"
+    ],
+    "/etc/crossclaim/web.env": [
+      "CROSSCLAIM_API_URL",
+      "NODE_ENV",
+      "PORT",
+      "NEXT_TELEMETRY_DISABLED"
+    ],
+    "/etc/crossclaim/rsi.env": [
+      "RSI_RECONCILE_REQUIRED",
+      "DATABASE_URL",
+      "RSI_ENABLED",
+      "RSI_PAUSED",
+      "RSI_HEALTH_PORT",
+      "RSI_WATCHDOG_INTERVAL_MS"
+    ]
+  },
+  "commands": {
+    "installDeps": "npm --prefix apps/api ci --no-audit --no-fund && npm --prefix apps/web ci --no-audit --no-fund",
+    "prismaValidate": "npx --prefix apps/api prisma validate",
+    "migrate": "npx --prefix apps/api prisma migrate deploy",
+    "prismaGenerate": "npx --prefix apps/api prisma generate",
+    "buildApi": "npm --prefix apps/api run build",
+    "buildWeb": "npm --prefix apps/web run build",
+    "typecheckApi": "npx --prefix apps/api tsc --noEmit",
+    "typecheckWeb": "npm --prefix apps/web run typecheck",
+    "installServices": "sudo deploy/install-services.sh",
+    "installRsiService": "sudo deploy/install-rsi-service.sh",
+    "restart": "systemctl restart crossclaim-api crossclaim-web crossclaim-rsi",
+    "preflightGate": "node deploy/verify-release.mjs --root ."
+  },
+  "healthChecks": [
+    { "target": "api-health", "command": "curl -fsS http://127.0.0.1:3000/health", "expect": "HTTP 200 with status ok" },
+    { "target": "api-readiness", "command": "curl -fsS http://127.0.0.1:3000/readyz", "expect": "HTTP 200 with ready=true" },
+    { "target": "web-root", "command": "curl -fsS http://127.0.0.1:3001/", "expect": "HTTP 200" },
+    { "target": "rsi-health", "command": "curl -fsS http://127.0.0.1:4319/health", "expect": "HTTP 200" },
+    { "target": "migration-status", "command": "npx --prefix apps/api prisma migrate status", "expect": "Database schema is up to date" }
+  ],
+  "rollback": {
+    "requiresHostApproval": true,
+    "previousKnownGoodReleaseCommit": null,
+    "applicationRollback": "git checkout <previous releaseCommit> && npm --prefix apps/api ci && npm --prefix apps/web ci && npm --prefix apps/api run build && npm --prefix apps/web run build && systemctl restart crossclaim-api crossclaim-web crossclaim-rsi",
+    "schemaRollbackPolicy": "Prisma 不提供自动 down；破坏性变更必须拆成「先加 -> 后用 -> 再删」两段发布",
+    "fullRestore": "仅在确有必要时用迁移前备份执行 pg_restore（需 HOST 授权）",
+    "drillCommand": "node tools/upgrade-verify/two-stage-upgrade.mjs"
+  },
+  "gates": {
+    "requireGitHeadEqualsReleaseCommit": true,
+    "requireCleanWorktree": true,
+    "requireApiBuild": true,
+    "requireApiTypecheck": true,
+    "requiredTestFiles": [
+      "src/__tests__/deploy-systemd-contract.test.ts",
+      "src/__tests__/rsi-deployment-contract.test.ts",
+      "src/__tests__/rsi-reconcile-bootstrap.test.ts",
+      "src/__tests__/rsi-restart-reconcile.test.ts"
+    ]
+  },
+  "boundaries": {
+    "productionDeploymentExecuted": false,
+    "productionDbMigrationExecuted": false,
+    "realProviderWrite": "HOLD",
+    "customsFiling": "HOLD",
+    "payment": "HOLD",
+    "autoCommissionCharge": "HOLD",
+    "productionCredentials": "HOLD",
+    "productionEnablement": "HOLD",
+    "externalWrite": "HOLD",
+    "transport": "HOLD",
+    "secondRuntime": 0,
+    "secondScheduler": 0,
+    "secondGuard": 0,
+    "secondPolicyEngine": 0,
+    "productionReady": false
+  },
+  "secretPolicy": {
+    "secretsInRepo": false,
+    "rule": "本清单只记录环境变量**名称**；任何真实 API Key / 数据库密码 / 令牌一律不写入 Git，取值只经密钥管理注入"
+  }
+}

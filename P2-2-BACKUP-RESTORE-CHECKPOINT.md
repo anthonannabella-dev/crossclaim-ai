@@ -1,5 +1,11 @@
 # P2-2 BACKUP / RESTORE VERIFICATION CHECKPOINT
 
+> ⚠️ **SUPERSEDED（历史归档）** —— 自 2026-10-08 起，CrossClaim 唯一正式部署入口为仓库根目录 `DEPLOYMENT.md`
+> （配合 `deploy/release-manifest.json` 与 `node deploy/verify-release.mjs` 门禁）。
+> 本文仅作历史记录保留，**不得作为部署流程依据**；内容冲突时以 `DEPLOYMENT.md` + manifest 为准。
+> 归档索引：`docs/archive/DEPLOYMENT-HISTORY.md`
+
+
 > 类型：**IMPLEMENTATION CHECKPOINT**（P2-2）
 > 依据：**MSG-20260929-71**（`P2-2 = GO`：CI 合成验证 + B1–B7 + Restore Failure Simulation + dump 产物边界 + 真实备份 HOST ONLY）
 > 分支：`gate/7-commercial-validation` @ **dc61e40**；main = `0e9a273`

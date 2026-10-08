@@ -1,5 +1,11 @@
 # P2-3 SECRET ROTATION CHECKPOINT
 
+> ⚠️ **SUPERSEDED（历史归档）** —— 自 2026-10-08 起，CrossClaim 唯一正式部署入口为仓库根目录 `DEPLOYMENT.md`
+> （配合 `deploy/release-manifest.json` 与 `node deploy/verify-release.mjs` 门禁）。
+> 本文仅作历史记录保留，**不得作为部署流程依据**；内容冲突时以 `DEPLOYMENT.md` + manifest 为准。
+> 归档索引：`docs/archive/DEPLOYMENT-HISTORY.md`
+
+
 > 类型：**IMPLEMENTATION CHECKPOINT（P2-3，Design + Implementation）**
 > 依据：**MSG-20260929-72**（`P2-3 SECRET ROTATION` = GO，范围冻结）
 > 分支：`gate/7-commercial-validation` @ **113cd9b**；main = `1e21219`

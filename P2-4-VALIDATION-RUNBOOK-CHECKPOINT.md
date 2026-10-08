@@ -1,5 +1,11 @@
 # P2-4 PRODUCTION VALIDATION RUNBOOK CHECKPOINT
 
+> ⚠️ **SUPERSEDED（历史归档）** —— 自 2026-10-08 起，CrossClaim 唯一正式部署入口为仓库根目录 `DEPLOYMENT.md`
+> （配合 `deploy/release-manifest.json` 与 `node deploy/verify-release.mjs` 门禁）。
+> 本文仅作历史记录保留，**不得作为部署流程依据**；内容冲突时以 `DEPLOYMENT.md` + manifest 为准。
+> 归档索引：`docs/archive/DEPLOYMENT-HISTORY.md`
+
+
 > 类型：**IMPLEMENTATION CHECKPOINT（P2-4）**
 > 依据：**MSG-20260929-73**（P2-4 = GO，验收标准冻结）
 > 分支：`gate/7-commercial-validation` @ **4c5bf3a**（实现 `c961e0d` / 修复 `4c5bf3a`）；main = `3c565e2`

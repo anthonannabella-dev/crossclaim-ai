@@ -1,5 +1,11 @@
 # RSI Controller —— 服务器部署与自动启动（Alibaba Cloud Linux / systemd）
 
+> ⚠️ **SUPERSEDED（历史归档）** —— 自 2026-10-08 起，CrossClaim 唯一正式部署入口为仓库根目录 `DEPLOYMENT.md`
+> （配合 `deploy/release-manifest.json` 与 `node deploy/verify-release.mjs` 门禁）。
+> 本文仅作历史记录保留，**不得作为部署流程依据**；内容冲突时以 `DEPLOYMENT.md` + manifest 为准。
+> 归档索引：`docs/archive/DEPLOYMENT-HISTORY.md`
+
+
 > 依据 OWNER 任务《补齐 RSI Controller 的服务器部署与自动启动能力》。
 > 硬约束不变：External Write / Payment / Customs Filing / Broker 特权执行 / 生产凭据全部 **HOLD**，只能由 OWNER gate 放行。
 
