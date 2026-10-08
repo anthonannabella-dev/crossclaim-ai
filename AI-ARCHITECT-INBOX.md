@@ -164524,3 +164524,249 @@ HOLD / FORBIDDEN                    = unchanged
 
 结论：历史 5 年扫描这一内部产品单元可以正式封板；下一步不应继续往这个单元加修复，而应进入外部 Provider / staging / production enablement 阶段。
 ```
+
+### [MSG-20261008-14] RC-20261008-LINUX-DEPLOY-PREP 部署准备独立审计裁决（PASS WITH REVISE；reviewed ref 32e28e94；5 项 CHANGE / 6 项 RISK；PRODUCTION_READY = NO）
+
+```text
+CROSSCLAIM · RC-20261008-LINUX-DEPLOY-PREP 独立审计裁决
+PASS WITH REVISE
+
+审计编号： CODEX-RC-AUDIT-1
+REVIEWED_HEAD： 32e28e94
+分支： release/rc-20261008-linux-deploy
+文档 TIP： cc1b3e9e
+审计范围： Linux systemd 部署准备、编译产物入口、Readiness、配置卫生及模型调用边界。
+
+本次裁决基于提供的修复说明、测试结果和部署证据摘要，属于证据级独立复审，并非已重新检出源码、复跑测试或验证 Linux 实机。
+
+一、逐项审计裁决
+
+审计项目
+
+	
+
+裁决
+
+	
+
+理由
+
+
+
+
+DEPLOY_ENTRYPOINT_PATHS (D1/D2)
+
+	
+
+PASS
+
+	
+
+API 启动路径与 RSI systemd ExecStart 已修正为 dist/src/**，符合给出的 TypeScript 编译布局
+
+
+
+
+READINESS_IN_DIST (D3)
+
+	
+
+PASS
+
+	
+
+已修正迁移目录双布局识别，编译产物 /readyz 实测 200，候选目录全缺失仍 fail-closed
+
+
+
+
+CONFIG_HYGIENE
+
+	
+
+PASS
+
+	
+
+仅保留环境变量名称，未提交真实密钥，.env 受 gitignore 保护
+
+
+
+
+MODEL_CHAIN_HONESTY
+
+	
+
+PASS
+
+	
+
+明确仅 local-sim，禁止将 DeepSeek/Qwen 配置名称等同于真实模型已接通
+
+
+
+
+DEPLOY_PREP_SCOPE
+
+	
+
+PASS WITH REVISE
+
+	
+
+GAP-01/02 可以独立后续实施，但必须保持发布阻断，不得将部署准备完成视为生产可用
+
+总体裁决：PASS WITH REVISE。
+
+三个部署缺陷 D1/D2/D3 的修复方向正确，现有证据支持进入下一阶段的部署工程补齐，但不支持直接公开上线。
+
+二、CHANGES · 必须执行的修订
+
+CHANGE 1 — RELEASE BLOCKER
+
+补齐 API / Web systemd unit、启动顺序、环境变量加载、服务账户权限、重启策略和停止行为。Linux 实机验证前，不得声明完整 systemd 部署闭环。
+
+CHANGE 2 — RELEASE BLOCKER
+
+补齐 TLS、反向代理、域名路由、HTTPS 安全配置与公网入口控制。HTTP localhost 200 不能替代公开入口验收。
+
+CHANGE 3 — RUNTIME BLOCKER
+
+将 createPrismaRsiReconcileStore 接入实际 rsi-run 启动入口，验证重启恢复、队列对账、幂等及多 worker 竞争。RSI_RECONCILE=NOT_CONFIGURED 不得进入生产启用状态。
+
+同时，生产 durable queue、fencing/lease 隔离与长时间任务超租约风险必须关闭，或证明具有足够严格且可验证的生产禁用隔离。不能因为本地测试通过而解除这些约束。
+
+CHANGE 4 — VERIFICATION REQUIRED
+
+在 Linux 环境执行尚未完成的 deploy-smoke、backup-verify、触发器与一致性 SQL、systemd A–F，并确认 GitHub Actions 结果。
+
+迁移 checksum 应使用 Git 固定内容作为校验依据，不应依赖本机 CRLF 工作区表现。
+
+CHANGE 5 — TEST ISOLATION
+
+P2E-DB5 及 broker authorization hook 超时仍应作为未关闭的测试债跟踪。单跑 30/30 通过说明失败可能与并行负载相关，但不能据此直接等同全量回归通过。
+
+三、RISKS · 剩余风险
+
+风险
+
+	
+
+等级
+
+	
+
+当前处置
+
+
+
+
+Durable queue / reconcile 尚未生产接线
+
+	
+
+P0
+
+	
+
+生产阻断
+
+
+
+
+Lease fencing 缺失及长任务租约超时
+
+	
+
+P0
+
+	
+
+生产阻断或严格隔离
+
+
+
+
+无 TLS、反向代理及完整 systemd 服务
+
+	
+
+P0
+
+	
+
+公网发布阻断
+
+
+
+
+Linux 实机、备份恢复及 SQL 门禁未验证
+
+	
+
+P0
+
+	
+
+部署验收阻断
+
+
+
+
+DeepSeek/Qwen 仅 local-sim
+
+	
+
+P1
+
+	
+
+真实智能决策不可宣称可用
+
+
+
+
+4670/4672，全量回归存在两项失败
+
+	
+
+P1
+
+	
+
+保留测试债并复验
+
+四、审计结论与授权边界
+
+LINUX_DEPLOY_PREP
+
+PASS WITH REVISE
+
+RC_CODE_TREE
+
+ACCEPTED FOR NEXT STAGE
+
+LINUX_HOST_DEPLOYMENT
+
+NOT VERIFIED
+
+REAL_EXTERNAL_EXECUTION
+
+NOT EXECUTED
+
+PRODUCTION_READY
+
+NO
+
+允许继续： 在现有 RC 分支上执行 GAP-01/02 和 runtime 启动恢复补齐，随后进行隔离的 Linux staging 部署、验证及独立复审。
+
+不允许： 直接切换公开生产流量、执行未经单独授权的生产数据库迁移、写入生产密钥、开放真实外部写操作、支付扣佣或自动报关。
+
+不要求回退已确认的 D1/D2/D3 修复，也不要求新增 Docker 架构。继续采用既定 systemd 方案即可。
+
+FINAL VERDICT = PASS WITH REVISE
+
+RC-20261008-LINUX-DEPLOY-PREP 的本轮修复可接受；Linux 部署准备仍有发布阻断项，PRODUCTION_READY = NO。
+
+本裁决仅在当前会话返回，未写入仓库。
+```

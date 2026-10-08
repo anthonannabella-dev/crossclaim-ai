@@ -139,6 +139,25 @@ PRODUCTION_READY              = NO
 HOST_APPROVAL_REQUIRED        = 生产部署 / 生产迁移 / 生产密钥 / 公开流量 / 外部自动提交 / 支付扣佣
 ```
 
+### 独立审计（AUDIT-RC-1）
+
+```
+AUDIT_RC_1                    = PASS WITH REVISE（MSG-20261008-14，逐字归档 FULL_COPY_OK）
+AUDIT_RC_1_REVIEWED_HEAD      = 32e28e94
+AUDIT_CHANNEL                 = https://chatgpt.com/c/6ac75e85-0cf4-83ec-820f-10101ae3208d
+DEPLOY_ENTRYPOINT_PATHS       = PASS
+READINESS_IN_DIST             = PASS
+CONFIG_HYGIENE                = PASS
+MODEL_CHAIN_HONESTY           = PASS
+DEPLOY_PREP_SCOPE             = PASS WITH REVISE
+RC_CODE_TREE                  = ACCEPTED FOR NEXT STAGE
+LINUX_HOST_DEPLOYMENT         = NOT VERIFIED
+CHANGES_REQUIRED              = 5（见 §10 与 RC-20261008-AUDIT-REQUEST.md §7.3）
+```
+
+> 首次投递（旧会话）因助手侧 `Unknown error` 未取得裁决；换新会话后投递成功并取得上述裁决。
+> 两次投递记录与提取保真证据见 `RC-20261008-AUDIT-REQUEST.md` §7.1 / §7.2。
+
 ---
 
 ## 9. RC 代码树锚点（回填）
@@ -153,9 +172,16 @@ HOST_APPROVAL_REQUIRED        = 生产部署 / 生产迁移 / 生产密钥 / 公
 
 ## 10. 待办（下一步，需新授权或新单元）
 
-1. 新增 `crossclaim-api.service` / `crossclaim-web.service`（GAP-01）+ 一次窄审计；
-2. TLS / 反向代理参考配置（GAP-02）；
-3. RSI 生产入口接线 durable reconcile（GAP-05）；
-4. 修正 `RSI-DEPLOYMENT.md` 漂移（GAP-04 / GAP-06）；
-5. RC tag `rc-20261008-linux-deploy`（GAP-10）；
-6. 真实 provider sidecar + 窄审计（见 `MODEL-PROVIDER-REAL-CALL-READINESS.md` §3.4）。
+**来自 AUDIT-RC-1 的强制修订（CHANGE 1–5）**
+
+1. **[RELEASE BLOCKER]** 新增 `crossclaim-api.service` / `crossclaim-web.service`，含启动顺序、环境变量加载、服务账户权限、重启策略与停止行为（GAP-01）；
+2. **[RELEASE BLOCKER]** TLS / 反向代理 / 域名路由 / HTTPS 安全配置与公网入口控制（GAP-02）；
+3. **[RUNTIME BLOCKER]** 把 `createPrismaRsiReconcileStore` 接入 `rsi-run` 启动入口并验证重启恢复 / 队列对账 / 幂等 / 多 worker 竞争（GAP-05）；同时关闭或严格隔离 durable queue 与 lease fencing 债；
+4. **[VERIFICATION REQUIRED]** Linux 实机执行 deploy-smoke、backup-verify、触发器与一致性 SQL、systemd A–F，并确认 GitHub Actions；迁移 checksum 改用 Git 固定内容为校验依据（GAP-09）；
+5. **[TEST ISOLATION]** P2E-DB5 与 broker hook 超时作为独立测试债继续跟踪。
+
+**其余（非阻断）**
+
+6. 修正 `RSI-DEPLOYMENT.md` 漂移（GAP-04 / GAP-06）；
+7. RC tag `rc-20261008-linux-deploy`（GAP-10）；
+8. 真实 provider sidecar + 窄审计（见 `MODEL-PROVIDER-REAL-CALL-READINESS.md` §3.4）。

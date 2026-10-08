@@ -165,31 +165,60 @@ node dist/runtime/rsi-run.js → Error: Cannot find module 'D:\crossclaim-ai\app
 
 ---
 
-## 7. 投递记录（AUDIT-RC-1）—— **通道阻塞，裁决未取得**
+## 7. 投递记录与裁决（AUDIT-RC-1）
+
+### 7.1 第一次投递 —— 通道故障（未取得裁决）
 
 | 项 | 值 |
 | --- | --- |
-| 通道 | 右侧 ChatGPT 会话 `https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67`（in-app browser） |
-| 投递时间 | 2026-10-08 17:53（本地） |
-| 标记 | `[CODEX-RC-AUDIT-1]` |
-| 投递校验 1 · 新用户轮出现 | **PASS** —— 会话中出现新的「你说：」轮，正文与送审文本逐字一致（含标记） |
-| 投递校验 2 · composer 清空 | **PASS（已手工修正）** —— 首次发送后 composer 仍残留同一草稿；已清空并复核为空（`contenteditable` 长度 = 1，仅换行） |
-| 投递校验 3 · 生成指示 | **FAIL** —— 助手侧未进入生成态，而是返回 `Unknown error` 并给出「重试」 |
-| 重试 | 已点击「重试」**2 次**；两次均再次落到 `Unknown error`，未产出任何裁决文本 |
-| 当前页面证据 | 我这条消息之后**没有**助手回复；`document.body.innerText` 中 `Unknown error` 仍存在 |
-| 裁决 | **未取得** |
+| 通道 | 旧会话 `https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67`（563 条消息） |
+| 时间 | 2026-10-08 17:53（本地） |
+| 投递校验 1 · 新用户轮出现 | PASS（正文与送审文本逐字一致，含标记） |
+| 投递校验 2 · composer 清空 | PASS（首次发送后残留草稿，已手工清空并复核） |
+| 投递校验 3 · 生成指示 | **FAIL** —— 助手侧返回 `Unknown error` |
+| 重试 | 点击「重试」2 次，均再次 `Unknown error`，无任何裁决文本 |
+| 处置 | 停止浏览器操作；不虚构裁决；`AUDIT-RC-1 = PENDING / CHANNEL_BLOCKED` |
 
-**处置（按审计桥规范）**：
+### 7.2 第二次投递 —— 新会话，**裁决已取得**
 
-1. **已停止浏览器操作**（不再反复重试，避免污染会话）；
-2. 审计包已保存并 push：本文件 + §1–§6 全部证据；
-3. **不虚构裁决、不自行宣告 PASS** —— `AUDIT-RC-1 = PENDING / CHANNEL_BLOCKED`；
-4. 该会话已累积 563 条消息；`Unknown error` 疑与服务端/会话规模相关，**需人工介入**（新开会话、清理该会话、或确认账户状态）。
+| 项 | 值 |
+| --- | --- |
+| 通道 | **新会话** `https://chatgpt.com/c/6ac75e85-0cf4-83ec-820f-10101ae3208d`（标题「部署准备审计判定」） |
+| 投递校验 1 · 新用户轮出现 | **PASS**（含标记 `[CODEX-RC-AUDIT-1]`） |
+| 投递校验 2 · composer 清空 | **PASS**（`contenteditable` 长度 = 1，仅换行） |
+| 投递校验 3 · 生成指示 | **PASS**（出现「停止」= 生成中；随后「回答已完成」） |
+| 提取方式 | 直接读取 DOM 渲染文本（非 accessibility tree），并校验为 `document.body.innerText` 的**连续子串** |
+| 原文 | 241 行 / 2490 字符；sha256 `f5f69f11639fbe37b348351d675c5b554ca4b3f16ab32b015ade0ffe81629791` |
+| 归档 | `AI-ARCHITECT-INBOX.md` → **`MSG-20261008-14`** |
+| 逐字校验 | `tools/verification/archive-verdict.mjs` + `tools/verdict-diff/compare.mjs` → **`RESULT: FULL_COPY_OK`（原文 81 行 / 归档 81 行 / 缺失 0 / 多出 0）** |
 
-**恢复审计所需的最小动作（HOST）**：
+> 校验限制（如实声明）：比对器验证的是「我的归档副本 ↔ 我的抽取源文件」逐行一致，
+> 即**机械复制保真**；抽取本身另以「连续子串 + 哈希」佐证，但不等于第三方独立复算。
 
-- 在右侧新开一个干净会话（或确认当前会话可正常生成），然后把本文件 §1–§6 作为送审内容投递；
-- 或直接告知「重发」，我会在新通道就绪后重新投递**同一份**送审内容（锚点仍为 `32e28e94`）。
+### 7.3 裁决要点（MSG-20261008-14，原文见归档）
 
-> 在裁决取得之前，本 RC 的定位是：**代码与证据已就绪、可复现、可回滚的发布候选**；
-> 而非「已通过独立审计的发布候选」。`PRODUCTION_READY = NO` 不变。
+**VERDICT = PASS WITH REVISE**（REVIEWED_HEAD `32e28e94`）
+
+| 审计项 | 裁决 |
+| --- | --- |
+| DEPLOY_ENTRYPOINT_PATHS (D1/D2) | PASS |
+| READINESS_IN_DIST (D3) | PASS |
+| CONFIG_HYGIENE | PASS |
+| MODEL_CHAIN_HONESTY | PASS |
+| DEPLOY_PREP_SCOPE | PASS WITH REVISE |
+
+**CHANGES（5 项）**
+
+1. **[RELEASE BLOCKER]** 补齐 API / Web 的 systemd unit、启动顺序、环境变量加载、服务账户权限、重启策略与停止行为；Linux 实机验证前不得声明完整 systemd 部署闭环。
+2. **[RELEASE BLOCKER]** 补齐 TLS、反向代理、域名路由、HTTPS 安全配置与公网入口控制；HTTP localhost 200 不能替代公开入口验收。
+3. **[RUNTIME BLOCKER]** 把 `createPrismaRsiReconcileStore` 接入实际 `rsi-run` 启动入口，验证重启恢复、队列对账、幂等与多 worker 竞争；`RSI_RECONCILE=NOT_CONFIGURED` 不得进入生产启用状态。
+4. **[VERIFICATION REQUIRED]** 在 Linux 上执行 deploy-smoke、backup-verify、触发器与一致性 SQL、systemd A–F，并确认 GitHub Actions；迁移 checksum 应以 Git 固定内容为校验依据（不依赖本机 CRLF 工作区表现）。
+5. **[TEST ISOLATION]** P2E-DB5 与 broker authorization hook 超时继续作为未关闭测试债；单跑 30/30 不能等同全量回归通过。
+
+**RISKS（P0）**：durable queue / reconcile 未接线；lease fencing 缺失与长任务租约超时；无 TLS/反代/完整 systemd 服务；Linux 实机与备份/SQL 门禁未验证。
+
+**边界**：`LINUX_DEPLOY_PREP = PASS WITH REVISE`、`RC_CODE_TREE = ACCEPTED FOR NEXT STAGE`、`LINUX_HOST_DEPLOYMENT = NOT VERIFIED`、`REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`、`PRODUCTION_READY = NO`。
+
+**允许继续**：在现有 RC 分支上执行 GAP-01/02 与 runtime 启动恢复补齐，随后做隔离的 Linux staging 部署、验证及独立复审。
+**不允许**：直接切换公开生产流量、未经单独授权的生产数据库迁移、写入生产密钥、开放真实外部写、支付扣佣或自动报关。
+**不要求回退 D1/D2/D3，也不要求新增 Docker 架构**（继续既定 systemd 方案）。
