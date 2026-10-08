@@ -659,8 +659,11 @@ durable 行 `RUNNING / nextShardIndex=2`；第二次同一域步骤调用（新�
 | i18n | **PASS** | `I18N_CHECK=OK locales=5 keys=904 statusCodes=13 customerHardcodes=0`（`HARDCODED_CUSTOMER_STRINGS=0`、`RAW_ENUM_FALLBACK_HITS=0`） |
 | api-contract | **PASS** | `implemented=100 documented=87` → `API_CONTRACT_OK` |
 | recover-projection gate | **PASS（fail-closed 保持）** | `/recover` 不产出静态页、sitemap 为空、全部 404（未生成投影时不套模板） |
-| 全量回归 | 运行中 | `apps/api` 全量 vitest（下一 tick 收取结果） |
+| 全量回归 | **4657/4658（唯一失败 = 既有 P2E-DB5 flake，隔离重跑 20/20 PASS）** | `apps/api` 全量 vitest（461 文件 / 4658 tests，1435s）；失败项 `recovery-si-phase2-e-db.test.ts > P2E-DB5`（`prisma.payment.count()` 期望 0 得 1，全量并发下的既有顺序型 flake，与本单元改动无关；单跑 `20 passed`） |
 | 浏览器 desktop+mobile 旅程 | 待做 | 结果页 `/recoveries/scans/[id]`（未重构已封板 UI V2） |
+
+**审计通道恢复 + 送审进度**：该会话曾服务端不可加载（§13.15），恢复后已重发 AUDIT-2R5 并收到 **PASS**（§13.16，PHASE 10 CLOSED）；
+随后已送 **AUDIT-3（PHASE 11/12，REVIEWED_HEAD `5062812a`）**，投递三项校验通过（composer 清空 / 标记新用户轮 / 生成中），裁决待读。
 
 > 边界不变：`REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`、`REAL_VALIDATION_COMPLETE = NO`、`PRODUCTION_READY = NO`；
 > `SECOND_* = 0`；全部外部写 / 凭据 / 运输 = HOLD。GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
