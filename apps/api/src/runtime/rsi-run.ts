@@ -280,6 +280,26 @@ export async function composeRsiRuntime(input: {
     awaitVerdict: domainPackList.length > 0 ? true : (input.awaitVerdict ?? false),
   });
 
+  // HISTORICAL_RECOVERY_SCAN_V1 / AUDIT-2R2 CHANGE 1（MSG-20261008-06）：
+  // **先**组装 domain-step-aware controller，**再**交给 event loop —— 否则 loop.start() / controller.emit()
+  // 持有的是原始 controller，domain step 永远不会运行（只在手动 tick 时运行）。
+  const domainStep = input.historicalScanDomainStep;
+  const controllerWithDomainSteps =
+    domainStep === undefined
+      ? controller
+      : {
+          ...controller,
+          async tick() {
+            const outcome = await controller.tick();
+            const claimed = (outcome as { claimed?: { dedupeKey?: unknown } } | null | undefined)?.claimed;
+            const dedupeKey = claimed?.dedupeKey;
+            if (typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:')) {
+              await domainStep({ dedupeKey });
+            }
+            return outcome;
+          },
+        };
+
   const localSources: RsiEventSources = createLocalEventSources({
     readFile: input.readFile,
     paths: {
@@ -290,7 +310,7 @@ export async function composeRsiRuntime(input: {
   });
 
   const loop = createRsiEventLoop({
-    controller,
+    controller: controllerWithDomainSteps,
     sources: localSources,
     intervalMs: input.intervalMs ?? 60_000,
   });
@@ -324,27 +344,6 @@ export async function composeRsiRuntime(input: {
         });
 
   const reconcileSpec = input.reconcile;
-  // HISTORICAL_RECOVERY_SCAN_V1 / AUDIT-2R（MSG-20261008-05）：
-  // runtime **认领之后**由 server-owned composition 显式驱动的领域步骤（例如 historical scan execution port）。
-  // 它不是第二 runtime / 第二 scheduler：只在既有 tick 之后被调用，且只在扫描任务上触发；
-  // claim / lease / park-for-judge / reserved namespace 语义一律不变。
-  const domainStep = input.historicalScanDomainStep;
-  const controllerWithDomainSteps =
-    domainStep === undefined
-      ? controller
-      : {
-          ...controller,
-          async tick() {
-            const outcome = await controller.tick();
-            const claimed = (outcome as { claimed?: { dedupeKey?: unknown } } | null | undefined)?.claimed;
-            const dedupeKey = claimed?.dedupeKey;
-            if (typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:')) {
-              await domainStep({ dedupeKey });
-            }
-            return outcome;
-          },
-        };
-
   return {
     loop,
     controller: controllerWithDomainSteps,
