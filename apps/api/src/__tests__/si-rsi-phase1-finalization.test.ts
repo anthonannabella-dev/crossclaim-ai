@@ -169,14 +169,14 @@ describe('PHASE 1 FINALIZATION · C2 运行中租约接管 + fencing', () => {
     expect((await prisma.autonomyLease.findUniqueOrThrow({ where: { taskId: task.id } })).ownerRef).toBe('worker-B');
 
     // 旧 worker A 迟到提交 ⇒ 必须被拒绝（fencing）
-    const stale = await a.settle({ taskId: task.id, ownerRef: 'worker-A', outcome: 'COMPLETED' });
+    const stale = await a.settle({ taskId: task.id, ownerRef: 'worker-A', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' });
     expect(stale.applied).toBe(false);
     expect(stale.reason).toBe('FENCED_OWNER_MISMATCH');
     const stillRunning = await prisma.autonomyTask.findUniqueOrThrow({ where: { id: task.id } });
     expect(stillRunning.status).toBe('IN_PROGRESS'); // 未被旧 worker 覆盖
 
     // 新 owner B 正常提交
-    const fresh = await b.settle({ taskId: task.id, ownerRef: 'worker-B', outcome: 'COMPLETED' });
+    const fresh = await b.settle({ taskId: task.id, ownerRef: 'worker-B', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' });
     expect(fresh.applied).toBe(true);
     // 既有 DB 词汇表无 COMPLETED：成功终态映射为 PROMOTED（已登记为已知限制）
     expect((await prisma.autonomyTask.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('PROMOTED');
@@ -197,7 +197,7 @@ describe('PHASE 1 FINALIZATION · C2 运行中租约接管 + fencing', () => {
         expiresAt: new Date('2026-10-08T11:59:00.000Z'),
       },
     });
-    const late = await a.settle({ taskId: task.id, ownerRef: 'worker-A', outcome: 'COMPLETED' });
+    const late = await a.settle({ taskId: task.id, ownerRef: 'worker-A', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' });
     expect(late.applied).toBe(false);
     expect(late.reason).toBe('FENCED_LEASE_EXPIRED');
     expect((await prisma.autonomyTask.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('IN_PROGRESS');

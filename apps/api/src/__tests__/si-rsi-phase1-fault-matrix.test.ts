@@ -140,13 +140,13 @@ describe('PHASE 1 / C6 · 多 worker 故障注入矩阵', () => {
     await b.reclaimExpired(5);
     await b.claim(5);
 
-    expect((await a.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED' })).reason).toBe('FENCED_OWNER_MISMATCH');
+    expect((await a.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' })).reason).toBe('FENCED_OWNER_MISMATCH');
     expect((await a.fail({ taskId, ownerRef: 'worker-A', errorCode: 'LATE' })).reason).toBe('FENCED_OWNER_MISMATCH');
     const row = await prisma.autonomyTask.findUniqueOrThrow({ where: { id: taskId } });
     expect(row.status).toBe('IN_PROGRESS');
     expect(row.attempts).toBe(0);
     // 新 owner 正常提交
-    expect((await b.settle({ taskId, ownerRef: 'worker-B', outcome: 'COMPLETED' })).applied).toBe(true);
+    expect((await b.settle({ taskId, ownerRef: 'worker-B', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' })).applied).toBe(true);
     expect((await prisma.autonomyTask.findUniqueOrThrow({ where: { id: taskId } })).status).toBe('PROMOTED');
   });
 
@@ -213,8 +213,8 @@ describe('PHASE 1 / C6 · 多 worker 故障注入矩阵', () => {
     await a.claim(5);
     const taskId = (await prisma.autonomyTask.findFirstOrThrow({ where: { dedupeKey: key } })).id;
 
-    expect((await a.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED' })).applied).toBe(true);
-    const again = await a.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED' });
+    expect((await a.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' })).applied).toBe(true);
+    const again = await a.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' });
     expect(again.applied).toBe(false);
     expect(again.reason).toBe('LEASE_NOT_ACTIVE');
     const lateFail = await a.fail({ taskId, ownerRef: 'worker-A', errorCode: 'AFTER_DONE' });

@@ -172,7 +172,7 @@ describe('PHASE 1 / C3 · 失败重试与退避', () => {
     const a = source('worker-A');
     await a.claim(5);
     const taskId = (await prisma.autonomyTask.findFirstOrThrow({ where: { dedupeKey: key } })).id;
-    const ok = await a.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED' });
+    const ok = await a.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' });
     expect(ok.applied).toBe(true);
     expect((await prisma.autonomyTask.findUniqueOrThrow({ where: { id: taskId } })).status).toBe('PROMOTED');
     expect((await prisma.autonomyLease.findUniqueOrThrow({ where: { taskId } })).status).toBe('RELEASED');

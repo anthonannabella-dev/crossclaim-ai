@@ -592,3 +592,27 @@ R6 断言已按实测更新为「无 recovery-si 记录 + caller runner 0」—�
 
 **口径**：organizationId 仍只由 durable claim（C4 门禁通过后）写入；JSON legacy 来源无该字段 ⇒ 两条防线
 （bind 未绑定 + 执行前复核）都会拒绝。回归：SI-RSI 全套件 **10 文件 / 58 tests 全绿**，api tsc 0。
+
+### 3.9 P2-CHANGE3（P1）业务完成状态真实性 —— 已实现并取证
+
+**新增业务结果词表**（`recovery-business-outcome.ts`，纯函数）：
+`NOT_DISPATCHED → DISPATCHED → WAITING_ON_PROVIDER / WAITING_ON_CUSTOMER / BLOCKED`（均**非完成**）
+`→ OPPORTUNITY_IDENTIFIED → CLAIM_PREPARED`（本地可达上限）`→ CLAIM_SUBMITTED → PROVIDER_CONFIRMED → SETTLEMENT_RECEIVED`（HOLD）。
+
+关键规则：
+- **dispatch 本身只得到 `DISPATCHED`**，绝不产出完成级结果（`dispatchImpliesBusinessSuccess = false`）；
+- `isTerminalBusinessCompletion` 仅对 `PROVIDER_CONFIRMED` / `SETTLEMENT_RECEIVED` 为真
+  ⇒ 「已准备索赔 / 已提交索赔」**都不算**追回成功；
+- `internalTaskStatusForBusinessOutcome`：`CLAIM_PREPARED` ⇒ **BLOCKED**（不是 PROMOTED），只有真实终局档才 ⇒ `PROMOTED`；
+- `settle({outcome:'COMPLETED'})` 现在**必须携带真实终局业务结果**，否则拒绝（`EXEC_SETTLE_BUSINESS_OUTCOME_NOT_TERMINAL`）。
+
+**验收**（`si-rsi-phase2-business-outcome.test.ts`，4/4 PASS；真实 PG 覆盖守卫）
+| 用例 | 断言 |
+| --- | --- |
+| B1 | dispatch / BLOCKED / WAITING_* 均非完成；仅 PROVIDER_CONFIRMED / SETTLEMENT_RECEIVED 为真实完成 |
+| B2 | 推导单调：仅 dispatch ⇒ DISPATCHED；逐级需各自证据；本地**不得**臆造 HOLD 档（无外写/回款证据） |
+| B3 | 内部映射：CLAIM_PREPARED ⇒ BLOCKED（关键：不得 PROMOTED） |
+| B4 | 真实 PG：无业务结果 与 **仅「已准备索赔」** 均被拒；任务保持 IN_PROGRESS（未被标成拉回成功）；只有 SETTLEMENT_RECEIVED 才放行 ⇒ PROMOTED |
+
+**连带更新**：PHASE 1 的 4 处 `settle(COMPLETED)` lifecycle 测试补上 `businessOutcome: 'SETTLEMENT_RECEIVED'`
+（它们验证的是状态机本身，需显式提供真实终局证据）。回归：SI-RSI 全套件 **11 文件 / 62 tests 全绿**，api tsc 0。

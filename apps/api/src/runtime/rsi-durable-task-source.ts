@@ -59,6 +59,12 @@ export interface RsiDurableTaskSource {
     taskId: string;
     ownerRef: string;
     outcome: 'COMPLETED' | 'BLOCKED';
+    /**
+     * P2-CHANGE3：`outcome='COMPLETED'` 时必须给出**真实终局业务结果**
+     * （PROVIDER_CONFIRMED / SETTLEMENT_RECEIVED）；否则拒绝落 PROMOTED
+     * —— 防止把「dispatch 成功 / 已准备索赔」当成客户追回成功。
+     */
+    businessOutcome?: import('./recovery-business-outcome').RecoveryBusinessOutcome;
   }): Promise<{ applied: boolean; reason: string }>;
   /**
    * C3（CHANGE 3）—— 失败与重试：fenced 记录失败码、attempts+1、按指数退避设置 nextAttemptAt；
@@ -270,6 +276,13 @@ export function createAutonomyTaskSource(input: {
      * 从而不会覆盖新 owner 的结果，也不会产生重复副作用。
      */
     async settle(request): Promise<{ applied: boolean; reason: string }> {
+      // P2-CHANGE3：成功终态必须有真实终局业务证据，否则拒绝（不得把 dispatch/准备索赔当追回成功）
+      if (request.outcome === 'COMPLETED') {
+        const { isTerminalBusinessCompletion } = await import('./recovery-business-outcome');
+        if (request.businessOutcome === undefined || !isTerminalBusinessCompletion(request.businessOutcome)) {
+          return { applied: false, reason: 'EXEC_SETTLE_BUSINESS_OUTCOME_NOT_TERMINAL' };
+        }
+      }
       const at = now();
       return input.prisma.$transaction(async (tx) => {
         const lease = await tx.autonomyLease.findUnique({ where: { taskId: request.taskId } });
