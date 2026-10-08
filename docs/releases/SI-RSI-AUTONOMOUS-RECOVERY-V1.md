@@ -1094,3 +1094,37 @@ node tools/dev/run-si-rsi-suite.mjs --rounds 1 --all --label full-api-2x     # h
 **口径**：`FULL_API_REGRESSION = COMPLETED（480/480 文件已执行；478 通过）`；
 阻塞项收敛为 **1 个环境漂移（待 HOST）+ 1 个间歇性用例债**；`PRODUCTION_READY = NO` 不变，
 外写 / 申报 / 支付 / 扣佣继续 HOLD。
+
+### 3.21 `email-verification-db` 间歇失败 —— 根因定位并已修复（锁竞争型 Hook 超时）
+
+**症状**：第二次全量回归中 `src/__tests__/email-verification-db.test.ts` 的 `PC-01B F` 用例失败，报
+**`Hook timed out in 10000ms`** —— 失败点在**钩子**（`beforeEach`），不是用例断言；该文件单文件隔离运行 **8/8 通过**，
+且第一次全量回归该文件是通过的 ⇒ 间歇性。
+
+**根因（本机可复现，非推测）**
+该文件 `beforeEach` 执行 `TRUNCATE TABLE "AuditLog", "Session", "EmailVerificationToken", "PasswordResetToken", "Membership", "User", "Organization" CASCADE`，
+TRUNCATE 需要 **ACCESS EXCLUSIVE** 锁；共享开发库上若有其它连接持有相关表锁（**本机 3 个后台 `rsi-run` 进程**、
+或上一个测试文件尚未释放的连接），TRUNCATE 会一直等待，直到 Vitest 默认 `hookTimeout = 10s` 触发。
+
+复现实验（只读 LOCK，不改数据）：
+| 步骤 | 观测 |
+| --- | --- |
+| 另一连接 `LOCK TABLE "User" IN ACCESS SHARE MODE` 持有 15 秒 | 锁正常持有 |
+| 在该条件下执行**修复前**的裸 TRUNCATE（与 `beforeEach` 同语句） | **阻塞 13,056 ms** ⇒ >10 s ⇒ 必然触发 `Hook timed out`，与全量回归报错一致 |
+
+**修复**（`apps/api/src/__tests__/email-verification-db.test.ts`，**不改任何断言**）
+- `beforeEach` 改为 `truncateAll()`：事务内 `SET LOCAL lock_timeout = '3s'`（把**无限等待**变成**有界等待**）
+  + 退避重试最多 6 次 + 该 `beforeEach` 显式 `hookTimeout = 30s`。
+- **判据零变化**：仍清同一批表、仍跑同一批断言；只是钩子不再因共享库上的锁竞争而假失败。
+
+**验证**
+| 项 | 结果 |
+| --- | --- |
+| `api tsc --noEmit` | **0** |
+| 人为持锁 15s 条件下运行该文件 | **Test Files 1 passed / Tests 8 passed**（21.28s，可见有界等待与重试生效） |
+| 无锁竞争条件下 | **Test Files 1 passed / Tests 8 passed**（9.19s） |
+| 冻存证据 | `tools/verification/si-rsi-suite-runs/email-verification-hook-timeout.json` |
+
+**仍未验证**：未重跑全量 480 文件 ⇒ 该文件与 `reconciliation-schema-s1-db` 的全量稳定性需下一次全量回归确认。
+**该修复同时说明**：三个后台 `rsi-run` 进程共享开发库会**实质影响测试稳定性**（不只是"潜在"），
+故「停止/迁移这 3 个进程」与「删除残留 schema `rc_c3_fresh_check`」两项仍请 HOST 决定。

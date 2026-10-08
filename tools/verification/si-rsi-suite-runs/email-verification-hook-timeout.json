@@ -1,0 +1,28 @@
+{
+  "id": "EMAIL-VERIFICATION-HOOK-TIMEOUT-FIX",
+  "observed": "第二次全量回归（full-api-2x）：src/__tests__/email-verification-db.test.ts 的 PC-01B F 用例失败，错误为「Hook timed out in 10000ms」——失败发生在**钩子**而非用例断言；同一文件单文件隔离运行 8/8 通过；第一次全量回归该文件通过 ⇒ 判定为间歇性",
+  "rootCause": {
+    "statement": "该文件 beforeEach 的 TRUNCATE ... CASCADE 需要 ACCESS EXCLUSIVE 锁；共享开发库上若有其它连接持有相关表锁（本机 3 个后台 rsi-run 进程、或上一个测试文件尚未释放的连接），TRUNCATE 会一直等待到 Vitest 默认 hookTimeout=10s，于是报 Hook timed out",
+    "reproduction": {
+      "steps": [
+        "用另一个连接执行 LOCK TABLE \"User\" IN ACCESS SHARE MODE 并持有 15 秒（ACCESS SHARE 与 ACCESS EXCLUSIVE 冲突）",
+        "在该条件下执行**修复前**的裸 TRUNCATE（与 beforeEach 完全相同语句）"
+      ],
+      "measured": {
+        "oldStyleTruncateBlockedMs": 13056,
+        "verdict": "阻塞 13.1 秒 > 10 秒 ⇒ 必然触发 hook 超时，与全量回归观察到的报错一致"
+      }
+    }
+  },
+  "fix": {
+    "file": "apps/api/src/__tests__/email-verification-db.test.ts",
+    "change": "beforeEach 改为 truncateAll()：事务内 SET LOCAL lock_timeout = 3s（把无限等待变成有界等待）+ 退避重试最多 6 次 + 该 beforeEach 显式 hookTimeout 30s",
+    "judgementChanges": "无（不改任何断言；只让钩子等待有界、可重试）"
+  },
+  "verification": {
+    "typecheck": "api tsc --noEmit = 0",
+    "underHeldLock": "人为持锁 15s 条件下：Test Files 1 passed / Tests 8 passed（耗时 21.28s，可见有界等待+重试生效）",
+    "normal": "无锁竞争条件下：Test Files 1 passed / Tests 8 passed（9.19s）"
+  },
+  "notYetVerified": "未重跑全量 480 文件；该文件在全量下的稳定性需下一次全量回归确认"
+}

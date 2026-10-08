@@ -47,12 +47,47 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-beforeEach(async () => {
-  delivery.outbox.length = 0;
-  await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "Session", "EmailVerificationToken", "PasswordResetToken", "Membership", "User", "Organization" CASCADE;',
-  );
-});
+const TRUNCATE_ALL_SQL =
+  'TRUNCATE TABLE "AuditLog", "Session", "EmailVerificationToken", "PasswordResetToken", "Membership", "User", "Organization" CASCADE;';
+
+/**
+ * 间歇失败修复（第二次全量回归实测：本文件某个用例报 `Hook timed out in 10000ms`）。
+ *
+ * 实测失败发生在**钩子**而不是用例断言：`TRUNCATE … CASCADE` 需要 ACCESS EXCLUSIVE 锁，
+ * 共享开发库上若有其它连接持有相关表的锁（本机后台 `rsi-run` 进程、或上一个测试文件尚未释放的连接），
+ * TRUNCATE 会一直等待到 Vitest 默认 hookTimeout（10s）⇒ 报 "Hook timed out"。
+ * 该用例本身在单文件隔离运行时 8/8 通过。
+ *
+ * 处置（只让等待**有界且可重试**，不改任何判据）：
+ *   ① 事务内 `SET LOCAL lock_timeout`，把「无限等待」变成「最多等 3 秒」；
+ *   ② 失败按退避重试最多 6 次；
+ *   ③ 该 beforeEach 显式放宽到 30s（覆盖建连 + 退避重试的合法开销）。
+ */
+async function truncateAll(attempts = 6): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '3s'");
+        await tx.$executeRawUnsafe(TRUNCATE_ALL_SQL);
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) break;
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
+  throw lastError;
+}
+
+beforeEach(
+  async () => {
+    delivery.outbox.length = 0;
+    await truncateAll();
+  },
+  30_000,
+);
 
 async function seedUser(options: { emailVerified?: boolean } = {}) {
   const organization = await prisma.organization.create({
