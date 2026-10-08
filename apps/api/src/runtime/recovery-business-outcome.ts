@@ -59,8 +59,15 @@ export interface RecoveryBusinessOutcomeInput {
   claimPrepared?: boolean;
   /** 是否已提交索赔（需真实外写证据；本地恒 false） */
   claimSubmitted?: boolean;
-  providerConfirmed?: boolean;
-  settlementReceived?: boolean;
+  /**
+   * CHANGE 3A（审计 MSG-20261008-20）—— 终局档**只能**由可信证据校验路径传入。
+   *
+   * 本模块**不再接受** `providerConfirmed` / `settlementReceived` 这类调用者自报布尔：
+   * 生成侧由 `recovery-terminal-evidence.ts` 的 `createAuthorizedTerminalOutcome()` 产出授权对象
+   * （证据不通过则不产出）；持久化侧由 `settle()` 在同一事务内对照 durable 权威事实**重新判定**
+   * —— 生成侧的授权只是**建议**，真正的门禁在 `settle()`。
+   */
+  authorizedTerminalOutcome?: RecoveryBusinessOutcome;
 }
 
 /**
@@ -69,8 +76,10 @@ export interface RecoveryBusinessOutcomeInput {
  */
 export function deriveRecoveryBusinessOutcome(input: RecoveryBusinessOutcomeInput): RecoveryBusinessOutcome {
   if (!input.dispatched) return 'NOT_DISPATCHED';
-  if (input.settlementReceived === true) return 'SETTLEMENT_RECEIVED';
-  if (input.providerConfirmed === true) return 'PROVIDER_CONFIRMED';
+  // CHANGE 3A：终局档只承认「已授权的终局档」；自报布尔不再被接受
+  if (input.authorizedTerminalOutcome !== undefined && TERMINAL_COMPLETION.includes(input.authorizedTerminalOutcome)) {
+    return input.authorizedTerminalOutcome;
+  }
   if (input.claimSubmitted === true) return 'CLAIM_SUBMITTED';
   if (input.claimPrepared === true) return 'CLAIM_PREPARED';
   if (input.opportunityIdentified === true) return 'OPPORTUNITY_IDENTIFIED';
@@ -96,6 +105,8 @@ export const RECOVERY_BUSINESS_OUTCOME_BOUNDARY = {
   holdOutcomesUnreachableLocally: HOLD_BUSINESS_OUTCOMES,
   locallyReachableMax: LOCALLY_REACHABLE_MAX_OUTCOME,
   promotesOnlyOnTerminalCompletion: true,
+  terminalOutcomeRequiresTrustedEvidence: true,
+  selfDeclaredTerminalAccepted: false,
   externalWrite: false,
   payment: false,
   customsFiling: false,

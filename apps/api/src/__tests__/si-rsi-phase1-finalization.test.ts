@@ -12,6 +12,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createAutonomyTaskSource } from '../runtime/rsi-durable-task-source';
+import { createTestTerminalEvidenceSource } from '../runtime/recovery-terminal-evidence';
 import { createPrismaTaskQueuePort } from '../services/agent-goal/prisma-task-queue-port';
 import type { GoalTaskDraft } from '../services/agent-goal/goal-task-planner';
 
@@ -163,7 +164,13 @@ describe('PHASE 1 FINALIZATION · C2 运行中租约接管 + fencing', () => {
       },
     });
 
-    const b = createAutonomyTaskSource({ prisma, ownerRef: 'worker-B', now: () => T0 });
+    // CHANGE 3A：本用例验证 fencing + 合法提交，不验证终局证据 ⇒ 显式注入启用来源
+    const b = createAutonomyTaskSource({
+      prisma,
+      ownerRef: 'worker-B',
+      now: () => T0,
+      terminalEvidenceSources: [createTestTerminalEvidenceSource()],
+    });
     await b.reclaimExpired(5);
     await b.claim(5);
     expect((await prisma.autonomyLease.findUniqueOrThrow({ where: { taskId: task.id } })).ownerRef).toBe('worker-B');
@@ -176,7 +183,23 @@ describe('PHASE 1 FINALIZATION · C2 运行中租约接管 + fencing', () => {
     expect(stillRunning.status).toBe('IN_PROGRESS'); // 未被旧 worker 覆盖
 
     // 新 owner B 正常提交
-    const fresh = await b.settle({ taskId: task.id, ownerRef: 'worker-B', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' });
+    const fresh = await b.settle({
+      taskId: task.id,
+      ownerRef: 'worker-B',
+      outcome: 'COMPLETED',
+      businessOutcome: 'SETTLEMENT_RECEIVED',
+      terminalEvidence: {
+        kind: 'SETTLEMENT_LEDGER_ENTRY',
+        source: 'SETTLEMENT_LEDGER',
+        verified: true,
+        verifiedBy: 'SETTLEMENT_EVIDENCE_VERIFIER',
+        verificationRef: 'test://settlement/' + key,
+        providerEventId: 'evt-' + key,
+        observedAt: '2026-10-08T12:05:00.000Z',
+        organizationId: 'org-A',
+        taskDedupeKey: key,
+      },
+    });
     expect(fresh.applied).toBe(true);
     // 既有 DB 词汇表无 COMPLETED：成功终态映射为 PROMOTED（已登记为已知限制）
     expect((await prisma.autonomyTask.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('PROMOTED');

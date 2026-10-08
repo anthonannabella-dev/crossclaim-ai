@@ -117,7 +117,7 @@ describe('PHASE 2 / P2-CHANGE3 · 业务完成状态真实性', () => {
     expect(internalTaskStatusForBusinessOutcome('SETTLEMENT_RECEIVED')).toBe('PROMOTED');
   });
 
-  it('B4 真实 PG 守卫：COMPLETED 必须携带真实终局业务结果，准备索赔不算完成', async () => {
+  it('B4 真实 PG 守卫：COMPLETED 必须携带真实终局业务结果，准备索赔不算完成；终局档还须可信证据（CHANGE 3A）', async () => {
     const key = 'task:recovery:LOGISTICS:' + suffix();
     await createPrismaTaskQueuePort({ prisma, now: () => T0 }).admit({ organizationId: 'org-A', tasks: [draft(key)] });
     const worker = createAutonomyTaskSource({ prisma, ownerRef: 'worker-A', now: () => T0 });
@@ -133,10 +133,14 @@ describe('PHASE 2 / P2-CHANGE3 · 业务完成状态真实性', () => {
     ).toBe('EXEC_SETTLE_BUSINESS_OUTCOME_NOT_TERMINAL');
     // ③ 任务未被标成 PROMOTED
     expect((await prisma.autonomyTask.findUniqueOrThrow({ where: { id: taskId } })).status).toBe('IN_PROGRESS');
-    // ④ 只有真实终局业务结果才放行
+    // ④ CHANGE 3A（MSG-20261008-20）：即使给出终局档，缺可信证据也不得放行。
+    //    生产默认注册表**全部 disabled**（Provider / 结算接入均为 HOLD）⇒ 终局档不可达；
+    //    此处连证据都未提供 ⇒ 先命中 MISSING（判定顺序：缺失 → 类别 → 来源 → 启用 → 校验者 → lineage）。
     expect(
-      (await worker.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' })).applied,
-    ).toBe(true);
-    expect((await prisma.autonomyTask.findUniqueOrThrow({ where: { id: taskId } })).status).toBe('PROMOTED');
+      (await worker.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' })).reason,
+    ).toBe('TERMINAL_EVIDENCE_MISSING');
+    // ⑤ 拒绝必须是「零部分写入」：任务仍在 IN_PROGRESS、租约仍 ACTIVE（未被误标成功）
+    expect((await prisma.autonomyTask.findUniqueOrThrow({ where: { id: taskId } })).status).toBe('IN_PROGRESS');
+    expect((await prisma.autonomyLease.findUniqueOrThrow({ where: { taskId } })).status).toBe('ACTIVE');
   });
 });

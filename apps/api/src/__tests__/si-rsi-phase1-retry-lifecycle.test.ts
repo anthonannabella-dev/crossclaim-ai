@@ -11,6 +11,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createAutonomyTaskSource } from '../runtime/rsi-durable-task-source';
+import { createTestTerminalEvidenceSource } from '../runtime/recovery-terminal-evidence';
 import { createPrismaTaskQueuePort } from '../services/agent-goal/prisma-task-queue-port';
 import type { GoalTaskDraft } from '../services/agent-goal/goal-task-planner';
 
@@ -80,7 +81,27 @@ afterAll(async () => {
 
 /** 固定退避 60s，便于断言（否则默认是指数退避 + 抖动） */
 const source = (ownerRef: string, at: Date = T0) =>
-  createAutonomyTaskSource({ prisma, ownerRef, now: () => at, backoffMs: () => 60_000 });
+  createAutonomyTaskSource({
+    prisma,
+    ownerRef,
+    now: () => at,
+    backoffMs: () => 60_000,
+    // CHANGE 3A：本文件验证重试/退避，不验证终局证据 ⇒ 显式注入启用来源
+    terminalEvidenceSources: [createTestTerminalEvidenceSource()],
+  });
+
+/** CHANGE 3A：已校验的终局证据（租户 + 任务 lineage 双绑定；仅测试用） */
+const terminalEvidence = (dedupeKey: string) => ({
+  kind: 'SETTLEMENT_LEDGER_ENTRY' as const,
+  source: 'SETTLEMENT_LEDGER',
+  verified: true,
+  verifiedBy: 'SETTLEMENT_EVIDENCE_VERIFIER',
+  verificationRef: 'test://settlement/' + dedupeKey,
+  providerEventId: 'evt-' + dedupeKey,
+  observedAt: '2026-10-08T12:05:00.000Z',
+  organizationId: 'org-A',
+  taskDedupeKey: dedupeKey,
+});
 
 describe('PHASE 1 / C3 · 失败重试与退避', () => {
   it('C3-1 失败一次：attempts=1、错误码落库、状态回 READY 且设 nextAttemptAt；退避期内不可领取', async () => {
@@ -172,7 +193,13 @@ describe('PHASE 1 / C3 · 失败重试与退避', () => {
     const a = source('worker-A');
     await a.claim(5);
     const taskId = (await prisma.autonomyTask.findFirstOrThrow({ where: { dedupeKey: key } })).id;
-    const ok = await a.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' });
+    const ok = await a.settle({
+      taskId,
+      ownerRef: 'worker-A',
+      outcome: 'COMPLETED',
+      businessOutcome: 'SETTLEMENT_RECEIVED',
+      terminalEvidence: terminalEvidence(key),
+    });
     expect(ok.applied).toBe(true);
     expect((await prisma.autonomyTask.findUniqueOrThrow({ where: { id: taskId } })).status).toBe('PROMOTED');
     expect((await prisma.autonomyLease.findUniqueOrThrow({ where: { taskId } })).status).toBe('RELEASED');

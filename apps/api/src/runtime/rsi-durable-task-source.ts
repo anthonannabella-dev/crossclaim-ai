@@ -20,6 +20,17 @@ import type { PrismaClient } from '@prisma/client';
 
 import type { RsiSafeTask } from '../services/autonomy/rsi-continuation-engine';
 
+import type { RecoveryBusinessOutcome } from './recovery-business-outcome';
+import {
+  PRODUCTION_TERMINAL_EVIDENCE_SOURCES,
+  TERMINAL_EVIDENCE_DECISION,
+  evaluateRecoveryTerminalEvidence,
+} from './recovery-terminal-evidence';
+import type {
+  RecoveryTerminalEvidence,
+  RecoveryTerminalEvidenceSource,
+} from './recovery-terminal-evidence';
+
 /** 客户 Recovery 任务的既有保留命名空间（与 Goal 计划一致） */
 export const RECOVERY_QUEUE_TASK_PREFIX = 'task:recovery:';
 
@@ -65,6 +76,12 @@ export interface RsiDurableTaskSource {
      * —— 防止把「dispatch 成功 / 已准备索赔」当成客户追回成功。
      */
     businessOutcome?: import('./recovery-business-outcome').RecoveryBusinessOutcome;
+    /**
+     * CHANGE 3A（审计 MSG-20261008-20）—— 终局事实必须携带**已校验证据**：
+     * `settle()` 会在同一事务内对照 durable 权威事实（租户 + 任务 lineage）重新判定；
+     * 无证据 / 来源未启用 / 自报 / 跨租户 / 错配归属 ⇒ 拒绝落终态。
+     */
+    terminalEvidence?: RecoveryTerminalEvidence;
   }): Promise<{ applied: boolean; reason: string }>;
   /**
    * C3（CHANGE 3）—— 失败与重试：fenced 记录失败码、attempts+1、按指数退避设置 nextAttemptAt；
@@ -103,6 +120,12 @@ export function createAutonomyTaskSource(input: {
    * organizationId 与 Standing Authorization；任一项不满足即拒绝并持久化 BLOCK。
    */
   authorizeOnClaim?: boolean;
+  /**
+   * CHANGE 3A —— 可信终局证据来源注册表。
+   * 缺省 = 生产注册表（**全部 disabled**）：真实 Provider / 结算接入均为 HOLD ⇒ 终局档不可达。
+   * 只有测试 / 同构验收才允许显式注入启用来源（生产不得注入）。
+   */
+  terminalEvidenceSources?: readonly RecoveryTerminalEvidenceSource[];
 }): RsiDurableTaskSource {
   const now = (): Date => (input.now ?? (() => new Date()))();
   const leaseMs = input.leaseMs ?? DEFAULT_LEASE_MS;
@@ -116,6 +139,7 @@ export function createAutonomyTaskSource(input: {
     return base + Math.floor((base * (h % 100)) / 1000);
   };
   const backoffMs = input.backoffMs ?? defaultBackoff;
+  const terminalSources = input.terminalEvidenceSources ?? PRODUCTION_TERMINAL_EVIDENCE_SOURCES;
 
   /**
    * C4（MSG-20261008-16 CHANGE 4）—— 执行前授权重解析（fail-closed）：
@@ -161,6 +185,26 @@ export function createAutonomyTaskSource(input: {
       return { allowed: false, reason: CLAIM_AUTHORIZATION_DENY.STANDING_AUTHORIZATION_REVOKED, organizationId };
     }
     return { allowed: true, reason: 'AUTHORIZED_STANDING_ACTIVE', organizationId };
+  };
+
+  /**
+   * CHANGE 3A —— 权威租户解析（唯一可信来源，绝不采用请求里的租户）：
+   *   AutonomyTask.incidentId → AutonomyIncident（必须是服务端写入的 CUSTOMER_GOAL_QUEUE）
+   *   → `sourceRefs[0].organizationId` → 该 Organization 必须在可信库中真实存在。
+   * 任一环节不成立即返回 null ⇒ 调用方必须 fail-closed（不得落任何成功状态）。
+   */
+  const resolveAuthoritativeOrganizationId = async (
+    db: Pick<PrismaClient, 'autonomyIncident' | 'organization'>,
+    incidentId: string,
+  ): Promise<string | null> => {
+    const incident = await db.autonomyIncident.findUnique({ where: { id: incidentId } });
+    if (incident === null || incident.kind !== CUSTOMER_GOAL_QUEUE_INCIDENT_KIND) return null;
+    const refs = incident.sourceRefs as unknown;
+    const first = Array.isArray(refs) ? (refs[0] as Record<string, unknown> | undefined) : undefined;
+    const organizationId = first !== undefined && typeof first.organizationId === 'string' ? first.organizationId : '';
+    if (organizationId === '') return null;
+    const organization = await db.organization.findUnique({ where: { id: organizationId } });
+    return organization === null ? null : organizationId;
   };
 
   return {
@@ -289,6 +333,8 @@ export function createAutonomyTaskSource(input: {
           return { applied: false, reason: 'EXEC_SETTLE_BUSINESS_OUTCOME_NOT_TERMINAL' };
         }
       }
+      const terminalOutcome: RecoveryBusinessOutcome | undefined =
+        request.outcome === 'COMPLETED' ? request.businessOutcome : undefined;
       const at = now();
       return input.prisma.$transaction(async (tx) => {
         const lease = await tx.autonomyLease.findUnique({ where: { taskId: request.taskId } });
@@ -296,6 +342,38 @@ export function createAutonomyTaskSource(input: {
         if (lease.status !== 'ACTIVE') return { applied: false, reason: 'LEASE_NOT_ACTIVE' };
         if (lease.ownerRef !== request.ownerRef) return { applied: false, reason: 'FENCED_OWNER_MISMATCH' };
         if (lease.expiresAt.getTime() <= at.getTime()) return { applied: false, reason: 'FENCED_LEASE_EXPIRED' };
+
+        /**
+         * CHANGE 3A（审计 MSG-20261008-20）—— 终局事实门禁。
+         * 位置刻意放在「释放租约 / 改写任务状态」**之前**：判定不通过时不产生任何部分写入。
+         * 通过条件（全部满足）：来源在注册表中且已由 HOST 启用、`verifiedBy` 为该来源登记的校验者、
+         * 证据租户 = 服务端解析出的权威租户、`taskDedupeKey` = 本任务去重键（lineage 强绑定）。
+         */
+        if (terminalOutcome !== undefined) {
+          const taskRow = await tx.autonomyTask.findUnique({
+            where: { id: request.taskId },
+            select: { dedupeKey: true, incidentId: true },
+          });
+          if (taskRow === null) return { applied: false, reason: 'TASK_MISSING' };
+          const authoritativeOrganizationId = await resolveAuthoritativeOrganizationId(tx, taskRow.incidentId);
+          if (authoritativeOrganizationId === null) {
+            console.error('RSI_TERMINAL_EVIDENCE_DENY=' + TERMINAL_EVIDENCE_DECISION.NO_TRUSTED_TENANT);
+            return { applied: false, reason: TERMINAL_EVIDENCE_DECISION.NO_TRUSTED_TENANT };
+          }
+          const verdict = evaluateRecoveryTerminalEvidence({
+            outcome: terminalOutcome,
+            ...(request.terminalEvidence === undefined ? {} : { evidence: request.terminalEvidence }),
+            context: {
+              authoritativeOrganizationId,
+              authoritativeTaskDedupeKey: taskRow.dedupeKey,
+              sources: terminalSources,
+            },
+          });
+          if (!verdict.trusted) {
+            console.error('RSI_TERMINAL_EVIDENCE_DENY=' + verdict.reason);
+            return { applied: false, reason: verdict.reason };
+          }
+        }
         const released = await tx.autonomyLease.updateMany({
           where: { id: lease.id, status: 'ACTIVE', ownerRef: request.ownerRef, expiresAt: { gt: at } },
           data: { status: 'RELEASED', renewedAt: at },

@@ -716,3 +716,59 @@ PRODUCTION_READY = NO
 该行位于全部送审判据**之后**，未影响任何 CHANGE 判据，故**未重发**请求（避免重复送审产生第二份裁决）；其余正文与 §3.6–§3.11 一致。
 
 **本 tick 的下一单元（从 `461c54e1` 之后的当前 HEAD 继续，不询问用户）**：CHANGE 3A → CHANGE 4A → P0-B1 → PHASE 2 FINAL-R2 复审。
+
+### 3.14 CHANGE 3A（P0）可信终局事实 —— 已实现并取证
+
+**审计指出的缺口（`MSG-20261008-20` 的 CHANGE 3 = REVISE）**：终局档缺少**可信来源证据**。
+实现前的真实行为是：`deriveRecoveryBusinessOutcome` 接受 `providerConfirmed` / `settlementReceived` 这类**调用者自报布尔**，
+且 `settle({ outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' })` 在**没有任何证据**时即可把任务落成 `PROMOTED`
+—— 等于「把档案名报对就算追回成功」。
+
+**新增模块** `apps/api/src/runtime/recovery-terminal-evidence.ts`（**纯判定**：不读凭据、不写库、无外部写）
+
+- 终局来源是一份 **allow-list 注册表**；生产 `PRODUCTION_TERMINAL_EVIDENCE_SOURCES` **全部 `enabled: false`**
+  （真实 Provider 确认与结算入账都需要外部能力，当前全部 HOLD ⇒ 生产上没有任何可被信任的终局来源）。
+- 类别 ↔ 档位**唯一映射**：`PROVIDER_CONFIRMATION → PROVIDER_CONFIRMED`、`SETTLEMENT_LEDGER_ENTRY → SETTLEMENT_RECEIVED`。
+- 判定（任一不满足即拒绝，返回原因码）：
+  `TERMINAL_EVIDENCE_MISSING` → `_KIND_MISMATCH` → `_SOURCE_UNKNOWN` → `_SOURCE_KIND_MISMATCH` → **`_SOURCE_DISABLED`**
+  → `_NOT_VERIFIED` → **`_SELF_DECLARED`**（`verifiedBy ∈ {RUNNER, TASK_INPUT, LOCAL_SIMULATION, LOCAL_SIM, CLIENT, UNKNOWN}`）
+  → `_VERIFIER_NOT_AUTHORIZED`（必须等于该来源登记的校验者） → `_NO_VERIFICATION_REF`（空或占位 token `timeout`/`unconfigured`…）
+  → `_MISSING_EVENT_ID` → `_OBSERVED_AT_INVALID` → **`_TENANT_MISMATCH`** → **`_TASK_LINEAGE_MISMATCH`** → `_ACCOUNT_MISMATCH`。
+
+**生成侧收紧**：`deriveRecoveryBusinessOutcome` **删除** `providerConfirmed` / `settlementReceived` 入参；
+终局档只能来自 `createAuthorizedTerminalOutcome()` / `deriveTrustedOutcomeOf()` 产出的**授权对象**（证据不通过 ⇒ `null`）。
+边界常量新增 `terminalOutcomeRequiresTrustedEvidence: true`、`selfDeclaredTerminalAccepted: false`。
+
+**持久化侧门禁（真正的 gate）**：`settle()` 在**同一事务内**、**在释放租约 / 改写任务状态之前**重新判定：
+权威租户 = `task → incident(CUSTOMER_GOAL_QUEUE) → sourceRefs[0].organizationId → Organization 必须存在`（**绝不用请求里的租户**）；
+权威 lineage = 本任务的 `dedupeKey`。生成侧的授权只是**建议**，能否落 `PROMOTED` 由这里决定；拒绝时保持 `IN_PROGRESS`，零部分写入。
+拒绝同时输出 `RSI_TERMINAL_EVIDENCE_DENY=<原因码>`（可观察性）。
+
+**验收**（`apps/api/src/__tests__/si-rsi-phase2-trusted-terminal.test.ts`，**9/9 PASS**，真实 PostgreSQL）
+| 用例 | 覆盖的审计要求 |
+| --- | --- |
+| T1 | **生产默认（HOLD）终局档不可达**：即使证据字段齐全，也被 `TERMINAL_EVIDENCE_SOURCE_DISABLED` 拒绝，任务保持 `IN_PROGRESS`、租约保持 `ACTIVE` —— 直接证明「不得用模拟终局事实把任务写成业务完成」 |
+| T2 | **自报终局被拒**：`RUNNER` / `TASK_INPUT` / `LOCAL_SIMULATION` 的 `verified=true` 一律 `_SELF_DECLARED` |
+| T3 | 跨租户终局事实被拒（`_TENANT_MISMATCH`） |
+| T4 | 错配归属被拒（证据 `taskDedupeKey` ≠ 本任务 ⇒ `_TASK_LINEAGE_MISMATCH`） |
+| T5 | 类别/档位唯一对应（`PROVIDER_CONFIRMATION` 不得充当回款 ⇒ `_KIND_MISMATCH`） |
+| T6 | 非终局档（`DISPATCHED` / `CLAIM_PREPARED` / `CLAIM_SUBMITTED`）不得落业务完成 |
+| T7 | 机制可达性：**显式启用来源**（测试注入）+ 证据齐备时才允许 `PROMOTED`（证明门禁不是「一律拒绝」的死码） |
+| T8 | 纯函数判定表：缺失 / 未校验 / 占位引用 / 无事件号 / 时间非法 / 未知来源 / 未授权校验者 / 租户空 全覆盖 |
+| T9 | 生成侧：自报布尔不再能推导终局档；授权对象 + 来源启用才可；来源未启用 ⇒ `null` |
+
+**既有测试的口径修订（如实登记：属收紧，不是放宽）**
+- `si-rsi-phase2-business-outcome.test.ts` B4：原「只给出终局档即放行」的断言**已作废**，改为
+  「无证据 ⇒ `TERMINAL_EVIDENCE_MISSING`，且任务仍 `IN_PROGRESS`、租约仍 `ACTIVE`（零部分写入）」。
+- `si-rsi-phase1-finalization`（C2-2）/ `si-rsi-phase1-fault-matrix`（M3/M8）/ `si-rsi-phase1-retry-lifecycle`（C3-4）：
+  这三者验证的是 **fencing / 生命周期**，不是终局证据；为保持其原判据，显式注入了**测试专用**启用来源
+  （`createTestTerminalEvidenceSource`，仅测试/同构验收可调用，生产代码不得调用）+ 已验证证据。
+
+**回归**：SI-RSI 全套件 **13 文件 / 77 tests**，连续 **2 次**全绿（本轮 +1 文件 / +9 tests）；`api tsc --noEmit` = **0**。
+未改动 Prisma schema（无新迁移）。
+
+**诚实边界（不得默认为已解决）**：CHANGE 4A 要求的「≥5 轮连跑 + 失败用例日志留存」**本轮未执行**（属 4A）；
+本机 Linux/systemd 实机、真实浏览器验收仍 **NOT VERIFIED**；真实 Provider 写入 / 支付 / 报关 = HOLD；
+`REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`；`PRODUCTION_READY = NO`。
+
+**剩余未关闭**：CHANGE 4A（P1 失败定位与隔离）、P0-B1（P0 生产同构业务链 E2E），随后申请 PHASE 2 FINAL-R2 复审。

@@ -13,6 +13,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createAutonomyTaskSource } from '../runtime/rsi-durable-task-source';
+import { createTestTerminalEvidenceSource } from '../runtime/recovery-terminal-evidence';
 import { createPrismaRsiReconcileStore } from '../runtime/rsi-reconcile-prisma-store';
 import { runRsiRestartReconcile } from '../runtime/rsi-restart-reconcile';
 import { createPrismaTaskQueuePort } from '../services/agent-goal/prisma-task-queue-port';
@@ -77,7 +78,28 @@ async function truncateAutonomy(): Promise<void> {
 }
 
 const source = (ownerRef: string, leaseMs?: number, at: Date = T0) =>
-  createAutonomyTaskSource({ prisma, ownerRef, now: () => at, ...(leaseMs === undefined ? {} : { leaseMs }) });
+  createAutonomyTaskSource({
+    prisma,
+    ownerRef,
+    now: () => at,
+    ...(leaseMs === undefined ? {} : { leaseMs }),
+    // CHANGE 3A：本文件验证的是 fencing / 生命周期，**不是**终局证据 ⇒ 显式注入一个启用来源
+    // （生产默认注册表全部 disabled；测试注入仅用于让「合法终态」这条判据可被验证）
+    terminalEvidenceSources: [createTestTerminalEvidenceSource()],
+  });
+
+/** CHANGE 3A：已校验的终局证据（租户 + 任务 lineage 双绑定；仅测试用） */
+const terminalEvidence = (dedupeKey: string) => ({
+  kind: 'SETTLEMENT_LEDGER_ENTRY' as const,
+  source: 'SETTLEMENT_LEDGER',
+  verified: true,
+  verifiedBy: 'SETTLEMENT_EVIDENCE_VERIFIER',
+  verificationRef: 'test://settlement/' + dedupeKey,
+  providerEventId: 'evt-' + dedupeKey,
+  observedAt: '2026-10-08T12:05:00.000Z',
+  organizationId: 'org-A',
+  taskDedupeKey: dedupeKey,
+});
 
 beforeEach(async () => {
   await truncateAutonomy();
@@ -146,7 +168,17 @@ describe('PHASE 1 / C6 · 多 worker 故障注入矩阵', () => {
     expect(row.status).toBe('IN_PROGRESS');
     expect(row.attempts).toBe(0);
     // 新 owner 正常提交
-    expect((await b.settle({ taskId, ownerRef: 'worker-B', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' })).applied).toBe(true);
+    expect(
+      (
+        await b.settle({
+          taskId,
+          ownerRef: 'worker-B',
+          outcome: 'COMPLETED',
+          businessOutcome: 'SETTLEMENT_RECEIVED',
+          terminalEvidence: terminalEvidence(key),
+        })
+      ).applied,
+    ).toBe(true);
     expect((await prisma.autonomyTask.findUniqueOrThrow({ where: { id: taskId } })).status).toBe('PROMOTED');
   });
 
@@ -213,8 +245,24 @@ describe('PHASE 1 / C6 · 多 worker 故障注入矩阵', () => {
     await a.claim(5);
     const taskId = (await prisma.autonomyTask.findFirstOrThrow({ where: { dedupeKey: key } })).id;
 
-    expect((await a.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' })).applied).toBe(true);
-    const again = await a.settle({ taskId, ownerRef: 'worker-A', outcome: 'COMPLETED', businessOutcome: 'SETTLEMENT_RECEIVED' });
+    expect(
+      (
+        await a.settle({
+          taskId,
+          ownerRef: 'worker-A',
+          outcome: 'COMPLETED',
+          businessOutcome: 'SETTLEMENT_RECEIVED',
+          terminalEvidence: terminalEvidence(key),
+        })
+      ).applied,
+    ).toBe(true);
+    const again = await a.settle({
+      taskId,
+      ownerRef: 'worker-A',
+      outcome: 'COMPLETED',
+      businessOutcome: 'SETTLEMENT_RECEIVED',
+      terminalEvidence: terminalEvidence(key),
+    });
     expect(again.applied).toBe(false);
     expect(again.reason).toBe('LEASE_NOT_ACTIVE');
     const lateFail = await a.fail({ taskId, ownerRef: 'worker-A', errorCode: 'AFTER_DONE' });
