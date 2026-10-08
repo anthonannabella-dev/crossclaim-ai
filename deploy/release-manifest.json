@@ -147,7 +147,13 @@
       "src/__tests__/deploy-systemd-contract.test.ts",
       "src/__tests__/rsi-deployment-contract.test.ts",
       "src/__tests__/rsi-reconcile-bootstrap.test.ts",
-      "src/__tests__/rsi-restart-reconcile.test.ts"
+      "src/__tests__/rsi-restart-reconcile.test.ts",
+      "src/__tests__/si-rsi-p0-repro.test.ts",
+      "src/__tests__/si-rsi-phase1-durable-queue.test.ts",
+      "src/__tests__/si-rsi-phase1-finalization.test.ts",
+      "src/__tests__/si-rsi-phase1-retry-lifecycle.test.ts",
+      "src/__tests__/si-rsi-phase1-authorization.test.ts",
+      "src/__tests__/si-rsi-phase1-fault-matrix.test.ts"
     ]
   },
   "boundaries": {

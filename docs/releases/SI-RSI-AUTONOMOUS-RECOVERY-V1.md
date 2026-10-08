@@ -237,7 +237,7 @@ NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
 | C3 完整生命周期/重试/死信（P0） | **CLOSED** | 见 §2.4（Schema Delta + 退避门禁 + fence 保护的 `fail()` + 死信终态 + DB 层不变量） |
 | C4 租户/账户/授权与撤销拦截（P0） | **CLOSED** | 见 §2.5（领取前授权重解析 + 撤销/过期 BLOCK + 持久化原因码） |
 | C6 多 worker 故障注入矩阵（P1） | **CLOSED** | 见 §2.6（8 类场景矩阵，含数据库事务失败注入与跨租户边界） |
-| C7 发布配置与 CI（P1） | PARTIAL | API 与 RSI 已共用同一 durable 源；JSON 仅显式 legacy 回退；CI 命中未验证（GitHub Actions = NOT_OBSERVED） |
+| C7 发布配置与 CI（P1） | **CLOSED** | 见 §2.7（同一 durable 源契约 + PHASE 1 套件纳入发布门禁并实跑验证） |
 | C5 → PHASE 2 Recovery 装配（P0） | NOT STARTED | 见 PHASE 2 |
 
 **C1/C2 验收测试**：`apps/api/src/__tests__/si-rsi-phase1-finalization.test.ts`（**5/5 PASS**，真实 PostgreSQL）
@@ -341,6 +341,27 @@ NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
 | M8 | 幂等与重复副作用控制 | 重复 `settle` ⇒ `LEASE_NOT_ACTIVE`（不二次生效）；迟到 `fail` 不改动 `attempts`；终态保持 `PROMOTED` |
 
 回归：PHASE 1 全量（5 个 SI-RSI 套件 + P0 复现 + 既有持久化/reconcile 契约）= **54/54**；api tsc **0**。
+
+### 2.7 C7 —— 发布配置与 CI 核验已关闭
+
+`apps/api/src/__tests__/si-rsi-phase1-release-wiring.test.ts`（**7/7 PASS**，确定性静态契约）
+
+| 用例 | 断言 |
+| --- | --- |
+| 01 | `server.ts` **默认**使用 `createPrismaTaskQueuePort`；`createJsonTaskQueuePort` 只出现在 `DATABASE_URL` 缺失的显式 legacy 分支（源码位置在其之后） |
+| 02 | `rsi-run` 启动入口把 `openedReconcile.taskSource` 接入组合根；先 `reclaimExpired(5)` 再 `claim(5)`，并 `adoptTasks` 进同一引擎队列 |
+| 03 | `rsi-run-bootstrap` 中 `new PrismaClient()` **只出现一次** ⇒ reconcile store 与任务源共用同一客户端（同一 durable 数据源） |
+| 04 | 端口与任务源使用同一 `CUSTOMER_GOAL_QUEUE` incident kind 与 `task:recovery:` 前缀 |
+| 05 | 生产 `crossclaim-api.service` **不含** `RSI_TASKS_PATH` ⇒ 不靠 JSON artifact 承载客户任务 |
+| 06 | 发布门禁 `gates.requiredTestFiles` 已包含全部 6 个 PHASE 1 套件，且文件真实存在；仍要求 SHA 锁定 + 工作树 clean |
+| 07 | 门禁脚本 `deploy/verify-release.mjs` 会**真实执行**必需测试（`gate.tests.pass` + `vitest.mjs`），不是只列清单 |
+
+**实跑验证**：提交后执行 `node deploy/verify-release.mjs --root .`（见提交信息 / 本轮日志），
+门禁在有 DATABASE_URL 的开发库上实际跑完新增 PHASE 1 套件 —— `FULL_REGRESSION` 之外，发布门禁本身也覆盖了 PHASE 1 行为。
+
+> 备注：`gates.requiredTestFiles` 的变更作用于**开发分支**的 manifest；正式封板时会在新 RC 上重新锁定
+> `releaseCommit`（AUDIT-RC-3 发布审计时执行）。GitHub Actions 仍未观测（`NOT_OBSERVED`），
+> 因此「CI 命中」只在本机发布门禁范围内验证，不声称云端 CI 已绿。
 
 ---
 
