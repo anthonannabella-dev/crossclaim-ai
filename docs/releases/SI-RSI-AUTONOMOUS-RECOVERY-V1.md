@@ -638,3 +638,20 @@ R6 断言已按实测更新为「无 recovery-si 记录 + caller runner 0」—�
 不并入六项生产启用债，也不因此宣称「稳定绿」。
 
 **诚实边界**：S5 是**故障注入**（错误连接串），非真实断电/断连；小时级长跑 soak 与 Linux 实机 **仍未验证**。
+
+### 3.12 PHASE 2 FINAL 复审 —— 送审未完成（AUDIT_PENDING，未伪造裁决）
+
+**发生了什么**：本 tick 已在右侧新会话把 PHASE 2 FINAL 复审请求写入 composer（实测 3906 字符、标记 `CODEX-SI-RSI-P2-FINAL` 在场、
+无 `Unknown error`），但**发送动作失败**：
+- `pressKey(null,'Return')` 未触发发送（URL 仍为 `https://chatgpt.com/`，composer 仍有内容）；
+- `[data-testid="send-button"]` 选择器在 5s 内未命中（selector 超时）。
+
+**处置（按审计桥规则）**：不重试到失控、不伪造裁决 —— 本轮标记 `AUDIT_PENDING`，
+不更新 `PHASE2_CLOSED` / `P0_B_CLOSED`（保持 NO）。
+
+**下一 tick 动作**：重新打开新会话 → 先 `getAXState` 取得 composer 与发送按钮的**当前元素索引**（不再依赖 testid / 空索引），
+再 `paste` + `click` 发送，并做三项投递校验（composer 清空 / 标记出现在新用户轮 / 进入生成态）后等待与逐字归档。
+
+**送审内容来源（已在库内，可重放）**：本文件 §3.7（CHANGE 1 实跑取证）、§3.8（CHANGE 2 执行前复核）、
+§3.9（CHANGE 3 业务结果词表）、§3.11（CHANGE 4 租约续租 + 稳定性 6/6），以及 §3.6 的 4 项 CHANGE 原文。
+送审锚点 `REVIEWED_HEAD = 461c54e1`。
