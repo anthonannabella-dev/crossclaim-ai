@@ -783,3 +783,41 @@ PHASE 11 的源码 regex 扫描属负向启发式，不等于完整静态能力�
 GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
 
 **下一步**：`AUDIT-3R` 窄复审（REVIEWED_HEAD 见送审正文），随后才可宣布 PHASE 11/12 CLOSED。
+### 21. AUDIT-3R 裁决（PASS WITH REVISE）—— PHASE 11 CLOSED，PHASE 12 待三个 fencing 完整性点
+
+**裁决（已逐字归档 `MSG-20261008-11`，FNV1A `ddceec6a`，FULL_COPY_OK；REVIEWED_HEAD `5b343429`）**
+
+| 判项 | 结果 |
+| --- | --- |
+| RUNTIME_GUARD_POLICY_BOUNDARY | **PASS**（CHANGE 1 关单；内部 durable scan 写入与 provider write / claim submit / filing / payment / transport 已明确分离；无第二 runtime/scheduler/guard/policy/Customs truth） |
+| TENANT_ISOLATION / EXTERNAL_WRITE_BOUNDARY / STALE_LEASE_HONESTY | **PASS**（维持） |
+| CONCURRENCY_CRASH_RESUME | **REVISE** → 见下方三点 |
+
+审计确认已真实落地的部分（无需返工）：`CREATED CAS unique claim`、`expired lease CAS reclaim`、`checkpoint resume`、
+`completed replay idempotency`、`stale different-owner checkpoint`、`execution port owner required`、
+`execution port foreign live owner`、`finish releases lease`。
+
+**待办 CHANGE（AUDIT-3R2，三个窄点）**
+
+1. **`shardsTotal` 初始化仍绕过 fencing**：`runHistoricalBackfill()` 里改用裸 `prisma.recoveryScanRun.update({ where: {organizationId_id…} })`
+   写 `shardsTotal`，未经 `updateScanFenced()`。竞态：A 校验 owner 成功后租约过期、B reclaim 成功，A 的普通 update 仍能写
+   `shardsTotal`（违反「B 接管后 stale A 的 durable write 全部被阻断」）。
+2. **fenced 写入只校验 owner，不校验租约仍有效**：`updateScanFenced()` 的 where 只有 `leaseOwner = expectedLeaseOwner`，
+   缺 `status = RUNNING` 与 `leaseExpiresAt > now`；`runHistoricalBackfill()` 只在**开始时**检查一次过期。
+   ⇒ 超过租约时长的长扫描，只要无人 reclaim，过期 owner 仍可继续写；且 `ingestPort` 在 checkpoint 被 FENCED 之前就已执行
+   （依赖 ingest 自身幂等而非 lease 防双跑）。审计建议：方案 A（每次 fenced 写同时校验 owner + RUNNING + 未过期）
+   或方案 B（每 page/N 秒续租 + 全部 durable 写校验 owner + 未过期）；对长扫描更推荐 B。
+3. **默认 `ownerRef = rsi-runtime:<pid>` 非全局唯一**：跨 host/container 相同 pid 会得到同一 owner 字符串，
+   B 可能误判「这是自己的租约」而跳过 reclaim。建议默认改为 `rsi-runtime:<bootUuid>:<pid>`（进程生命周期内固定），
+   或要求宿主显式传入全局唯一 `runtimeOwnerRef`。
+
+**要求补的真实 DB 回归**：A）A 校验后 B reclaim，A 再试 `shardsTotal` 初始化 ⇒ FENCED；
+B）owner 仍等于 A 但租约已过期，A 的 checkpoint/finish ⇒ BLOCK / FENCED；
+C）两个 runtime 实例模拟相同 pid、不同 instance identity ⇒ 不得视为同 owner；
+D）长扫描跨 lease boundary ⇒ 续租后继续，或未续租时立即停止（绝不 ingest 下一页）。
+
+**RISKS（继续登记）**：无独立 `fencingVersion` 列（单调 `leaseEpoch` 比字符串 owner 更强）；
+`runHistoricalBackfill()` 的 unfenced 兼容路径仍存在（仅测试/内部），长期应显式限制为 test-only。
+
+**当前状态**：`AUDIT-3 = PASS WITH REVISE`，**PHASE 11 = CLOSED**，**PHASE 12 = NOT CLOSED**。
+下一步：完成上述三点 + A–D 回归后送 `AUDIT-3R2`。

@@ -163573,3 +163573,379 @@ HOLD / FORBIDDEN         = unchanged
 
 这轮真正要补的不是更多测试数量，而是把 “谁有资格推进这个 scan” 从测试约定变成数据库可强制的 durable ownership/fencing 规则。
 ```
+
+### [MSG-20261008-11] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-3R 窄复审（REVIEWED_HEAD 5b343429）= PASS WITH REVISE；RUNTIME_GUARD_POLICY_BOUNDARY = PASS（CHANGE 1 关单，PHASE 11 = CLOSED）；CONCURRENCY_CRASH_RESUME = REVISE / PHASE 12 = NOT CLOSED —— 三个 fencing 完整性点：① shardsTotal 初始化未走 fenced；② fenced 写入只校验 owner，不校验租约仍有效（建议加续租）；③ 默认 ownerRef=rsi-runtime:<pid> 非全局唯一。要求补 A–D 四条 DB 回归。
+
+```text
+RUNTIME_GUARD_POLICY_BOUNDARY = PASS
+CONCURRENCY_CRASH_RESUME = REVISE
+
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 5b343429a1860f1cefa10f2b46f24613c3dc096d
+
+这轮两条主修复都是真实落地的。尤其是上一轮最核心的问题——production execution port 已不再能只凭 organizationId + scanId 推进扫描——已经修掉。
+
+RUNTIME_GUARD_POLICY_BOUNDARY = PASS
+
+CHANGE 1 可以关单。
+
+原来不准确的：
+
+纯文本
+RSI_RUNTIME_COMPOSITION_BOUNDARY.writesDatabase = false
+
+已经拆成：
+
+纯文本
+coreWritesDatabase = false
+historicalDomainStepWritesInternalScanState = true
+performsExternalWrite = false
+
+这个表述和实际架构一致：
+
+纯文本
+ONE SI Runtime core
+→ 本身不直接持有 Prisma scan 写逻辑
+
+PASS verdict
+→ server-owned historical domain step
+→ execution port
+→ RecoveryScanRun 内部 checkpoint / coverage / status 写入
+
+内部 durable scan 写入与：
+
+纯文本
+Provider write
+Claim submit
+Filing
+Payment
+Transport
+
+已经明确分离。
+
+同时没有看到第二套：
+
+纯文本
+runtime
+scheduler
+guard
+policy engine
+Customs truth
+
+因此：
+
+RUNTIME_GUARD_POLICY_BOUNDARY = PASS
+
+CONCURRENCY_CRASH_RESUME = REVISE
+
+这轮已经解决了上一轮的大部分问题。
+
+现在真实 product path 已经变成：
+
+纯文本
+execution port
+→ ownerRef required
+→ durable scope
+→ CREATED: CAS claim
+→ RUNNING/self: verify ownership
+→ RUNNING/expired: CAS reclaim
+→ runHistoricalBackfill(expectedLeaseOwner)
+→ coverage/checkpoint/finish fenced by owner
+
+而且新增 DB 测试确实证明：
+
+纯文本
+A owns → B execution port BLOCK
+expired A → B reclaim → resume
+B reclaim → stale A checkpoint update FENCED
+missing owner → BLOCK
+
+这些都是真的。
+
+但还有 3 个 fencing 完整性问题，其中前两个是当前代码级问题，因此我还不能给 PASS。
+
+CHANGE 1 — shardsTotal 初始化仍绕过 fencing
+
+runHistoricalBackfill() 中：
+
+TypeScript
+if (scan.shardsTotal !== shards.length) {
+  scan = await prisma.recoveryScanRun.update({
+    where: {
+      organizationId_id: {
+        organizationId: input.organizationId,
+        id: input.scanId
+      }
+    },
+    data: {
+      shardsTotal: shards.length,
+      ...
+    }
+  });
+}
+
+这里没有：
+
+纯文本
+expectedLeaseOwner
+status=RUNNING
+lease ownership
+
+也没有经过 updateScanFenced()。
+
+所以存在竞态：
+
+纯文本
+A 校验 owner 成功
+→ A 准备初始化 shardsTotal
+
+租约此时过期
+→ B reclaim 成功，成为新 owner
+
+A 的普通 prisma.update
+→ 仍然可以写 shardsTotal
+
+这已经违反：
+
+B 接管后 stale A 的 durable write 必须全部被 fencing 阻断。
+
+虽然它不是 checkpoint 数量本身，但仍是 RecoveryScanRun durable execution state。
+
+最小修复：
+
+纯文本
+shardsTotal 初始化
+→ 也必须走 updateScanFenced()
+CHANGE 2 — fencing 只校验 owner，不校验租约仍有效
+
+当前 updateScanFenced()：
+
+纯文本
+where:
+  organizationId
+  scanId
+  leaseOwner = expectedLeaseOwner
+
+没有：
+
+纯文本
+status = RUNNING
+leaseExpiresAt > now
+
+而 runHistoricalBackfill() 只在函数开始时检查一次：
+
+纯文本
+scan.leaseExpiresAt <= now()
+→ LEASE_EXPIRED
+
+后续整个扫描过程中不再检查。
+
+这意味着一个运行时间超过默认 60 秒的 scan：
+
+纯文本
+t0:
+A 有效租约，开始 backfill
+
+t+60s:
+A 租约已经过期
+
+但无人 reclaim
+→ DB 里的 leaseOwner 仍然是 A
+
+t+61s:
+A coverage/checkpoint/finish
+→ owner 条件仍然匹配
+→ 写入仍成功
+
+所以现在的实际语义是：
+
+lease expiry 只有在开始执行时有意义；执行过程中只要没人 reclaim，过期 owner 仍可以继续写。
+
+这与真正的 lease ownership 不完全一致。
+
+更危险的是：
+
+纯文本
+A fetch page
+→ 租约过期
+→ B reclaim
+→ A ingest(...)
+→ A checkpoint write
+→ checkpoint 被 FENCED
+
+checkpoint 虽然不会被 A 覆盖，但 ingestPort 已经在 fencing 失败之前执行了。
+
+如果 ingest 产生持久化业务事实，B 后续重跑同页，就依赖 ingest 自身的幂等保护，而不是 lease 层防止双执行。
+
+建议
+
+至少二选一：
+
+纯文本
+方案 A：
+每次 coverage/checkpoint/finish 的 fenced update
+同时 where:
+  leaseOwner = expectedOwner
+  status = RUNNING
+  leaseExpiresAt > now
+
+更完整的是：
+
+纯文本
+方案 B：
+每 page / N 秒续租
++ 所有 durable writes 校验 owner + unexpired
+
+对于可能跑多分钟/多小时的历史扫描，我更建议 B。
+
+CHANGE 3 — 默认 rsi-runtime:<pid> 不是全局唯一 owner identity
+
+现在：
+
+TypeScript
+runtimeOwnerRef =
+  input.runtimeOwnerRef ??
+  `rsi-runtime:${process.pid}`
+
+单机多进程 PID 可以区分。
+
+但跨：
+
+纯文本
+host A / container A: pid 123
+host B / container B: pid 123
+
+都会得到：
+
+纯文本
+rsi-runtime:123
+
+于是 B 看到：
+
+纯文本
+current.leaseOwner === ownerRef
+
+会误认为“这是我自己的租约”，甚至不需要 reclaim。
+
+对于真正 multi-worker / multi-host 环境，这会削弱 owner fencing。
+
+建议默认至少：
+
+纯文本
+runtime-instance UUID + pid
+
+例如：
+
+纯文本
+rsi-runtime:<bootUuid>:<pid>
+
+并在整个进程生命周期固定。
+
+如果宿主已有 globally unique worker ID，直接要求 runtimeOwnerRef 必须由宿主传入会更干净。
+
+已经可以确认 PASS 的并发部分
+
+以下无需再返工：
+
+纯文本
+CREATED CAS unique claim              = PASS
+expired lease CAS reclaim             = PASS
+checkpoint resume                     = PASS
+completed replay idempotency          = PASS
+stale different-owner checkpoint      = PASS
+execution port owner required         = PASS
+execution port foreign live owner     = PASS
+finish releases lease                 = PASS
+
+因此这轮不是架构推倒重来，只需要把 fencing 做完整。
+
+CHANGES
+
+建议 AUDIT-3R2 只收这三个窄点：
+
+纯文本
+1. shardsTotal 初始化也必须 fenced
+
+2. durable fenced writes 必须验证租约仍有效
+   或加入可靠 lease renewal
+
+3. production runtime ownerRef 必须全局唯一
+   不能只用 pid
+
+建议增加 3 条 DB 回归：
+
+纯文本
+A. A 校验后，B reclaim，
+   A 再尝试 shardsTotal 初始化
+   → FENCED
+
+B. owner 仍等于 A，但 lease 已过期，
+   A checkpoint/finish
+   → BLOCK / FENCED
+
+C. 两个 runtime 实例模拟相同 pid、不同 instance identity
+   → 不能被视为同 owner
+
+最好再加：
+
+纯文本
+D. 长扫描跨 lease boundary
+   → lease renew 后继续
+   或
+   → 未 renew 时立即停止，绝不 ingest 下一页
+RISKS
+
+你登记的：
+
+纯文本
+无 fencingVersion 列
+
+仍然是有效设计债。
+
+单靠 owner token 可以工作，但前提是 owner token 全局唯一且不可复用。如果后续要做到真正严格的 distributed fencing，单调递增的：
+
+纯文本
+leaseEpoch / fencingVersion
+
+会比字符串 owner 更强，因为旧 worker 即使错误复用相同 owner identity，也无法使用旧 epoch 写入。
+
+另外你提到的 legacy：
+
+纯文本
+runHistoricalBackfill()
+without expectedLeaseOwner
+
+目前还存在于测试/内部路径。只要 production 唯一入口继续严格经过 HistoricalScanExecutionPort，它可以暂时作为兼容债；但长期最好把 unfenced mode 明确限制为 test-only，避免未来有人从新 production callsite 直接调用。
+
+GitHub Actions 对 exact reviewed head：
+
+NOT_OBSERVED
+
+所以 95/95、api tsc 0 仍只能写成 local/Codex evidence。
+
+最终：
+
+纯文本
+RUNTIME_GUARD_POLICY_BOUNDARY = PASS
+CONCURRENCY_CRASH_RESUME      = REVISE
+
+TENANT_ISOLATION              = PASS
+EXTERNAL_WRITE_BOUNDARY       = PASS
+STALE_LEASE_HONESTY           = PASS
+
+AUDIT-3                       = PASS WITH REVISE
+PHASE 11                      = CLOSED
+PHASE 12                      = NOT CLOSED
+
+边界仍保持：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+SECOND_*                 = 0
+HOLD / FORBIDDEN         = unchanged
+
+现在剩下的不是“有没有 ownership”，而是把 ownership 从入口级检查提升成“扫描执行全过程的完整 lease/fencing”。
+```
