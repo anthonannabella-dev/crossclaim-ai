@@ -842,3 +842,39 @@ D）长扫描跨 lease boundary ⇒ 续租后继续，或未续租时立即停�
 **证据**：`historical-scan-fencing` **8/8**；定向批次 **14 文件 / 90 tests 全绿**；api tsc 0。GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
 
 **下一步**：`AUDIT-3R2` 窄复审（REVIEWED_HEAD `ce541b7c`）。
+### 23. AUDIT-3R2 = PASS —— **AUDIT-3 / PHASE 11 / PHASE 12 全部 CLOSED**（裁决归档 MSG-20261008-12）
+
+**裁决（`MSG-20261008-12`，FNV1A `96852ec8`，FULL_COPY_OK；REVIEWED_HEAD `ce541b7c`）**
+
+| 判项 | 结果 |
+| --- | --- |
+| RUNTIME_GUARD_POLICY_BOUNDARY | **PASS** |
+| TENANT_ISOLATION | **PASS** |
+| EXTERNAL_WRITE_BOUNDARY | **PASS** |
+| CONCURRENCY_CRASH_RESUME | **PASS**（本轮三个 fencing 完整性点全部落码） |
+| STALE_LEASE_HONESTY | **PASS** |
+
+**审计逐条确认**：① `shardsTotal` 写旁路已 CLOSED（改走 `setRecoveryScanShardsTotal() → updateScanFenced()`，
+stale worker 不能再绕过 lease fencing 修改执行状态）；② durable fencing 已形成完整数据库条件
+（`organizationId + scanId + leaseOwner = expected + status = RUNNING + leaseExpiresAt > now`，覆盖
+`shardsTotal / coverage / checkpoint / finish`，租约过期即便 owner 相同也不可写）；③ reclaim / stale-worker 语义成立
+（CREATED→CAS claim→RUNNING+owner A；A 崩溃/过期→B CAS reclaim；stale A 写入 → FENCED → DB 不变）；
+④ 每页续租已进入真实 executor（`renewRecoveryScanLease()` 成功后才 fetchPage→coverage→ingest→checkpoint；
+续租 CAS 失败 ⇒ `RECOVERY_SCAN_LEASE_RENEW_FAILED` → BLOCKED，不 fetch/不 ingest 下一页；`leaseMs` 由 execution port
+真实透传而非仅测试参数；长扫描跨租约回归证明可持续续租至 COMPLETED，finish 后 `leaseOwner/leaseExpiresAt = null`）；
+⑤ ownerRef PID 碰撞已 CLOSED（默认 `rsi-runtime:<boot-uuid>:<pid>`，`randomUUID()` 模块加载时调用一次 ⇒
+同进程稳定、跨 host/container 不复用、相同 PID 不会被当作同 owner）。
+
+**结论**：无阻断 CHANGE，无需 AUDIT-3R3；**`AUDIT-3 = PASS / CLOSED`，`PHASE 11 = CLOSED`，`PHASE 12 = CLOSED`**。
+
+**继续登记的非阻断生产设计债（审计明示不阻断本轮 closure）**：
+
+1. 无独立 `fencingVersion / leaseEpoch` 列 —— 当前以「全局唯一 ownerRef + 未过期租约」承担 fencing token；
+   未来若需更强分布式 fencing，单调递增 epoch 更严格；
+2. `runHistoricalBackfill()` 仍支持 `expectedLeaseOwner = undefined` 的 unfenced 兼容模式（production 端口已强制 `ownerRef`）；
+   长期应显式限制为 test/internal-only；
+3. 若单个 `fetchPage()` 自身耗时超过 `leaseMs`，续租发生在 fetch **之前**，存在 fetch 返回时租约已过期的窗口
+   （该窗口不允许 stale worker 覆盖 `RecoveryScanRun`，但接真实 provider 后应令 `leaseMs > 单页最大合理耗时`，
+   或升级为时间型/后台 renewal；若 `ingest` 将来产生不可幂等副作用，此项需重新审）。
+
+**下一步**：`AUDIT-4`（PHASE 13/14 收官审计）。

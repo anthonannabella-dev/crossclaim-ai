@@ -163949,3 +163949,233 @@ HOLD / FORBIDDEN         = unchanged
 
 现在剩下的不是“有没有 ownership”，而是把 ownership 从入口级检查提升成“扫描执行全过程的完整 lease/fencing”。
 ```
+
+### [MSG-20261008-12] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-3R2 窄复审（REVIEWED_HEAD ce541b7c）= PASS；CONCURRENCY_CRASH_RESUME = PASS；RUNTIME_GUARD_POLICY_BOUNDARY / TENANT_ISOLATION / EXTERNAL_WRITE_BOUNDARY / STALE_LEASE_HONESTY = PASS；**AUDIT-3 = PASS / CLOSED，PHASE 11 = CLOSED，PHASE 12 = CLOSED**；无阻断 CHANGE，不需要 AUDIT-3R3。保留三项非阻断生产设计债（无 fencingVersion/leaseEpoch；unfenced 兼容路径；单页耗时超 leaseMs 的窗口）。
+
+```text
+CONCURRENCY_CRASH_RESUME = PASS
+
+VERDICT: PASS
+
+REVIEWED_HEAD: ce541b7c6c679a7b27a669f937f0760405c5c9f3
+
+这次 AUDIT-3R2 的三个 fencing 完整性点都已经真正落到代码，不再只是测试约定。PHASE 12 可以正式封板。
+
+纯文本
+RUNTIME_GUARD_POLICY_BOUNDARY = PASS
+TENANT_ISOLATION              = PASS
+EXTERNAL_WRITE_BOUNDARY       = PASS
+CONCURRENCY_CRASH_RESUME      = PASS
+STALE_LEASE_HONESTY           = PASS
+
+AUDIT-3                       = PASS / CLOSED
+PHASE 11                      = PASS / CLOSED
+PHASE 12                      = PASS / CLOSED
+① shardsTotal 写旁路已 CLOSED
+
+上一轮指出的裸：
+
+纯文本
+prisma.recoveryScanRun.update(...)
+
+已经移除。
+
+现在初始化 shardsTotal 走：
+
+纯文本
+setRecoveryScanShardsTotal()
+→ updateScanFenced()
+
+所以 stale worker 不再能绕过 lease fencing 修改执行状态。
+
+② durable fencing 已形成完整数据库条件
+
+带 expectedLeaseOwner 的 durable write 现在必须同时满足：
+
+纯文本
+organizationId
+scanId
+leaseOwner = expected owner
+status = RUNNING
+leaseExpiresAt > now
+
+否则：
+
+纯文本
+RECOVERY_SCAN_LEASE_FENCED
+
+这已经覆盖：
+
+纯文本
+shardsTotal
+coverage
+checkpoint / shard progress
+finish
+
+所以即使 owner 字符串仍相同，只要租约过期，也不能继续写。
+
+这是上一轮缺失的关键点。
+
+③ reclaim / stale-worker 语义成立
+
+真实链现在是：
+
+纯文本
+CREATED
+→ CAS claim
+→ RUNNING + owner A
+
+A crash / lease expires
+→ B CAS reclaim
+→ owner B
+
+stale A write
+→ owner mismatch / expired
+→ FENCED
+→ DB 不变化
+
+新增 PostgreSQL 回归确实覆盖：
+
+纯文本
+A owns → B blocked
+A expires → B reclaim
+B reclaim → stale A fenced
+B continues from durable checkpoint
+→ COMPLETED
+
+因此“谁可以推进 scan”现在已经是 数据库可强制规则。
+
+④ 每页续租已进入实际 executor
+
+现在每一页：
+
+纯文本
+renewRecoveryScanLease()
+→ success
+→ fetchPage()
+→ coverage
+→ ingest
+→ checkpoint
+
+如果续租 CAS 失败：
+
+纯文本
+RECOVERY_SCAN_LEASE_RENEW_FAILED
+→ BLOCKED
+→ 不 fetch / 不 ingest 下一页
+
+并且 execution port 已把：
+
+纯文本
+leaseMs
+
+真实透传给 runHistoricalBackfill()，不是只有测试层参数。
+
+“长扫描跨最初租约边界”回归也证明持续续租后可以完成，并在 finish 后：
+
+纯文本
+leaseOwner = null
+leaseExpiresAt = null
+⑤ ownerRef PID 碰撞已 CLOSED
+
+默认 identity 已从：
+
+纯文本
+rsi-runtime:<pid>
+
+改成模块启动时生成一次：
+
+纯文本
+rsi-runtime:<boot-uuid>:<pid>
+
+randomUUID() 在模块加载时调用一次，所以：
+
+纯文本
+同一进程生命周期 → owner 稳定
+不同 runtime/container/host → UUID 不同
+相同 PID → 仍不会被当成同 owner
+
+这满足当前 owner-token fencing 设计。
+
+CHANGES
+
+无阻断性 CHANGE。
+
+不需要 AUDIT-3R3。
+
+PHASE 12 可以停止继续修改。
+
+RISKS
+
+仍有三个已经如实登记、但不阻断本轮 closure 的生产设计债。
+
+第一，目前没有独立：
+
+纯文本
+fencingVersion / leaseEpoch
+
+而是：
+
+纯文本
+globally unique ownerRef + unexpired lease
+
+作为 fencing token。当前模型已经能够阻止旧 owner 写入，但以后如果要做更强的分布式 fencing，单调递增 epoch 会更严格。
+
+第二，runHistoricalBackfill() 仍支持：
+
+纯文本
+expectedLeaseOwner = undefined
+
+的 unfenced 兼容模式。当前 production execution port 强制 ownerRef，所以真实 product path 已经 fenced；但长期建议把 unfenced 模式明确限制为 test/internal-only，避免未来新增生产 callsite 时误用。
+
+第三，如果单个 fetchPage() 自身耗时超过 leaseMs，续租是在 fetch 前完成的，因此存在 fetch 返回时租约已经过期的窗口。如果该页没有 coverage 更新作为中间 fence，ingest() 可能先发生，之后 checkpoint 写才发现 lease 已失效。
+
+这不允许 stale worker 覆盖 RecoveryScanRun，因此不阻断本次 CONCURRENCY_CRASH_RESUME；但接真实 provider 后应：
+
+纯文本
+leaseMs > 单页最大合理耗时
+
+或升级成时间型/后台 renewal。尤其 ingest 若将来产生不可幂等副作用，这一项需要重新审。
+
+另外 exact HEAD：
+
+纯文本
+GitHub Actions = NOT_OBSERVED
+
+所以：
+
+纯文本
+historical-scan-fencing = 8/8
+targeted batch          = 90/90
+api tsc                 = 0
+
+仍应标记为 local/Codex evidence，不能写成 GitHub CI green。
+
+我也确认：
+
+纯文本
+ce541b7c → 0ca23947
+
+只有：
+
+纯文本
+docs/releases/HISTORICAL-RECOVERY-SCAN-V1.md
+
+变化，没有 runtime/service 实现变化。
+
+最终边界继续：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+
+SECOND_RUNTIME           = 0
+SECOND_SCHEDULER         = 0
+SECOND_GUARD             = 0
+SECOND_POLICY_ENGINE     = 0
+
+HOLD / FORBIDDEN         = unchanged
+
+最终裁决：CONCURRENCY_CRASH_RESUME = PASS，AUDIT-3 / PHASE 11/12 = PASS / CLOSED。
+```
