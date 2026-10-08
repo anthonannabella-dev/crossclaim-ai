@@ -97,9 +97,9 @@ inbox/*
 .autopilot/PIPELINE.lock
 .autopilot/units-materialized/*.tmp
 .ui-check/
-+
-+# SI/RSI 连续执行运行时产物（由 Windows 计划任务每 180 秒重新生成；不进入版本库以免污染工作树）
-+tools/dev/logs/
-+tools/dev/*.flag
-+tools/dev/.continuous-check.lock
-+tools/dev/continuous-execution-state.json
+
+# SI/RSI 连续执行运行时产物（由 Windows 计划任务每 180 秒重新生成；不进入版本库以免污染工作树）
+tools/dev/logs/
+tools/dev/*.flag
+tools/dev/.continuous-check.lock
+tools/dev/continuous-execution-state.json
