@@ -292,11 +292,22 @@ export async function composeRsiRuntime(input: {
     const dedupeKey = claimed?.dedupeKey;
     if (typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:')) pendingScanTaskKey = dedupeKey;
   };
-  const runPendingScanStepAfterVerdict = async (event: unknown): Promise<void> => {
+  // AUDIT-2R3 CHANGE A（MSG-20261008-07）：domain step 只在真实 PASS 裁决收口后执行。
+  // continuation engine 真实语义：PASS => action=CONSUME_VERDICT；REVISE => action=REVISION；
+  // BLOCK => action=OWNER_ACTION_REQUIRED（三者都会把 waitingForVerdict 置为 false）。
+  // 因此绝不能用 `!waitingForVerdict` 放行（会误放 REVISE / BLOCK：BLOCK 也不得推进 scan）。
+  // 必须同时满足：① 收口前 controller 记录的 verdict === 'PASS'；② 收口 outcome.action === 'CONSUME_VERDICT'。
+  const consumeOutcomeIsPass = (verdictBeforeConsume: unknown, outcomeLike: unknown): boolean => {
+    if (verdictBeforeConsume !== 'PASS') return false;
+    const action = (outcomeLike as { action?: unknown } | null | undefined)?.action;
+    return action === 'CONSUME_VERDICT';
+  };
+  const maybeRunPendingScanStep = async (verdictBeforeConsume: unknown, outcomeLike: unknown): Promise<void> => {
     if (domainStep === undefined || pendingScanTaskKey === null) return;
-    if (event !== 'JUDGE_VERDICT_RECEIVED') return;
-    const parked = (controller.state() as { waitingForVerdict?: unknown }).waitingForVerdict === true;
-    if (parked) return; // 例如裁决为 BLOCK → 仍 park，绝不推进扫描
+    if (!consumeOutcomeIsPass(verdictBeforeConsume, outcomeLike)) return;
+    // 注意：这里**不再**用 parked(waitingForVerdict) 作放行条件 —— 裁决收口后引擎可能立刻为
+    // 「下一个」任务重新 park（awaitVerdict=true），若用 parked 兜底会误伤本轮已获 PASS 授权的 scan。
+    // 「未裁决 / BLOCK / REVISE → 零执行」已由上面的精确 PASS 门覆盖，语义更强。
     const key = pendingScanTaskKey;
     pendingScanTaskKey = null;
     await domainStep({ dedupeKey: key });
@@ -307,16 +318,19 @@ export async function composeRsiRuntime(input: {
       : {
           ...controller,
           async tick() {
+            const verdictBeforeConsume = controller.state().verdict;
             const outcome = await controller.tick();
             captureClaimedScanTask(outcome);
+            await maybeRunPendingScanStep(verdictBeforeConsume, outcome);
             return outcome;
           },
           // AUDIT-2R2 CHANGE 1（实测）：既有 event loop 的续跑路径调用的是 `controller.emit(event)`，
           // `tick()` 仅在无事件可用时兜底 —— 因此 emit 路径必须同样被覆盖，否则 loop 驱动的链不会触发 domain step。
           async emit(event: Parameters<typeof controller.emit>[0]) {
+            const verdictBeforeConsume = controller.state().verdict;
             const outcome = await controller.emit(event);
             captureClaimedScanTask(outcome);
-            await runPendingScanStepAfterVerdict(event);
+            await maybeRunPendingScanStep(verdictBeforeConsume, outcome);
             return outcome;
           },
         };
@@ -353,13 +367,13 @@ export async function composeRsiRuntime(input: {
       ? null
       : createVerdictWatcher({
           readVerdict: async () => (await localSources.readVerdict?.()) ?? undefined,
-          isWaiting: () => controller.state().waitingForVerdict,
+          isWaiting: () => controllerWithDomainSteps.state().waitingForVerdict,
           onVerdict: async () => {
             // 真实取值来自 artifact；无法识别则不设置（引擎会保持当前裁决，不会瞎猜）。
             const raw = await localSources.readVerdict?.();
             const parsed = normalizeRsiVerdict(raw);
-            if (parsed !== null) controller.markWaitingForVerdict(parsed);
-            await controller.emit('JUDGE_VERDICT_RECEIVED');
+            if (parsed !== null) controllerWithDomainSteps.markWaitingForVerdict(parsed);
+            await controllerWithDomainSteps.emit('JUDGE_VERDICT_RECEIVED');
           },
           intervalMs: input.verdictWatch.intervalMs ?? 15_000,
         });
@@ -404,6 +418,10 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   parkForJudgeDefault: false,
   /** FINAL-3：domainPacks 路径强制 park-for-judge，不可被 awaitVerdict=false 绕过 */
   domainPackAlwaysParksForJudge: true,
+  /** AUDIT-2R3 CHANGE A：historical scan 回填只在真实 PASS 裁决收口后执行（未裁决 / REVISE / BLOCK = 零执行） */
+  historicalScanDomainStepRequiresPassVerdict: true,
+  /** AUDIT-2R3 CHANGE B：verdictWatcher 复用 domain-step-aware controller（生产 watcher 与测试同一 runtime path） */
+  verdictWatcherUsesDomainStepController: true,
   verdictValueFromArtifact: true,
   restartReconcileSupported: true,
   signalDrivenTaskGeneration: true,

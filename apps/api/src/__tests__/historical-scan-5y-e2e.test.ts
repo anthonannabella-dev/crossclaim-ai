@@ -69,6 +69,144 @@ function syntheticCustomsRecord(entryNumber: string, kind: 'PERFECT' | 'NO_EVIDE
   };
 }
 
+// ---- AUDIT-2R3（MSG-20261008-07）定向夹具：PASS-only 执行 + verdictWatcher 走 wrapped controller ----
+const SCAN_READ_PORTS: RecoveryReadPorts = {
+  async opportunityRead(input) {
+    return { opportunityRef: input.opportunityRef, status: 'READY', currency: 'USD', hasRecoverableAmount: true, hasRuleEvaluation: true };
+  },
+  async evidenceRead(input) {
+    return { opportunityRef: input.opportunityRef, caseRef: 'case-1', evidenceCount: 1, kinds: ['ENTRY_RECORD'] };
+  },
+  async customsAuthorizationReadinessRead(input) {
+    return { opportunityRef: input.opportunityRef, route: 'MODE_A', readyToFile: false, blockerCodes: ['POA_MISSING'] };
+  },
+};
+
+function scanGuardDeps() {
+  return {
+    killSwitchResolver: {
+      async resolve(scope: string) {
+        return { scope, value: 'enabled', degraded: false, stale: false };
+      },
+    },
+    audit: {
+      async write() {
+        /* no-op：审计由既有链路负责，测试不额外写库 */
+      },
+    },
+  } as never;
+}
+
+async function seedScanFixture(organizationId: string) {
+  const compiled = compileAgentGoal({ text: INTENT });
+  if (!compiled.ok) throw new Error('compile failed');
+  const validated = validateAgentGoalDraft({
+    draft: compiled.draft,
+    context: { organizationId, actorUserId: USER, now: NOW },
+  });
+  await prisma.agentGoal.create({
+    data: {
+      id: validated.goalId,
+      organizationId,
+      createdBy: USER,
+      rawUserIntent: INTENT,
+      normalizedGoal: { version: validated.version, goalDigest: validated.goalDigest },
+      status: 'ADMITTED',
+      createdAt: NOW,
+      updatedAt: NOW,
+    },
+  });
+  const created = await createOrGetRecoveryScan(prisma, {
+    organizationId,
+    goalId: validated.goalId,
+    goalDigest: validated.goalDigest,
+    domain: 'CUSTOMS',
+    provider: 'CBP',
+    platformAccountId: null,
+    requestedFrom: REQUESTED_FROM,
+    requestedTo: REQUESTED_TO,
+    effectiveFrom: REQUESTED_FROM,
+    effectiveTo: REQUESTED_TO,
+    requestedMonths: 60,
+  });
+  return { taskKey: 'task:recovery:CUSTOMS:' + created.row.dedupeKey, created };
+}
+
+/** domain step 调用计数 + 走既有 execution port（durable scope → runHistoricalBackfill）。 */
+function scanStepSpy() {
+  const calls: Array<{ ok: boolean; scanId: string | null; status: string }> = [];
+  const step = async ({ dedupeKey }: { dedupeKey: string }) => {
+    const executed = await createHistoricalScanExecutionPort(prisma).run({
+      organizationId: ORG,
+      taskKey: dedupeKey,
+      pagePort: {
+        async fetchPage({ shard }) {
+          return {
+            records: [syntheticCustomsRecord('ENTRY-W-' + shard.key, 'PERFECT')],
+            nextCursor: null,
+            coverageFrom: '2025-10-08',
+            coverageTo: REQUESTED_TO,
+            coverageStatus: 'SOURCE_LIMITED',
+          };
+        },
+      },
+      ingestPort: {
+        async ingest({ records }) {
+          const batch = evaluateCustomsHistoricalBatch(records as never);
+          return { accepted: batch.summary.scanned, rejected: 0, eligibleFound: batch.summary.claimReady };
+        },
+      },
+    });
+    calls.push({ ok: executed.ok, scanId: executed.scanId, status: executed.status });
+    return executed;
+  };
+  return { calls, step };
+}
+
+async function composeScanRuntime(input: {
+  taskKey: string;
+  verdictArtifact: string;
+  onDomainStep: (args: { dedupeKey: string }) => Promise<unknown>;
+}) {
+  return composeRsiRuntime({
+    readFile: async (path: string) => {
+      if (path === 'mem://tasks') {
+        return JSON.stringify([{ id: 'task-scan-1', dedupeKey: input.taskKey, priority: 'P2' }]);
+      }
+      if (path === 'mem://verdict') return input.verdictArtifact;
+      return '[]';
+    },
+    tasksPath: 'mem://tasks',
+    verdictPath: 'mem://verdict',
+    verdictWatch: { intervalMs: 10_000 },
+    historicalScanDomainStep: (claimed) => input.onDomainStep(claimed),
+    productRecoveryPack: {
+      appActionGuardDeps: scanGuardDeps(),
+      readPorts: SCAN_READ_PORTS,
+      bind: (task: { id: string; dedupeKey: string; priority: string }) => {
+        const match = /^task:recovery:([A-Z_]+):(.+)$/.exec(task.dedupeKey);
+        if (match === null) return null;
+        return {
+          organizationId: ORG,
+          domain: 'CUSTOMS' as never,
+          actionKind: 'EXECUTE_READ_ONLY_CHECK' as never,
+          opportunityRef: match[2]!,
+        };
+      },
+      scanScope: {
+        async load(ref: { organizationId: string; dedupeKey: string }) {
+          const loaded = await loadScanScopeForClaimedTask(prisma, {
+            organizationId: ref.organizationId,
+            dedupeKey: ref.dedupeKey,
+          });
+          return { ok: loaded.ok, reasonCodes: loaded.reasonCodes };
+        },
+      },
+    },
+    awaitVerdict: false,
+  });
+}
+
 async function truncate(): Promise<void> {
   await prisma.$executeRawUnsafe(
     'TRUNCATE "RecoveryScanRun", "AgentGoalRun", "AgentGoal", "AuditLog", "Membership", "User", "Organization" CASCADE;',
@@ -400,5 +538,123 @@ describe('PHASE 10 · 合成 5 年 E2E（Goal → scan → shard → customs →
     expect(summary.filingPerformed).toBe(false);
     expect(summary.externalWritePerformed).toBe(false);
     expect(summary.paymentPerformed).toBe(false);
+  });
+
+  // ---------------- AUDIT-2R3（MSG-20261008-07）：PASS-only 执行 + verdictWatcher 走 wrapped controller ----------------
+
+  it('AUDIT-2R3 CHANGE B：真实 verdictWatcher（PASS artifact）→ wrapped controller → domain step 恰好一次 + scan COMPLETED', async () => {
+    const { taskKey, created } = await seedScanFixture(ORG);
+    const spy = scanStepSpy();
+    const composition = await composeScanRuntime({
+      taskKey,
+      verdictArtifact: JSON.stringify({ messageId: 'msg-pass-1', verdict: 'PASS' }),
+      onDomainStep: spy.step,
+    });
+
+    // claim + park-for-judge：裁决前零执行
+    await composition.controller.tick();
+    expect(composition.controller.state().waitingForVerdict).toBe(true);
+    expect(spy.calls).toHaveLength(0);
+
+    // **生产路径**：verdictWatcher 读 artifact → 写 verdict → emit（必须走 wrapped controller）
+    const polled = await composition.verdictWatcher!.pollOnce();
+    expect(polled.delivered).toBe(true);
+    expect(composition.verdictWatcher!.deliveries()).toBe(1);
+    expect(spy.calls).toHaveLength(1);
+    expect(spy.calls[0]!.scanId).toBe(created.row.id);
+    expect(spy.calls[0]!.status).toBe('COMPLETED');
+    expect(spy.calls[0]!.ok).toBe(true);
+
+    const row = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId: created.row.id });
+    expect(row!.status).toBe('COMPLETED');
+    expect(row!.recordsScanned).toBeGreaterThan(0);
+  });
+
+  it('AUDIT-2R3 CHANGE A：BLOCK verdict → domain step 0 且 durable scan 未推进', async () => {
+    const { taskKey, created } = await seedScanFixture(ORG);
+    const spy = scanStepSpy();
+    const composition = await composeScanRuntime({
+      taskKey,
+      verdictArtifact: JSON.stringify({ messageId: 'msg-block-1', verdict: 'BLOCK' }),
+      onDomainStep: spy.step,
+    });
+
+    await composition.controller.tick();
+    const polled = await composition.verdictWatcher!.pollOnce();
+    expect(polled.delivered).toBe(true);
+
+    // BLOCK：绝不回填（旧实现只看 !waitingForVerdict 会误放行）
+    expect(spy.calls).toHaveLength(0);
+    const row = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId: created.row.id });
+    // 执行端口根本没被调用 ⇒ durable scan 仍停留在创建态，未被认领 / 未推进检查点
+    expect(row!.status).toBe('CREATED');
+    expect(row!.recordsScanned).toBe(0);
+    expect(row!.nextShardIndex).toBe(0);
+  });
+
+  it('AUDIT-2R3 CHANGE A：REVISE verdict → domain step 0 且 durable scan 未推进', async () => {
+    const { taskKey, created } = await seedScanFixture(ORG);
+    const spy = scanStepSpy();
+    const composition = await composeScanRuntime({
+      taskKey,
+      verdictArtifact: JSON.stringify({ messageId: 'msg-revise-1', verdict: 'REVISE' }),
+      onDomainStep: spy.step,
+    });
+
+    await composition.controller.tick();
+    const polled = await composition.verdictWatcher!.pollOnce();
+    expect(polled.delivered).toBe(true);
+
+    expect(spy.calls).toHaveLength(0);
+    const row = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId: created.row.id });
+    expect(row!.status).toBe('CREATED');
+    expect(row!.recordsScanned).toBe(0);
+  });
+
+  it('AUDIT-2R3 CHANGE A：watchdog 收口 PASS verdict（无 artifact 事件）→ domain step 恰好一次', async () => {
+    const { taskKey, created } = await seedScanFixture(ORG);
+    const spy = scanStepSpy();
+    const composition = await composeScanRuntime({
+      taskKey,
+      verdictArtifact: '{}',
+      onDomainStep: spy.step,
+    });
+
+    await composition.controller.tick();
+    expect(spy.calls).toHaveLength(0);
+
+    // 真实 Judge verdict 写入 + watchdog tick 收口（同一条收口语义，不依赖 tick 之外的旁路）
+    composition.controller.markWaitingForVerdict('PASS');
+    await composition.controller.tick();
+    expect(spy.calls).toHaveLength(1);
+    expect(spy.calls[0]!.scanId).toBe(created.row.id);
+    expect(spy.calls[0]!.status).toBe('COMPLETED');
+  });
+
+  it('AUDIT-2R3：重复 PASS verdict / 重复 poll / 额外 tick → 不重复回填（幂等）', async () => {
+    const { taskKey, created } = await seedScanFixture(ORG);
+    const spy = scanStepSpy();
+    const composition = await composeScanRuntime({
+      taskKey,
+      verdictArtifact: JSON.stringify({ messageId: 'msg-pass-2', verdict: 'PASS' }),
+      onDomainStep: spy.step,
+    });
+
+    await composition.controller.tick();
+    await composition.verdictWatcher!.pollOnce();
+    expect(spy.calls).toHaveLength(1);
+
+    // 同 messageId+verdict 已被 watcher 去重 → 不再投递
+    const again = await composition.verdictWatcher!.pollOnce();
+    expect(again.delivered).toBe(false);
+    expect(spy.calls).toHaveLength(1);
+
+    // 重复 PASS 裁决 / 额外 watchdog tick → 仍只有一次回填，且 durable scan 保持 COMPLETED
+    composition.controller.markWaitingForVerdict('PASS');
+    await composition.controller.emit('JUDGE_VERDICT_RECEIVED');
+    await composition.controller.tick();
+    expect(spy.calls).toHaveLength(1);
+    const row = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId: created.row.id });
+    expect(row!.status).toBe('COMPLETED');
   });
 });
