@@ -1583,3 +1583,29 @@ NEXT_AUDIT = PHASE3_RECOVERY_DURABLE_CLOSURE_R1
 **口径**：R9-11 **仍未达成**（首次 60 分钟运行因收尾未排空判失败）；但本次运行提供了两条**有效观察**：
 ① 60 分钟内**零停滞**、持续推进 708 个任务；② 全程零外部业务事实、零重复 domain 执行。
 下一单元以修正后的取证器**重跑 60 分钟**，通过后方可进入 PHASE 3 最终审计包。
+
+### 3.34 R9-11 第 2 次 60 分钟运行（修正后取证器）= **SOAK_PASS** ⇒ **R9-11 达成**
+
+**运行（真实 PostgreSQL，head `5d7762d7`）**：`--minutes 60 --round-seconds 10 --batch 2 --workers 3 --label r9-11-60m-attempt2`
+| 指标 | 值 |
+| --- | --- |
+| 时长 / 轮数 | **3606 s（60.1 分钟）/ 357 轮** |
+| admit 任务 | **696** |
+| 已收口（APPLIED） | **747** |
+| 终态任务 | **696 / 696**（全部 `BLOCKED`） |
+| **非终态 / ACTIVE 租约** | **0 / 0**（收尾已完全排空） |
+| 零外部业务事实 | ✅ 0 |
+| domain step 重复执行 | ✅ 0 |
+| 故障注入 | 78 次（F1 INTENT 崩溃恢复 + F2 worker 空闲重启） |
+| **停滞（STALL）** | **0 次** |
+| 结论 | **`SOAK_PASS`（0 违规）** |
+
+**保证口径（对齐审计）**：R9-12 不替换被测路径（全走既有 `composeRsiRuntime()` / durable 任务源 / 生产 Recovery pack / 既有 verdictWatcher）；
+**未缩短租约 TTL**；F2 仅在无在飞任务时重启；收尾 = 截止前 90 秒停止 admit + **6 分钟有界 drain（含显式 `reclaimExpired`）**。
+
+**证据冻存**：`tools/verification/si-rsi-soak/r9-11-60m-attempt2.json`（原始日志 `tools/dev/logs/si-rsi-soak/`，已 gitignore）。
+
+**R9 全项状态**：R9-1…R9-12 **全部达成**（R9-1…R9-10/R9-12 见 §3.31；R9-11 见本节）。
+**PHASE 3 下一步**：整理**最终审计包**并送独立审计（`NEXT_AUDIT = PHASE3_FINAL`），
+其中须如实包含：PRELEASE_FIX_B、`AUDIT-2R4` 用例调整说明、R1–R8、R9-1…R9-12、60 分钟 soak 两次运行（第一次失败+根因、第二次通过）、
+全量回归口径（4799/4800，唯一失败为开发库 schema 漂移）与未验证项（Linux systemd / 真实 Provider / 断连）。

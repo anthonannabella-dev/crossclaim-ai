@@ -1,0 +1,544 @@
+{
+  "label": "r9-11-60m-attempt2",
+  "minutes": 60,
+  "roundSeconds": 10,
+  "workers": 3,
+  "batchSize": 2,
+  "databaseMarker": "127.0.0.1:55432/crossclaim",
+  "soakOrganizationId": "soak-org-d71c4aed",
+  "startedAt": "2026-10-08T19:18:24.600Z",
+  "finishedAt": "2026-10-08T20:18:30.289Z",
+  "durationSec": 3606,
+  "rounds": 357,
+  "tasksAdmitted": 696,
+  "settlementsApplied": 747,
+  "settlementIntents": 747,
+  "tasksTerminal": 696,
+  "nonTerminalTasks": [],
+  "activeLeases": 0,
+  "externalWriteRows": 0,
+  "domainStepDoubleExecutions": 0,
+  "faultsInjected": [
+    "F1_INTENT_RESUME round=7 resumed=1",
+    "F2_WORKER_RESTART round=13 owner=soak-w2",
+    "F1_INTENT_RESUME round=14 resumed=1",
+    "F1_INTENT_RESUME round=21 resumed=1",
+    "F2_WORKER_RESTART round=26 owner=soak-w3",
+    "F1_INTENT_RESUME round=28 resumed=1",
+    "F1_INTENT_RESUME round=35 resumed=1",
+    "F2_WORKER_RESTART_SKIPPED round=39 owner=soak-w1 inFlight=1",
+    "F1_INTENT_RESUME round=42 resumed=1",
+    "F1_INTENT_RESUME round=49 resumed=1",
+    "F2_WORKER_RESTART round=52 owner=soak-w2",
+    "F1_INTENT_RESUME round=56 resumed=1",
+    "F1_INTENT_RESUME round=63 resumed=1",
+    "F2_WORKER_RESTART round=65 owner=soak-w3",
+    "F1_INTENT_RESUME round=70 resumed=1",
+    "F1_INTENT_RESUME round=77 resumed=1",
+    "F2_WORKER_RESTART_SKIPPED round=78 owner=soak-w1 inFlight=1",
+    "F1_INTENT_RESUME round=84 resumed=1",
+    "F1_INTENT_RESUME round=91 resumed=1",
+    "F2_WORKER_RESTART round=91 owner=soak-w2",
+    "F1_INTENT_RESUME round=98 resumed=1",
+    "F2_WORKER_RESTART_SKIPPED round=104 owner=soak-w3 inFlight=1",
+    "F1_INTENT_RESUME round=105 resumed=1",
+    "F1_INTENT_RESUME round=112 resumed=1",
+    "F2_WORKER_RESTART round=117 owner=soak-w1",
+    "F1_INTENT_RESUME round=119 resumed=1",
+    "F1_INTENT_RESUME round=126 resumed=1",
+    "F2_WORKER_RESTART_SKIPPED round=130 owner=soak-w2 inFlight=1",
+    "F1_INTENT_RESUME round=133 resumed=1",
+    "F1_INTENT_RESUME round=140 resumed=1",
+    "F2_WORKER_RESTART_SKIPPED round=143 owner=soak-w3 inFlight=1",
+    "F1_INTENT_RESUME round=147 resumed=1",
+    "F1_INTENT_RESUME round=154 resumed=1",
+    "F2_WORKER_RESTART_SKIPPED round=156 owner=soak-w1 inFlight=1",
+    "F1_INTENT_RESUME round=161 resumed=1",
+    "F1_INTENT_RESUME round=168 resumed=1",
+    "F2_WORKER_RESTART round=169 owner=soak-w2",
+    "F1_INTENT_RESUME round=175 resumed=1",
+    "F1_INTENT_RESUME round=182 resumed=1",
+    "F2_WORKER_RESTART round=182 owner=soak-w3",
+    "F1_INTENT_RESUME round=189 resumed=1",
+    "F2_WORKER_RESTART round=195 owner=soak-w1",
+    "F1_INTENT_RESUME round=196 resumed=1",
+    "F1_INTENT_RESUME round=203 resumed=1",
+    "F2_WORKER_RESTART_SKIPPED round=208 owner=soak-w2 inFlight=1",
+    "F1_INTENT_RESUME round=210 resumed=1",
+    "F1_INTENT_RESUME round=217 resumed=1",
+    "F2_WORKER_RESTART round=221 owner=soak-w3",
+    "F1_INTENT_RESUME round=224 resumed=1",
+    "F1_INTENT_RESUME round=231 resumed=1",
+    "F2_WORKER_RESTART_SKIPPED round=234 owner=soak-w1 inFlight=1",
+    "F1_INTENT_RESUME round=238 resumed=1",
+    "F1_INTENT_RESUME round=245 resumed=1",
+    "F2_WORKER_RESTART round=247 owner=soak-w2",
+    "F1_INTENT_RESUME round=252 resumed=1",
+    "F1_INTENT_RESUME round=259 resumed=1",
+    "F2_WORKER_RESTART round=260 owner=soak-w3",
+    "F1_INTENT_RESUME round=266 resumed=1",
+    "F1_INTENT_RESUME round=273 resumed=1",
+    "F2_WORKER_RESTART round=273 owner=soak-w1",
+    "F1_INTENT_RESUME round=280 resumed=1",
+    "F2_WORKER_RESTART round=286 owner=soak-w2",
+    "F1_INTENT_RESUME round=287 resumed=1",
+    "F1_INTENT_RESUME round=294 resumed=1",
+    "F2_WORKER_RESTART round=299 owner=soak-w3",
+    "F1_INTENT_RESUME round=301 resumed=1",
+    "F1_INTENT_RESUME round=308 resumed=1",
+    "F2_WORKER_RESTART_SKIPPED round=312 owner=soak-w1 inFlight=3",
+    "F1_INTENT_RESUME round=315 resumed=1",
+    "F1_INTENT_RESUME round=322 resumed=1",
+    "F2_WORKER_RESTART round=325 owner=soak-w2",
+    "F1_INTENT_RESUME round=329 resumed=1",
+    "F1_INTENT_RESUME round=336 resumed=1",
+    "F2_WORKER_RESTART round=338 owner=soak-w3",
+    "F1_INTENT_RESUME round=343 resumed=1",
+    "F1_INTENT_RESUME round=350 resumed=1",
+    "F2_WORKER_RESTART round=351 owner=soak-w1",
+    "F1_INTENT_RESUME round=357 resumed=1"
+  ],
+  "invariantViolations": [],
+  "result": "SOAK_PASS",
+  "roundDetail": [
+    {
+      "round": 298,
+      "admitted": 2,
+      "settledTotal": 635,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 299,
+      "admitted": 2,
+      "settledTotal": 638,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 300,
+      "admitted": 2,
+      "settledTotal": 640,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 301,
+      "admitted": 2,
+      "settledTotal": 643,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 302,
+      "admitted": 2,
+      "settledTotal": 645,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 303,
+      "admitted": 2,
+      "settledTotal": 647,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 304,
+      "admitted": 2,
+      "settledTotal": 650,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 305,
+      "admitted": 2,
+      "settledTotal": 651,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 306,
+      "admitted": 2,
+      "settledTotal": 652,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 307,
+      "admitted": 2,
+      "settledTotal": 653,
+      "active": 4,
+      "pending": 4
+    },
+    {
+      "round": 308,
+      "admitted": 2,
+      "settledTotal": 655,
+      "active": 5,
+      "pending": 5
+    },
+    {
+      "round": 309,
+      "admitted": 2,
+      "settledTotal": 657,
+      "active": 5,
+      "pending": 5
+    },
+    {
+      "round": 310,
+      "admitted": 2,
+      "settledTotal": 660,
+      "active": 4,
+      "pending": 4
+    },
+    {
+      "round": 311,
+      "admitted": 2,
+      "settledTotal": 663,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 312,
+      "admitted": 2,
+      "settledTotal": 665,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 313,
+      "admitted": 2,
+      "settledTotal": 666,
+      "active": 4,
+      "pending": 4
+    },
+    {
+      "round": 314,
+      "admitted": 2,
+      "settledTotal": 667,
+      "active": 5,
+      "pending": 5
+    },
+    {
+      "round": 315,
+      "admitted": 2,
+      "settledTotal": 670,
+      "active": 5,
+      "pending": 5
+    },
+    {
+      "round": 316,
+      "admitted": 2,
+      "settledTotal": 672,
+      "active": 5,
+      "pending": 5
+    },
+    {
+      "round": 317,
+      "admitted": 2,
+      "settledTotal": 674,
+      "active": 5,
+      "pending": 5
+    },
+    {
+      "round": 318,
+      "admitted": 2,
+      "settledTotal": 676,
+      "active": 5,
+      "pending": 5
+    },
+    {
+      "round": 319,
+      "admitted": 2,
+      "settledTotal": 678,
+      "active": 5,
+      "pending": 5
+    },
+    {
+      "round": 320,
+      "admitted": 2,
+      "settledTotal": 681,
+      "active": 4,
+      "pending": 4
+    },
+    {
+      "round": 321,
+      "admitted": 2,
+      "settledTotal": 683,
+      "active": 4,
+      "pending": 4
+    },
+    {
+      "round": 322,
+      "admitted": 2,
+      "settledTotal": 687,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 323,
+      "admitted": 2,
+      "settledTotal": 689,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 324,
+      "admitted": 2,
+      "settledTotal": 691,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 325,
+      "admitted": 2,
+      "settledTotal": 693,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 326,
+      "admitted": 2,
+      "settledTotal": 695,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 327,
+      "admitted": 2,
+      "settledTotal": 697,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 328,
+      "admitted": 2,
+      "settledTotal": 699,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 329,
+      "admitted": 2,
+      "settledTotal": 702,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 330,
+      "admitted": 2,
+      "settledTotal": 703,
+      "active": 4,
+      "pending": 4
+    },
+    {
+      "round": 331,
+      "admitted": 2,
+      "settledTotal": 705,
+      "active": 4,
+      "pending": 4
+    },
+    {
+      "round": 332,
+      "admitted": 2,
+      "settledTotal": 707,
+      "active": 4,
+      "pending": 4
+    },
+    {
+      "round": 333,
+      "admitted": 2,
+      "settledTotal": 709,
+      "active": 4,
+      "pending": 4
+    },
+    {
+      "round": 334,
+      "admitted": 2,
+      "settledTotal": 712,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 335,
+      "admitted": 2,
+      "settledTotal": 715,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 336,
+      "admitted": 2,
+      "settledTotal": 718,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 337,
+      "admitted": 2,
+      "settledTotal": 719,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 338,
+      "admitted": 2,
+      "settledTotal": 721,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 339,
+      "admitted": 2,
+      "settledTotal": 723,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 340,
+      "admitted": 2,
+      "settledTotal": 725,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 341,
+      "admitted": 2,
+      "settledTotal": 727,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 342,
+      "admitted": 2,
+      "settledTotal": 729,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 343,
+      "admitted": 2,
+      "settledTotal": 733,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 344,
+      "admitted": 2,
+      "settledTotal": 735,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 345,
+      "admitted": 2,
+      "settledTotal": 736,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 346,
+      "admitted": 2,
+      "settledTotal": 738,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 347,
+      "admitted": 2,
+      "settledTotal": 740,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 348,
+      "admitted": 2,
+      "settledTotal": 742,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 349,
+      "admitted": 0,
+      "settledTotal": 744,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 350,
+      "admitted": 0,
+      "settledTotal": 746,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 351,
+      "admitted": 0,
+      "settledTotal": 746,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 352,
+      "admitted": 0,
+      "settledTotal": 746,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 353,
+      "admitted": 0,
+      "settledTotal": 746,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 354,
+      "admitted": 0,
+      "settledTotal": 746,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 355,
+      "admitted": 0,
+      "settledTotal": 746,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 356,
+      "admitted": 0,
+      "settledTotal": 746,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 357,
+      "admitted": 0,
+      "settledTotal": 747,
+      "active": 0,
+      "pending": 0
+    }
+  ],
+  "note": "R9-11 连续运行取证：全部走既有 composeRsiRuntime()/durable 源/生产 pack/既有 verdictWatcher；未替换被测路径（R9-12）；未缩短租约 TTL；无第二套 runtime/scheduler/controller",
+  "attempt": "r9-11 第 2 次（60 分钟，修正后取证器）—— SOAK_PASS",
+  "command": "node apps/api/node_modules/tsx/dist/cli.mjs tools/dev/si-rsi-soak.ts --minutes 60 --round-seconds 10 --batch 2 --workers 3 --label r9-11-60m-attempt2",
+  "guarantees": [
+    "R9-12 不替换被测路径：全走既有 composeRsiRuntime()/durable 任务源/生产 Recovery pack/既有 verdictWatcher",
+    "未缩短租约 TTL（使用默认租约）",
+    "F2 worker 重启仅在无在飞任务时执行；有在飞任务时跳过并记录 F2_WORKER_RESTART_SKIPPED",
+    "收尾：截止前 90 秒停止 admit + 6 分钟有界 drain（含显式 reclaimExpired）"
+  ],
+  "stallCheck": {
+    "rule": "仍有 READY/IN_PROGRESS 任务但连续 max(6, 120s/roundSeconds) 轮零收口 ⇒ STALL",
+    "observedStalls": 0
+  },
+  "tailDrain": {
+    "finalActiveLeases": 0,
+    "finalNonTerminal": 0,
+    "drained": true
+  },
+  "rawLogsLocation": "tools/dev/logs/si-rsi-soak/（运行时产物，已 gitignore）"
+}
