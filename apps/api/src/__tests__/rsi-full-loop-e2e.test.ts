@@ -54,12 +54,16 @@ describe('RSI 全链路端到端（事件驱动）', () => {
     controller.markWaitingForVerdict('REVISE');
     const revised = await controller.emit('JUDGE_VERDICT_RECEIVED');
     expect(revised.action).toBe('REVISION');
-    // 已记录缺口：当前 wrapper 在 runner 返回后立即完成任务，因此真实路径上没有任何任务处于
-    // 「等待裁决」状态 → REVISE 不会凭空插入 P0 修订任务，而是继续领取下一个正常任务（B）。
-    // 需要「park-for-judge」模式才能让 REVISE 真正产生修订任务；此处如实断言当前行为。
-    expect(revised.claimed?.id).toBe('B');
-    expect(controller.state().queueLength).toBe(0);
     expect(revised.reason).toBe('VERDICT_REVISE');
+    /**
+     * PRELEASE_FIX_B（审计 MSG-20261009-03）：裁决事件不再预租下一条 ⇒ 本调用 `claimed` 为 null。
+     * 当前 wrapper 在 runner 返回后即完成任务，故 REVISE 不会凭空插入 P0 修订任务；
+     * 「继续领取下一个正常任务（B）」现由**下一次正常 tick** 完成。
+     */
+    expect(revised.claimed).toBeNull();
+    const nextTick = await controller.tick();
+    expect(nextTick.claimed?.id).toBe('B');
+    expect(controller.state().queueLength).toBe(0);
   });
 
   it('VERDICT_BLOCK_REQUIRES_OWNER：BLOCK 裁决触发 OWNER_ACTION_REQUIRED，不静默吞掉', async () => {

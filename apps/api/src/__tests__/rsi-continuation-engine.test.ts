@@ -94,8 +94,15 @@ describe('RSI 事件驱动续跑引擎', () => {
 
     const outcome = engine.handleEvent('JUDGE_VERDICT_RECEIVED');
     expect(outcome.action).toBe('REVISION');
-    expect(outcome.claimed?.priority).toBe('P0'); // 修订任务最高优先
-    expect(outcome.transitionLatencyMs).toBeLessThan(5_000);
+    /**
+     * PRELEASE_FIX_B（审计 MSG-20261009-03）：裁决事件**只收口当前任务**，不再在同一次调用里预租下一条。
+     * 「不等心跳」的语义改由**下一次正常 tick** 承担（秒级，仍远小于 5 分钟心跳）；REVISE 插入的 P0 修订任务由该 tick 领取。
+     */
+    expect(outcome.claimed).toBeNull();
+    const nextTick = engine.watchdogTick();
+    expect(nextTick.claimed?.priority).toBe('P0'); // 修订任务最高优先
+    expect(nextTick.claimed?.dedupeKey).toMatch(/^REVISION:/);
+    expect(nextTick.transitionLatencyMs === null || nextTick.transitionLatencyMs < 5_000).toBe(true);
 
     // BLOCK → OWNER_ACTION_REQUIRED；无变化 → SILENT（不产生噪声）
     const blockEngine = createRsiContinuationEngine({ tasks: [], now: clock.now });

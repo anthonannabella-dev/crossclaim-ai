@@ -43,9 +43,15 @@ describe('RSI park-for-judge', () => {
     controller.markWaitingForVerdict('REVISE');
     const revised = await controller.emit('JUDGE_VERDICT_RECEIVED');
     expect(revised.action).toBe('REVISION');
-    expect(revised.claimed?.priority).toBe('P0');
-    expect(revised.transitionLatencyMs!).toBeLessThan(5_000);
-    expect(controller.state().queueLength).toBe(1); // 还剩 B
+    /**
+     * PRELEASE_FIX_B（审计 MSG-20261009-03）：裁决事件只收口当前任务、不再预租 ⇒ 本条 `claimed` 为 null；
+     * P0 修订任务已入队，由**下一次正常 tick** 领取（仍是秒级，不是 5 分钟心跳）。
+     */
+    expect(revised.claimed).toBeNull();
+    expect(controller.state().queueLength).toBe(2); // 修订任务 + 尚未执行的 B
+    const nextTick = await controller.tick();
+    expect(nextTick.claimed?.priority).toBe('P0');
+    expect(controller.state().queueLength).toBe(1); // 领取修订任务后只剩 B
   });
 
   it('PASS_CLOSES_AND_CONTINUES：裁决 PASS → 完成任务并领取下一个', async () => {
@@ -53,7 +59,10 @@ describe('RSI park-for-judge', () => {
     await controller.emit('CI_COMPLETED');
     controller.markWaitingForVerdict('PASS');
     const next = await controller.emit('JUDGE_VERDICT_RECEIVED');
-    expect(next.claimed?.id).toBe('B');
+    // PRELEASE_FIX_B：PASS 收口只完成当前任务；下一个（B）由下一次正常 tick 领取
+    expect(next.claimed).toBeNull();
+    const after = await controller.tick();
+    expect(after.claimed?.id).toBe('B');
     expect(controller.state().queueLength).toBe(0);
   });
 });
