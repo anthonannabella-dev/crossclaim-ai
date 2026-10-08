@@ -21,6 +21,8 @@ import { runRsiRestartReconcile } from '../runtime/rsi-restart-reconcile';
 import { createPrismaTaskQueuePort } from '../services/agent-goal/prisma-task-queue-port';
 import type { GoalTaskDraft } from '../services/agent-goal/goal-task-planner';
 
+import { testDatabaseMarker, uniqueTaskKeys, unreachableDatabaseUrl } from './si-rsi-test-db.helper';
+
 const prisma = new PrismaClient();
 const T0 = new Date('2026-10-08T12:00:00.000Z');
 const suffix = (): string => randomUUID().replace(/-/g, '').slice(0, 12);
@@ -98,16 +100,24 @@ afterAll(async () => {
 
 describe('PHASE 2 / P2-CHANGE4 · 运行时稳定性与可观察性', () => {
   it('S1 多 worker 并发（2 轮 × 4 任务 × 5 worker）⇒ 无重复领取、无遗漏', async () => {
+    // CHANGE 4A：每轮独立键 + try/finally 清理 —— 失败时也不把脏数据留给下一个用例
     for (let round = 0; round < 2; round += 1) {
-      const keys = [0, 1, 2, 3].map(() => 'task:recovery:LOGISTICS:' + suffix());
-      await createPrismaTaskQueuePort({ prisma, now: () => T0 }).admit({ organizationId: 'org-A', tasks: keys.map(draft) });
-      const workers = ['w1', 'w2', 'w3', 'w4', 'w5'].map((w) => createAutonomyTaskSource({ prisma, ownerRef: `${w}-r${round}`, now: () => T0 }));
-      const results = (await Promise.all(workers.map((w) => w.claim(5)))).flat().map((t) => t.dedupeKey);
-      expect(results).toHaveLength(4);
-      expect(new Set(results).size).toBe(4);
-      // 清理本轮：把任务与租约清掉以便下一轮独立
-      await truncateAutonomy();
-      await seedTenant('org-A');
+      const keys = uniqueTaskKeys('task:recovery:LOGISTICS:', 4, `${suffix()}-r${round}`);
+      try {
+        await createPrismaTaskQueuePort({ prisma, now: () => T0 }).admit({ organizationId: 'org-A', tasks: keys.map(draft) });
+        const workers = ['w1', 'w2', 'w3', 'w4', 'w5'].map((w) =>
+          createAutonomyTaskSource({ prisma, ownerRef: `${w}-r${round}`, now: () => T0 }),
+        );
+        const results = (await Promise.all(workers.map((w) => w.claim(5)))).flat().map((t) => t.dedupeKey);
+        expect(results).toHaveLength(4);
+        expect(new Set(results).size).toBe(4);
+        // 赢家数量与任务数一致：每个任务恰好一个 owner 持有 ACTIVE 租约
+        expect(await prisma.autonomyLease.count({ where: { status: 'ACTIVE' } })).toBe(4);
+      } finally {
+        // 清理本轮：把任务与租约清掉以便下一轮独立（无论断言是否失败都执行）
+        await truncateAutonomy();
+        await seedTenant('org-A');
+      }
     }
   });
 
@@ -150,6 +160,9 @@ describe('PHASE 2 / P2-CHANGE4 · 运行时稳定性与可观察性', () => {
     await next.reclaimExpired(5);
     expect((await next.claim(5)).map((t) => t.dedupeKey)).toEqual([key]);
     expect((await prisma.autonomyLease.findUniqueOrThrow({ where: { taskId } })).ownerRef).toBe('worker-next');
+    // CHANGE 4A：接管后仍只有一条租约行、且没有第二条任务行（无重复副作用 / 无键漂移）
+    expect(await prisma.autonomyLease.count({ where: { taskId } })).toBe(1);
+    expect(await prisma.autonomyTask.count({ where: { dedupeKey: key } })).toBe(1);
   });
 
   it('S4 重启后幂等恢复：既有 reconcile 重复执行 0 行变化', async () => {
@@ -165,14 +178,22 @@ describe('PHASE 2 / P2-CHANGE4 · 运行时稳定性与可观察性', () => {
   });
 
   it('S5 DB 不可用（注入）：拒绝连接时操作 fail-closed 且不产生部分写入', async () => {
-    const broken = new PrismaClient({ datasources: { db: { url: 'postgresql://crossclaim:ccdevpass@127.0.0.1:55999/nope' } } });
+    // CHANGE 4A：故障注入 URL 由**真实测试库 URL** 派生（只换端口/库名）——
+    // 仓库内不再出现任何凭据字面量；日志只暴露无凭据的数据库标记。
+    const marker = testDatabaseMarker();
+    expect(marker).not.toContain('@');
+    expect(marker).not.toContain('DB_MARKER_UNAVAILABLE');
+    const broken = new PrismaClient({ datasources: { db: { url: unreachableDatabaseUrl() } } });
     try {
       const source = createAutonomyTaskSource({ prisma: broken, ownerRef: 'worker-x', now: () => T0 });
       await expect(source.claim(5)).rejects.toThrow();
     } finally {
+      // 客户端必须释放，避免连接池残留干扰后续用例（复审要求：收拢客户端释放）
       await broken.$disconnect();
     }
-    // 真实库未受影响：仍可正常领取
+    // 真实库未受影响：既无残留任务，也仍可正常领取
+    expect(await prisma.autonomyTask.count()).toBe(0);
+    expect(await prisma.autonomyLease.count()).toBe(0);
     const key = 'task:recovery:LOGISTICS:' + suffix();
     await createPrismaTaskQueuePort({ prisma, now: () => T0 }).admit({ organizationId: 'org-A', tasks: [draft(key)] });
     expect((await createAutonomyTaskSource({ prisma, ownerRef: 'worker-ok', now: () => T0 }).claim(5)).map((t) => t.dedupeKey)).toEqual([key]);
