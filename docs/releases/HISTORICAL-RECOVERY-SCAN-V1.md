@@ -821,3 +821,24 @@ D）长扫描跨 lease boundary ⇒ 续租后继续，或未续租时立即停�
 
 **当前状态**：`AUDIT-3 = PASS WITH REVISE`，**PHASE 11 = CLOSED**，**PHASE 12 = NOT CLOSED**。
 下一步：完成上述三点 + A–D 回归后送 `AUDIT-3R2`。
+### 22. AUDIT-3R2 三项 fencing 完整性修复完成（代码 `ce541b7c`）
+
+| 审计点 | 修复 |
+| --- | --- |
+| ① `shardsTotal` 初始化绕过 fencing | `runHistoricalBackfill()` 的 `shardsTotal` 写入改走新导出 `setRecoveryScanShardsTotal()` → 同一 `updateScanFenced()` 路径（带 `expectedLeaseOwner` 时条件更新，0 行 ⇒ `RECOVERY_SCAN_LEASE_FENCED`） |
+| ② fenced 写不校验租约有效性 | `updateScanFenced()` 的 where 现在同时要求 `leaseOwner = 期望 owner`、`status = RUNNING`、`leaseExpiresAt > now`；新增 `renewRecoveryScanLease()`（CAS：自己仍是 owner 且未过期才续租），executor 在**每页取数前**续租一次（同一时间戳计算 expiry，避免二次读时钟）；续租失败 ⇒ 立即 `BLOCKED / RECOVERY_SCAN_LEASE_RENEW_FAILED`，**绝不 ingest 下一页**。execution port 把 `leaseMs` 透传给 executor，使续租时长与 claim 一致 |
+| ③ 默认 ownerRef 非全局唯一 | 默认值改为 `rsi-runtime:<进程启动 UUID>:<pid>`（模块加载时生成一次、进程生命周期内固定；导出 `DEFAULT_RUNTIME_OWNER_REF` 供断言），跨 host/container 相同 pid 不再碰撞；仍可用 `runtimeOwnerRef` 由宿主显式覆盖 |
+
+**新增回归（`historical-scan-fencing`，A–D，真实 PostgreSQL）**
+
+* **A**：B 接管后 stale A 走 `runHistoricalBackfill`（即 `shardsTotal` 初始化入口）⇒ `BLOCKED / RECOVERY_SCAN_LEASE_NOT_HELD`，
+  `shardsTotal` 保持 0、owner 仍为 B；
+* **B**：owner 仍是 A 但租约已过期 ⇒ `advanceRecoveryScanShard(..., expectedLeaseOwner:'worker-a')` 抛
+  `RECOVERY_SCAN_LEASE_FENCED`（0 行、`recordsScanned` 未变），executor 立即 `BLOCKED / RECOVERY_SCAN_LEASE_EXPIRED` 且**零分片**；
+* **C**：两个 runtime 实例 PID 相同、实例 UUID 不同 ⇒ 不被视为同 owner（跨实例调用 execution port ⇒ `RECOVERY_SCAN_LEASE_NOT_HELD`）；
+  并断言 `DEFAULT_RUNTIME_OWNER_REF` 形如 `rsi-runtime:<uuid>:<pid>`；
+* **D**：长扫描跨过**首次**租约边界（时钟 3s/步、租约 10s）⇒ 每页续租后继续到 `COMPLETED`、分片零重复、finish 释放租约。
+
+**证据**：`historical-scan-fencing` **8/8**；定向批次 **14 文件 / 90 tests 全绿**；api tsc 0。GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
+
+**下一步**：`AUDIT-3R2` 窄复审（REVIEWED_HEAD `ce541b7c`）。
