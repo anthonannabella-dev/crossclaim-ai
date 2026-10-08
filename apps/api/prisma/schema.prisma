@@ -3965,3 +3965,58 @@ model ConnectionSyncState {
   @@unique([organizationId, connectionId])
   @@unique([organizationId, id])
 }
+
+// ============================================================
+// HISTORICAL_RECOVERY_SCAN_V1（HOST 2026-10-08 授权）
+// Durable 历史追回扫描范围（server-owned scan scope）
+//   * 不是第二事实源：只承载「扫描范围 / 覆盖 / 进度 / 检查点」，业务事实仍走既有 CanonicalFact /
+//     Opportunity / Case / Evidence / Claim 链。
+//   * 身份由确定性 dedupeKey / scanDigest 决定：同 goal+domain+provider+account+区间 不产生第二个 scan。
+//   * Runtime claim 之后**只能**通过本表读取范围（caller / task payload 不得自报 timeRange）。
+// ============================================================
+
+/// 历史追回扫描（durable scan scope + 进度 + 检查点）
+model RecoveryScanRun {
+  id                   String    @id @default(uuid())
+  organizationId       String
+  goalId               String
+  goalDigest           String
+  domain               String
+  provider             String?
+  platformAccountId    String?
+  requestedFrom        DateTime
+  requestedTo          DateTime
+  effectiveFrom        DateTime
+  effectiveTo          DateTime
+  requestedMonths      Int
+  scanPolicyVersion    String
+  shardGrain           String    @default("MONTHLY")
+  status               String    @default("CREATED")
+  coverageStart        DateTime?
+  coverageEnd          DateTime?
+  sourceCoverageStatus String    @default("UNKNOWN")
+  shardsTotal          Int       @default(0)
+  shardsCompleted      Int       @default(0)
+  nextShardIndex       Int       @default(0)
+  shardCursor          String?
+  recordsScanned       Int       @default(0)
+  recordsAccepted      Int       @default(0)
+  recordsRejected      Int       @default(0)
+  opportunitiesFound   Int       @default(0)
+  eligibleFound        Int       @default(0)
+  expiredFound         Int       @default(0)
+  needsEvidenceFound   Int       @default(0)
+  reasonCodes          Json?
+  scanDigest           String
+  dedupeKey            String
+  leaseOwner           String?
+  leaseExpiresAt       DateTime?
+  createdAt            DateTime
+  updatedAt            DateTime
+  completedAt          DateTime?
+
+  @@unique([organizationId, dedupeKey])
+  @@unique([organizationId, id])
+  @@index([organizationId, goalId, domain])
+  @@index([organizationId, status, updatedAt])
+}

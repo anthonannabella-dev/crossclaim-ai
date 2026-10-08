@@ -220,8 +220,18 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     }
   });
 
-  it('模型总数为 113（96 + 5 耐久底座 + 3 Scheduler + 3 Provider 事实层 + 1 AI 解读 + 1 Standing Authorization 持久化 + 2 Goal 持久化 + 2 OAuth·Sync 补强）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(113);
+  // HISTORICAL_RECOVERY_SCAN_V1（HOST 2026-10-08）：durable 历史扫描范围
+  //   * tenant-owned；只承载 scan scope / coverage / checkpoint，**不是**第二事实源、不是第二 runtime
+  const HISTORICAL_SCAN_MODELS = ['RecoveryScanRun'];
+
+  it(`历史扫描模型 ${HISTORICAL_SCAN_MODELS.length} 个`, () => {
+    for (const name of HISTORICAL_SCAN_MODELS) {
+      expect(modelBlock(name), `缺少历史扫描模型 ${name}`).not.toBe('');
+    }
+  });
+
+  it('模型总数为 114（96 + 5 耐久底座 + 3 Scheduler + 3 Provider 事实层 + 1 AI 解读 + 1 Standing Authorization 持久化 + 2 Goal 持久化 + 2 OAuth·Sync 补强 + 1 Historical Recovery Scan）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(114);
   });
 });
 
@@ -243,6 +253,8 @@ describe('租户归属（C-0002 CHANGE #2）', () => {
     'StandingAuthorization',    // AGENT EXPERIENCE LAYER / P3：Goal 持久化为 tenant-owned
     'AgentGoal',
     'AgentGoalRun',
+    // HISTORICAL_RECOVERY_SCAN_V1：历史扫描范围（tenant-owned，服务端唯一 owner）
+    'RecoveryScanRun',
     // AGENT EXPERIENCE LAYER / P9：OAuth 会话与同步检查点为 tenant-owned
     'OAuthAuthorizationSession',
     'ConnectionSyncState',

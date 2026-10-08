@@ -1,114 +1,123 @@
-# HISTORICAL_RECOVERY_SCAN_V1 —— 单元记录（PHASE 0 + PHASE 1 已交付）
+# HISTORICAL_RECOVERY_SCAN_V1 —— 单元记录（PHASE 0/1/2/4/5/6-core/9 已交付）
 
-> 诚实状态：本单元**未完成**。PHASE 0（只读审计）与 PHASE 1（确定性 5 年时间范围）已实现并验证；
-> PHASE 2–14 未实现。因此 **`HISTORICAL_RECOVERY_SCAN_V1` ≠ PASS / CLOSED**（详见 §4 状态表）。
+> 诚实状态：**PHASE 2–14 尚未全部完成**。已交付：PHASE 0（审计）、PHASE 1（5 年时间范围）、
+> PHASE 2（durable `RecoveryScanRun` + migration + 幂等/租户/检查点）、PHASE 4（窗口解析器）、
+> PHASE 5（Customs remedy 双 gate）、PHASE 6 核心（分片 + 检查点 + crash resume 执行器）、PHASE 9（客户安全 summary）。
+> 未完成：PHASE 3（Runtime 侧 scope 装载接线）、PHASE 7（connector 历史区间）、PHASE 8（customs 历史管线接线）、
+> PHASE 10（ONE SI Runtime E2E）、PHASE 11/12（边界与并发/崩溃的运行时验证）、PHASE 13/14（完整矩阵与最终验收）。
+> 因此 **`HISTORICAL_RECOVERY_SCAN_V1 ≠ PASS / CLOSED`**。
 
 ## 1. 基线
 
 | 项 | 值 |
 | --- | --- |
-| BASE_BRANCH | `feat/goal-input-ux-guidance`（最新已 push 基线，父为已 CLOSED 的 `release/integration-20261008`） |
+| BASE_BRANCH | `feat/goal-input-ux-guidance`（父：已 CLOSED 的 `release/integration-20261008`） |
 | BASE_HEAD | `7a078da6320c9cb6b868ede34d7c191db25723e0` |
-| WORKTREE_STATUS | clean（开工时） |
 | BRANCH | `feat/historical-recovery-scan-v1` |
-| 已封板分支 | 未修改（`release/integration-20261008` = `190d57a6` 不变） |
+| 已封板分支 | 未修改（`release/integration-20261008` = `190d57a6`、`main` = `5a340bc0` 不变） |
 
-## 2. PHASE 0 — 只读审计（已交付）
+## 2. PHASE 0 —— 只读审计
 
-产出：`docs/releases/HISTORICAL_SCAN_AUDIT.md`（每一项均带代码级证据与文件/行号）。
+产出：[`HISTORICAL_SCAN_AUDIT.md`](HISTORICAL_SCAN_AUDIT.md)。结论摘要：`GOAL_5Y_PARSE = MISSING`；
+`TIME_RANGE_RUNTIME_PROPAGATION = PARTIAL`；`HISTORICAL_CONNECTOR_SUPPORT = PARTIAL`；
+`CUSTOMS_5Y_RULE_SUPPORT = PARTIAL`；`DURABLE_SCAN_STATE / CHECKPOINT_RESUME / SOURCE_COVERAGE_TRACKING = MISSING`；
+`IDEMPOTENCY = PARTIAL`。
 
-关键结论：
+## 3. PHASE 1 —— 确定性 5 年时间范围（已交付）
 
-* **GOAL_5Y_PARSE = MISSING**：「过去 5 年」被静默回落为默认 12 个月（实测）。
-* **TIME_RANGE_RUNTIME_PROPAGATION = PARTIAL**：`GoalPlan.timeRange` 存在，但 task 草案（`{domain, dedupeKey}`）、
-  队列准入、`recovery-si-pack` 组装均**不携带**时间范围 → Runtime 无法知道「过去 5 年」。
-* **HISTORICAL_CONNECTOR_SUPPORT = PARTIAL**：有 durable cursor 与一页一推进；**无**历史区间入参、无 coverage 元数据。
-* **CUSTOMS_5Y_RULE_SUPPORT = PARTIAL**：已是 per-remedy（无全球 3–5 年规则）、drawback = exportDate + 1825 天、
-  `UNVERIFIED / LEGAL_VERIFIED` 词表已存在；但**未拆双 gate**（CLAIM_FILING_DEADLINE /
-  EXPORT_OR_DESTRUCTION_QUALIFYING_WINDOW），且 `evaluateRemedyDeadline()` **不消费 verification**。
-* **DURABLE_SCAN_STATE / CHECKPOINT_RESUME（scan 级）/ SOURCE_COVERAGE_TRACKING = MISSING**。
-* **IDEMPOTENCY = PARTIAL**（goal/task 级有确定性 digest/dedupeKey；scan 级无）。
+* `GOAL_MAX_MONTHS` **36 → 60**；新增错误码 `GOAL_TIME_RANGE_EXCEEDS_MAX`。
+* 编译器新增 `YEARS_DIGIT_SIGNAL`（`5 years` / `5 年`）与 `YEARS_CJK_SIGNAL`（`五年`，支持 一…十 / 十一…九十九），
+  在默认 12 个月之前判定；超上限夹紧到 bounded max 并写**可审计** `TIME:CLAMPED_TO_MAX`；CUSTOMS 域补 `进口` / `import`。
+* 校验器：超过上限的未受信 draft **显式拒绝**（不再静默夹紧）。
+* 证据：`agent-goal.test.ts` 38/38（含 1/12/36/60 个月、5 年（中/英）、五年、超限夹紧信号、ALL_TIME、digest 确定性）。
 
-## 3. PHASE 1 — 确定性 5 年时间范围（已实现并通过验证）
+## 4. PHASE 2 —— durable `RecoveryScanRun`（已交付）
 
-### 3.1 变更
-
-| 文件 | 变化 |
+| 项 | 实现 |
 | --- | --- |
-| `apps/api/src/services/agent-goal/goal-contract.ts` | `GOAL_MAX_MONTHS` **36 → 60**（bounded max，带说明注释）；新增错误码 `GOAL_TIME_RANGE_EXCEEDS_MAX` |
-| `apps/api/src/services/agent-goal/goal-compiler.ts` | 新增 `YEARS_DIGIT_SIGNAL`（`5 years` / `5 年`）与 `YEARS_CJK_SIGNAL`（`五年`，含 一…十 / 十一…十九 / 二十…九十九 解析）；`resolveTimeRange()` 先判年数 → `LAST_N_MONTHS = years*12`；超上限夹紧到 bounded max 并写 **可审计** signal `TIME:CLAMPED_TO_MAX`；CUSTOMS 域词表补 `进口` / `import(s|ed|ing)` |
-| `apps/api/src/services/agent-goal/goal-validator.ts` | `normalizeTimeRange()` 不再静默夹紧：`> GOAL_MAX_MONTHS` → 显式抛 `GOAL_TIME_RANGE_EXCEEDS_MAX` |
-| `apps/api/src/__tests__/agent-goal.test.ts` | 旧「静默夹紧到 36」断言改为「1..60 原样接受 + 超上限显式拒绝」；新增 PHASE 1 测试块（8 项） |
+| Schema | `RecoveryScanRun`（organizationId / goalId / goalDigest / domain / provider / platformAccountId / requestedFrom·To / effectiveFrom·To / requestedMonths / scanPolicyVersion / shardGrain / status / coverage* / shardsTotal·Completed·nextShardIndex / shardCursor / 计数 7 项 / reasonCodes / scanDigest / dedupeKey / leaseOwner·leaseExpiresAt / createdAt·updatedAt·completedAt） |
+| 迁移 | `20261008120000_recovery_scan_run`（表 + CHECK + UNIQUE(organizationId,dedupeKey) + 身份触发器 + tenant 基线触发器）+ `20261008121000_recovery_scan_identity_effective_range`（**修正**：把 effectiveFrom/effectiveTo/shardGrain 纳入身份不可改写） |
+| 清单同步 | `tools/tenant-triggers/required-triggers.json` 新增 `cc_tenant_recoveryscanrun` |
+| 身份 | `buildRecoveryScanIdentity()`：`scanDigest = sha256(canonical(goal+domain+provider+account+effective 区间+months+policy))`；`dedupeKey = scan:v1:<goalDigest16>:<domain>:<provider|->:<account|->:<from>:<to>:<months>`；**不含 transient timestamp** |
+| 幂等 | `createOrGetRecoveryScan()`（UNIQUE + P2002 → 返回既有行）；重复创建 `created=false`，行 id 相同 |
+| 租户/账号隔离 | 创建前校验 goal 属于该组织（否则 `RECOVERY_SCAN_GOAL_NOT_FOUND`）；跨租户按 dedupeKey 读取返回 `null`；DB 触发器 `crossclaim_assert_tenant_integrity('goalId','AgentGoal')` + `cc_tenant_immutable__*` |
+| 检查点 | `shardCursor`（当前分片内页游标）+ `nextShardIndex` + `shardsCompleted`；`advanceRecoveryScanShard()` 只在整页处理完后推进 |
+| 并发 | `claimRecoveryScanRun()`：`updateMany(status='CREATED')` CAS，只有一个 worker 能抢到 |
+| 覆盖 | `coverageStart/End/sourceCoverageStatus`（FULL/PARTIAL/SOURCE_LIMITED/UNKNOWN）由**端口上报**写入，不按请求推断 |
 
-### 3.2 行为证据（实测）
+**Fresh DB**：scratch 库 `crossclaim_hscan20261008` → `prisma migrate deploy` **93/93 成功**（原 92 + 本单元 2，其中 1 个为修正）。
 
-| 输入 | 修复前 | 修复后 |
-| --- | --- | --- |
-| 检查我过去 5 年的关税损失 | `12` 个月（DEFAULT_12_MONTHS） | **`60` 个月**（`TIME:LAST_N_YEARS`） |
-| 把过去五年的进口记录都检查一下 | `GOAL_UNSUPPORTED_INTENT`（域缺失）→ 时间不可达 | **`60` 个月**（CUSTOMS 域已识别「进口」） |
-| scan my last 5 years of customs activity | `12` 个月 | **`60` 个月** |
-| review my last 1 year of customs activity | `12` 个月 | `12` 个月（不变） |
-| 检查过去 12 / 36 / 60 个月的关税损失 | `12 / 36 / 36`（60 被夹到 36） | **`12 / 36 / 60`** |
-| 扫描过去 10 年的进口记录 | 静默 → `12` 个月 | 夹紧到 `60` + signal **`TIME:CLAMPED_TO_MAX`**（可审计，不静默） |
-| 校验器收到 `months = 61` | 静默夹到 36 | **显式拒绝**（`GOAL_TIME_RANGE_EXCEEDS_MAX`） |
-| 检查全部历史的关税记录 | `ALL_TIME` | `ALL_TIME`（不变） |
+## 5. PHASE 4 —— `RecoveryWindowResolver`（已交付）
 
-确定性：同文本两次编译 → 同 `goalDigest` / `goalId`（测试覆盖），无模型调用（`modelCallCount = 0`）。
+`resolveRecoveryWindow()`：`effectiveRange = min(requested, 数据源覆盖, 领域规则窗口)`，输出 reason codes
+（REQUESTED_RANGE_APPLIED / SOURCE_HISTORY_LIMITED / POLICY_WINDOW_SHORTER / RULE_UNVERIFIED /
+MISSING_JURISDICTION / MISSING_ANCHOR / FULL_COVERAGE / PARTIAL_COVERAGE）与 `blocksClaimReady`。
+Customs 缺 jurisdiction / 未核验政策 / 缺 anchor → **阻断 CLAIM_READY**；无全球统一年限兜底。
 
-### 3.3 回归证据
+## 6. PHASE 5 —— Customs remedy-specific 双 gate（已交付）
+
+新增 `customs/enterprise-ior/remedy-gates.ts`：把时间规则拆成彼此独立的
+**`CLAIM_FILING_DEADLINE`** 与 **`EXPORT_OR_DESTRUCTION_QUALIFYING_WINDOW`**；policy 需 versioned 且带
+`verification ∈ {UNVERIFIED, LEGAL_VERIFIED}`。规则：
+
+* 未 `LEGAL_VERIFIED` → `INDETERMINATE`，`claimReadyAllowed = false`；
+* 任一 gate 未建模 / 缺 anchor → `INDETERMINATE`（不猜测、不套用统一年限）；
+* 任一 gate 过期 → `EXPIRED`；
+* 两 gate 均 PASS 且已核验 → `CLAIM_READY`（`autoFilingAllowed` 恒为 false）。
+
+Drawback 的 1825 天（exportDate 锚点）被明确定位为**合格窗口**，而不是「统一的申报期限」。
+
+## 7. PHASE 6（核心）—— 分片 / 检查点 / crash resume（已交付）
+
+* `planScanShards()`：MONTHLY / QUARTERLY 确定性分片（保留 day-of-month；5 年 = 60 个月度分片；bounded ≤ 240）。
+* `runHistoricalBackfill()`：逐 shard → 逐 page；每页 `ingest` 完成后才 `advanceRecoveryScanShard()` 写检查点；
+  预算耗尽（`maxPages`）→ 返回 `PARTIAL` 并把检查点留在库里；再次调用从 `nextShardIndex` + `shardCursor` 继续；
+  已完成 scan 重放**不产生任何 ingest 调用**（幂等）。
+
+## 8. PHASE 9 —— 客户安全 summary（已交付）
+
+`buildScanSummaryView()` + `scanCoverageIsFull()`：只读投影，恒声明 `claimsFiled = 0`、
+`externalActionPerformed/externalWritePerformed/filingPerformed/paymentPerformed = false`；
+覆盖非 FULL 或 effective 收窄时给出 `COVERAGE_NOT_FULL` / `EFFECTIVE_RANGE_NARROWER_THAN_REQUESTED` disclaimer；
+**不允许**把部分覆盖表述为「5 年检查完成」。
+
+## 9. 本轮实测证据
 
 | 门禁 | 结果 |
 | --- | --- |
+| `prisma validate` | **valid** |
+| Fresh DB migration | **93/93 applied**（scratch `crossclaim_hscan20261008`） |
 | api tsc | **0** |
-| `agent-goal.test.ts` | **38/38**（原 30 + 本单元 8） |
-| `agent-goal-http-db.test.ts` / `goal-admission-db.test.ts` / `architecture-contract.test.ts` | **6 / 18 / 170 全绿** |
-| 定向合计 | **4 文件 / 232 tests PASS** |
+| `historical-scan-db.test.ts` | **11/11**（身份确定性 / 幂等 / 租户隔离 / 身份不可改写（DB 触发器）/ 并发 claim / 终态约束 / digest 篡改 / 分片检查点 / crash resume / 幂等重放 / 覆盖） |
+| `historical-scan-window.test.ts` | **8/8**（分片计划 + 窗口解析 8 个 reason code 场景） |
+| `customs-remedy-gates.test.ts` | **8/8**（未核验阻断 / 缺 gate / 缺 anchor / 过期 / 不同 remedy 独立窗口 / 无政策） |
+| `agent-goal.test.ts` | **38/38** |
+| `architecture-contract.test.ts` | **173/173**（模型总数 113 → 114，新增 tenant-owned `RecoveryScanRun`） |
+| API 全量回归（fresh DB `crossclaim_hscan20261008`） | **4607 passed / 1 failed / 4608**（454 文件：453 通过），唯一失败 = 既有 `recovery-si-phase2-e-db` P2E-DB5 并行隔离 flake；单跑 **20/20 PASS** |
 
-`prisma`、`apps/web`、`apps/api/src/runtime/**` **未改动**（本阶段只动 goal 编译/校验链与其测试）。
-
-## 4. 状态表（截至本记录）
+## 10. 未完成（如实登记）
 
 | PHASE | 内容 | 状态 |
 | --- | --- | --- |
-| 0 | 只读架构审计 | **DONE**（`HISTORICAL_SCAN_AUDIT.md`） |
-| 1 | Goal 5 年支持（60 个月、无静默回落/夹紧） | **DONE**（232 tests） |
-| 2 | Durable `RecoveryScanRun`（schema + migration + 确定性 identity/dedupe） | **NOT STARTED** |
-| 3 | 时间范围经 durable scan 进入 ONE SI Runtime（claim 时按 dedupeKey 解析 scope，fail-closed） | **NOT STARTED** |
-| 4 | `RecoveryWindowResolver`（requested vs effective + reason codes） | **NOT STARTED** |
-| 5 | Customs 双 gate（filing deadline / qualifying window）+ verification 门禁 + remedy 词表补齐 | **NOT STARTED** |
-| 6 | Historical Backfill Executor（季度/月度 shard + checkpoint + crash resume） | **NOT STARTED** |
-| 7 | Connector 历史区间 + coverage 元数据（FULL/PARTIAL/SOURCE_LIMITED/UNKNOWN） | **NOT STARTED** |
-| 8 | Customs 历史管线复用（entry → duty → discrepancy → eligibility → matching → evidence → drawback → CLAIM_READY） | **NOT STARTED**（既有链已存在，未接历史输入） |
-| 9 | 客户安全 scan summary（UI 轻量进度/结果，不重构 UI V2） | **NOT STARTED** |
-| 10 | 自动化 / SI 执行接线 | **NOT STARTED**（既有链路未改；SECOND_* 仍为 0） |
-| 11 | 生产边界 | **保持 HOLD（未解锁任何能力）** |
-| 12 | Durability debt | 已登记（`PRODUCTION_DURABLE_QUEUE_REQUIRED`），未解决 |
-| 13 | 测试矩阵 A–G | 仅 A（Goal parsing）完成；B–G 未实现 |
-| 14 | 验收（含 synthetic E2E） | **NOT DONE** |
+| 3 | Runtime claim → durable scan scope 装载（fail-closed BLOCK） | **未接线**（store 侧 `loadRecoveryScanScope` 已就绪，尚未在 Recovery SI claim 路径调用） |
+| 7 | Connector 历史区间 + coverage 元数据 | 未实现 |
+| 8 | Customs 历史管线接线（entry → duty → discrepancy → eligibility → matching → evidence → drawback） | 未实现（既有链未改） |
+| 10 | ONE SI Runtime E2E（Goal → scan → shards → customs → summary） | 未实现 |
+| 11 | 生产边界验证（自动化断言 externalWrite/filing/payment = false 的端到端） | 部分（summary 层已固化，运行时尚无 E2E） |
+| 12 | durability / 并发 / crash recovery 的运行时验证 | 部分（store + executor 级已测；运行时级未测） |
+| 13 | 完整测试矩阵 B–G（range propagation / resume E2E / coverage limitation / customs 全矩阵 / tenant isolation E2E） | 部分（A/C/D/E 及 customs 纯函数已覆盖） |
+| 14 | 验收 + synthetic E2E | 未完成 |
 
-## 5. 停止原因（非 STOP CONDITIONS 触发）
+**未完成的原因**：PHASE 3/7/8/10 需要改动 ONE SI Runtime 的 claim → Recovery SI 装配路径与 connector 契约，
+必须与 runtime 级 E2E、并发/崩溃验证一起完成并跑全量回归（单次约 27 分钟）；在未完成该闭环前不把它们部分合入，
+避免产生「范围可被 caller 自报」或「connector 区间未经 server 校验」的中间态。
 
-未触发任何 HOST 列出的 STOP CONDITION：没有新建第二 Runtime / Policy Engine / Guard / Fact Source，
-没有绕过 Authorization 或 Action Guard，没有真实 provider 外写 / filing / payment，
-没有用未核验的法律期限自动放行。
+## 11. 边界（不变）
 
-停在 PHASE 1 之后的原因是**范围与验证强度**：PHASE 2 起需要 schema migration（新增 durable scan 实体）、
-Runtime claim 侧的 scope 解析、connector 契约扩展与 customs 法律期限双 gate 建模——这些都属于
-「持久化真相 + 运行时语义 + 法律期限」的高风险面，必须在同一轮内完成
-schema → migration → fresh DB → tests → runtime wiring → E2E 的完整闭环并全量回归（当前全量回归单次约 27 分钟），
-不能以未验证的中间态合并。本记录如实登记进度，不宣称 CLOSED。
-
-## 6. 下一步（PHASE 2 起的实现清单，按依赖顺序）
-
-1. **PHASE 2**：`RecoveryScanRun`（organizationId + goalId + goalDigest + platformAccountId + domain + provider +
-   requested/effective 区间 + requestedMonths + scanPolicyVersion + status + coverage* + shard/cursor checkpoint +
-   计数 + scanDigest + dedupeKey（`scan:<goalDigest>:<domain>:<account>:<from>:<to>`））；
-   `@@unique([organizationId, dedupeKey])`；不得含 transient timestamp；迁移 + fresh DB + tenant 触发器清单同步。
-2. **PHASE 3**：claim 时以 task `dedupeKey` 解析 durable scan；tenant 不符 / 缺 scope / digest 被改 → BLOCK。
-3. **PHASE 4/7**：`RecoveryWindowResolver` + connector range/coverage（先纯函数与契约，再接 adapter）。
-4. **PHASE 5/8**：customs 双 gate + verification 门禁 + 历史输入复用既有 customs 链。
-5. **PHASE 6/9/13/14**：backfill shard 执行器、scan summary UI、测试矩阵 B–G、synthetic E2E。
-
-边界不变：`REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`、`REAL_VALIDATION_COMPLETE = NO`、`PRODUCTION_READY = NO`；
-`SECOND_RUNTIME = 0`、`SECOND_POLICY_ENGINE = 0`、`SECOND_GUARD = 0`、`SECOND_FACT_SOURCE = 0`；
-全部 HOLD 不变。
+* `SECOND_RUNTIME = 0`、`SECOND_POLICY_ENGINE = 0`、`SECOND_GUARD = 0`、`SECOND_FACT_SOURCE = 0`
+  （本单元新增的只是 durable scan scope + 纯函数解析器 + 领域步骤执行器；未新增调度器/运行时/政策引擎/守卫）。
+* `REAL_PROVIDER_WRITE / CUSTOMS_FILING / PAYMENT / AUTO_COMMISSION_CHARGE / PRODUCTION_CREDENTIALS /
+  PRODUCTION_ENABLEMENT / EXTERNAL_WRITE / TRANSPORT = HOLD`；`AUTO_FILING` 在代码层恒为 false。
+* `createJsonTaskQueuePort()` 仍为 JSON read-modify-write：**已登记 `PRODUCTION_DURABLE_QUEUE_REQUIRED`**，
+  本单元的 scan durability 走数据库（PostgreSQL 原子状态 + 唯一约束 + 触发器），未使用该 JSON 端口承载扫描检查点。
+* `REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`；`REAL_VALIDATION_COMPLETE = NO`；`PRODUCTION_READY = NO`。

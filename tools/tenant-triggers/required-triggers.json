@@ -469,6 +469,10 @@
       "table": "AgentGoalRun"
     },
     {
+      "name": "cc_tenant_recoveryscanrun",
+      "table": "RecoveryScanRun"
+    },
+    {
       "name": "cc_tenant_oauthauthorizationsession",
       "table": "OAuthAuthorizationSession"
     },
