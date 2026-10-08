@@ -26,6 +26,8 @@ import {
   type BackfillPagePort,
 } from '../services/historical-scan';
 import { evaluateCustomsHistoricalBatch } from '../services/historical-scan/customs-historical-pipeline';
+import { composeRsiRuntime } from '../runtime/rsi-run';
+import type { RecoveryReadPorts } from '../services/intelligence/recovery-read-tools';
 
 const prisma = new PrismaClient();
 
@@ -88,6 +90,97 @@ afterAll(async () => {
 });
 
 describe('PHASE 10 · 合成 5 年 E2E（Goal → scan → shard → customs → CLAIM_READY → summary）', () => {
+  it('runtime leg：既有 ONE SI Runtime composition（productRecoveryPack）认领该 scan task，并由 runtime 自行装载 durable scope', async () => {
+    const compiled = compileAgentGoal({ text: INTENT });
+    if (!compiled.ok) throw new Error('compile failed');
+    const validated = validateAgentGoalDraft({
+      draft: compiled.draft,
+      context: { organizationId: ORG, actorUserId: USER, now: NOW },
+    });
+    await prisma.agentGoal.create({
+      data: {
+        id: validated.goalId,
+        organizationId: ORG,
+        createdBy: USER,
+        rawUserIntent: INTENT,
+        normalizedGoal: { version: validated.version, goalDigest: validated.goalDigest },
+        status: 'ADMITTED',
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    });
+    const created = await createOrGetRecoveryScan(prisma, {
+      organizationId: ORG,
+      goalId: validated.goalId,
+      goalDigest: validated.goalDigest,
+      domain: 'CUSTOMS',
+      provider: 'CBP',
+      platformAccountId: null,
+      requestedFrom: REQUESTED_FROM,
+      requestedTo: REQUESTED_TO,
+      effectiveFrom: REQUESTED_FROM,
+      effectiveTo: REQUESTED_TO,
+      requestedMonths: 60,
+    });
+
+    // planner 生成的 task identity：task:recovery:<DOMAIN>:<suffix>（suffix 含 durable scan token）
+    const taskKey = 'task:recovery:CUSTOMS:' + created.row.dedupeKey;
+    const loadedRefs: string[] = [];
+    const readPorts: RecoveryReadPorts = {
+      async opportunityRead(input) {
+        return { opportunityRef: input.opportunityRef, status: 'READY', currency: 'USD', hasRecoverableAmount: true, hasRuleEvaluation: true };
+      },
+      async evidenceRead(input) {
+        return { opportunityRef: input.opportunityRef, caseRef: 'case-1', evidenceCount: 1, kinds: ['ENTRY_RECORD'] };
+      },
+      async customsAuthorizationReadinessRead(input) {
+        return { opportunityRef: input.opportunityRef, route: 'MODE_A', readyToFile: false, blockerCodes: ['POA_MISSING'] };
+      },
+    };
+    const appGuardDeps = () =>
+      ({
+        killSwitchResolver: {
+          async resolve(scope: string) {
+            return { scope, value: 'enabled', degraded: false, stale: false };
+          },
+        },
+        audit: { async write() { /* no-op（本用例不校验审计落盘） */ } },
+      }) as never;
+
+    const composition = await composeRsiRuntime({
+      readFile: async (path: string) =>
+        path === 'mem://tasks' ? JSON.stringify([{ id: 'task-scan-1', dedupeKey: taskKey, priority: 'P2' }]) : '[]',
+      tasksPath: 'mem://tasks',
+      productRecoveryPack: {
+        appActionGuardDeps: appGuardDeps(),
+        readPorts,
+        bind: (task: { id: string; dedupeKey: string; priority: string }) => {
+          const match = /^task:recovery:([A-Z_]+):(.+)$/.exec(task.dedupeKey);
+          if (match === null) return null;
+          return { organizationId: ORG, domain: 'CUSTOMS' as never, actionKind: 'EXECUTE_READ_ONLY_CHECK' as never, opportunityRef: match[2]! };
+        },
+        scanScope: {
+          async load(ref: { organizationId: string; dedupeKey: string }) {
+            loadedRefs.push(ref.dedupeKey);
+            const loaded = await loadScanScopeForClaimedTask(prisma, {
+              organizationId: ref.organizationId,
+              dedupeKey: ref.dedupeKey,
+            });
+            return { ok: loaded.ok, reasonCodes: loaded.reasonCodes };
+          },
+        },
+      },
+      awaitVerdict: false,
+    });
+
+    const outcome = await composition.controller.tick();
+    // ① 任务由**唯一 runtime**（productRecoveryPack）认领
+    expect(outcome.claimed?.dedupeKey).toBe(taskKey);
+    // ② runtime 自行经扫描范围端口装载 durable scope（不是测试直接查库）
+    expect(loadedRefs).toEqual([taskKey]);
+    expect(composition.domainDispatchLog().length).toBeGreaterThan(0);
+  });
+
   it('完整链路跑通：60 个月 → durable scan → scope 装载 → 分片回填 → 四态结果 → 覆盖诚实 summary', async () => {
     // ① Goal 文本 → 确定性编译（5 年 = 60 个月）
     const compiled = compileAgentGoal({ text: INTENT });
