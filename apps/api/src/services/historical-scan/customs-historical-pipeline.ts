@@ -14,6 +14,21 @@ import {
   type DrawbackCandidateRouteInput,
 } from '../customs/drawback/drawback-candidate-route';
 
+/**
+ * AUDIT-1 / CHANGE 1（MSG-20261008-01）：
+ * PHASE 8 **必须消费** PHASE 4 的 `blocksClaimReady`，而不是让既有 drawback route
+ * 用 `jurisdiction ?? 'US'` 的默认值把「缺 jurisdiction」悄悄变成 US 规则。
+ * 同时缺 jurisdiction 本身也一律不得进入 CLAIM_READY（双保险，不新建第二套规则）。
+ */
+export interface CustomsHistoricalWindowGate {
+  readonly blocksClaimReady: boolean;
+  readonly reasonCodes: readonly string[];
+}
+
+export type CustomsHistoricalCandidateInput = DrawbackCandidateRouteInput & {
+  readonly historicalWindow?: CustomsHistoricalWindowGate | null;
+};
+
 export const CUSTOMS_HISTORICAL_OUTCOMES = [
   'CLAIM_READY',
   'NEEDS_EVIDENCE',
@@ -46,13 +61,14 @@ export class CustomsHistoricalBoundaryError extends Error {
 
 /** 单条历史 entry：复用既有 drawback 路径，并把 disposition 映射为四种历史结果之一。 */
 export function evaluateCustomsHistoricalCandidate(
-  input: DrawbackCandidateRouteInput,
+  input: CustomsHistoricalCandidateInput,
 ): CustomsHistoricalCandidateResult {
   if (input.requestFiling === true) {
     // 历史扫描永远不申报；显式拒绝而不是静默忽略
     throw new CustomsHistoricalBoundaryError('CUSTOMS_HISTORICAL_CANNOT_REQUEST_FILING');
   }
-  const route = evaluateDrawbackCandidateRoute({ ...input, requestFiling: false });
+  const { historicalWindow, ...routeInput } = input;
+  const route = evaluateDrawbackCandidateRoute({ ...routeInput, requestFiling: false });
 
   if (route.filingPerformed !== false || route.billable !== false || route.autoFilingAllowed !== false) {
     throw new CustomsHistoricalBoundaryError('CUSTOMS_HISTORICAL_ROUTE_NOT_FAIL_CLOSED');
@@ -61,11 +77,25 @@ export function evaluateCustomsHistoricalCandidate(
     throw new CustomsHistoricalBoundaryError('CUSTOMS_HISTORICAL_UNKNOWN_DISPOSITION:' + route.disposition);
   }
 
+  // AUDIT-1 / CHANGE 1：consumption of the historical window gate（缺 jurisdiction / blocksClaimReady → 降级）
+  const jurisdictionMissing = input.jurisdiction === null || input.jurisdiction === undefined || String(input.jurisdiction).trim() === '';
+  const gateBlocks = historicalWindow?.blocksClaimReady === true;
+  const gateReasonCodes = [
+    ...(jurisdictionMissing ? ['MISSING_JURISDICTION'] : []),
+    ...(gateBlocks ? ['HISTORICAL_WINDOW_BLOCKS_CLAIM_READY'] : []),
+    ...(historicalWindow?.reasonCodes ?? []),
+  ];
+  const disposition = route.disposition;
+  const outcome: CustomsHistoricalOutcome =
+    (jurisdictionMissing || gateBlocks) && disposition === 'CLAIM_READY'
+      ? 'NEEDS_MANUAL_REVIEW'
+      : (disposition as CustomsHistoricalOutcome);
+
   return {
     entryNumber: route.entryNumber,
-    outcome: route.disposition as CustomsHistoricalOutcome,
+    outcome,
     route,
-    reasonCodes: route.reasonCodes,
+    reasonCodes: [...new Set([...route.reasonCodes, ...gateReasonCodes])],
     filingPerformed: false,
     billable: false,
     paymentPerformed: false,
@@ -106,7 +136,7 @@ function isExpired(route: DrawbackCandidateRoute): boolean {
  * 批量评估（历史分片内的一批 entry）。任一记录触发边界回归 → **整批 fail-closed**（不产出部分结果）。
  */
 export function evaluateCustomsHistoricalBatch(
-  candidates: readonly DrawbackCandidateRouteInput[],
+  candidates: readonly CustomsHistoricalCandidateInput[],
 ): CustomsHistoricalBatchResult {
   const results: CustomsHistoricalCandidateResult[] = [];
   for (const candidate of candidates) {

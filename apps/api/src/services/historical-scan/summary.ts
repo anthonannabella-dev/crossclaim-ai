@@ -46,7 +46,14 @@ export function buildScanSummaryView(row: RecoveryScanRun): ScanSummaryView {
     toScanDay(row.effectiveTo) !== toScanDay(row.requestedTo);
 
   const disclaimerCodes: string[] = ['SCAN_IS_DISCOVERY_NOT_FILING'];
-  if (coverage !== 'FULL') disclaimerCodes.push('COVERAGE_NOT_FULL');
+  // AUDIT-1 非阻断硬化：server 侧与 UI 侧使用**同一**完整覆盖判据（避免两套判断漂移）
+  const fullCoverage =
+    coverage === 'FULL' &&
+    row.coverageStart !== null &&
+    row.coverageEnd !== null &&
+    toScanDay(row.coverageStart) <= toScanDay(row.requestedFrom) &&
+    toScanDay(row.coverageEnd) >= toScanDay(row.requestedTo);
+  if (!fullCoverage) disclaimerCodes.push('COVERAGE_NOT_FULL');
   if (clamped) disclaimerCodes.push('EFFECTIVE_RANGE_NARROWER_THAN_REQUESTED');
   if (status !== 'COMPLETED') disclaimerCodes.push('SCAN_NOT_COMPLETED');
 

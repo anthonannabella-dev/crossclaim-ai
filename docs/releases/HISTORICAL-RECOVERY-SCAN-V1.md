@@ -196,7 +196,24 @@ Drawback 的 1825 天（exportDate 锚点）被明确定位为**合格窗口**�
   ② `CLAIM_READY` 是否严格 fail-closed（未核验政策 / 缺 anchor / 缺证据 / 非 EXACT 匹配 / 特殊条款一律不得进入）；
   ③ UI 覆盖诚实规则是否成立（非 FULL 覆盖不得表述为「全部历史检查完成」）；
   ④ 是否存在未授权的外部动作（filing / payment / external write）。
-* 裁决（等待中）：VERDICT = PENDING。
+* 裁决（已归档）：**VERDICT = PASS WITH REVISE**，逐字归档 `AI-ARCHITECT-INBOX.md`
+  `MSG-20261008-01`（FNV-1a `2b4491f6` / `FULL_COPY_OK` 223/223）。
+  `SCAN_VIEW_*` / `SCAN_ROUTE_TENANT_SCOPED` / `NO_SECOND_ENGINE` / `CUSTOMS_PIPELINE_REUSES_EXISTING_CHAIN` = PASS；
+  唯一 CHANGE：`CUSTOMS_CLAIM_READY_FAIL_CLOSED = REVISE` —— PHASE 8 必须消费 PHASE 4 的 `blocksClaimReady`，
+  否则 `jurisdiction ?? 'US'` 的默认值会让「缺 jurisdiction」仍可能 CLAIM_READY。
+
+### 12.1 AUDIT-1 / CHANGE 1 修订（已实现）
+
+* `customs-historical-pipeline.ts`：`CustomsHistoricalCandidateInput` 新增可选
+  `historicalWindow: { blocksClaimReady, reasonCodes }`；`evaluateCustomsHistoricalCandidate()` 现在
+  **消费**该 gate 并在「缺 jurisdiction」或 `blocksClaimReady === true` 时把 `CLAIM_READY` 降级为
+  `NEEDS_MANUAL_REVIEW`，同时保留 `MISSING_JURISDICTION` / `HISTORICAL_WINDOW_BLOCKS_CLAIM_READY` /
+  gate 自身 reason codes。未新建第二套 eligibility/rule/deadline 引擎（仍复用既有 drawback route）。
+* 回归（评审点名的 3 条，全部落地）：① 缺 jurisdiction + 其余完美 → 永不 CLAIM_READY 且保留 `MISSING_JURISDICTION`；
+  ② `blocksClaimReady=true` 且底层 route 本会 CLAIM_READY → 降级阻断；③ `blocksClaimReady=false` + 完整已核验 US → CLAIM_READY 正常。
+* 非阻断硬化（本轮一并做）：`buildScanSummaryView()` 的 `COVERAGE_NOT_FULL` 改用与 UI **同一**完整覆盖判据
+  （`coverage=FULL` 且覆盖区间包住请求区间），避免 server/UI 两套判断漂移。
+* 证据：`customs-historical-pipeline` **11/11**；定向批次 6 文件 **215/215**；api tsc **0**；web tsc **0**。
 
 * `SECOND_RUNTIME = 0`、`SECOND_POLICY_ENGINE = 0`、`SECOND_GUARD = 0`、`SECOND_FACT_SOURCE = 0`
   （本单元新增的只是 durable scan scope + 纯函数解析器 + 领域步骤执行器；未新增调度器/运行时/政策引擎/守卫）。

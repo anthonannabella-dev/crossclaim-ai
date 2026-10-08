@@ -161102,3 +161102,338 @@ SECOND_CONTROL_PLANE  = 0
 
 这套 UI 现在达到了你这一轮真正想要的效果：客户第一眼只看到“我想追回什么、能追回多少钱、系统正在做什么、我现在需要做什么”，复杂能力仍然保留在第二层，没有为了简单而删功能。
 ```
+
+### [MSG-20261008-01] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-1 独立审计（REVIEWED_HEAD cbf5c7e1）= PASS WITH REVISE（唯一 CHANGE：PHASE 8 必须消费 Historical Window blocksClaimReady；UI_RESULT_VIEW 本轮视为通过）
+
+```text
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: cbf5c7e1bde00b3653fc2ca9ac29b311db712320
+AUDIT_RECORD_HEAD: c604fb55381ffda786b210c19adc22c70ac82c8c（确认仅修改 docs/releases/HISTORICAL-RECOVERY-SCAN-V1.md）
+
+逐项裁决：
+
+纯文本
+CUSTOMS_PIPELINE_REUSES_EXISTING_CHAIN = PASS
+CUSTOMS_CLAIM_READY_FAIL_CLOSED        = REVISE
+NO_SECOND_ENGINE                       = PASS
+SCAN_VIEW_COVERAGE_HONESTY             = PASS
+SCAN_VIEW_NO_EXTERNAL_ACTION           = PASS
+SCAN_ROUTE_TENANT_SCOPED               = PASS
+
+HISTORICAL_RECOVERY_SCAN_V1 · AUDIT-1  = PASS WITH REVISE
+1. CUSTOMS_PIPELINE_REUSES_EXISTING_CHAIN = PASS
+
+实际 customs-historical-pipeline.ts 没有另写 Customs eligibility/deadline/rule engine，而是直接调用既有：
+
+纯文本
+evaluateDrawbackCandidateRoute()
+
+既有 route 再复用：
+
+纯文本
+resolveJurisdictionRulePack()
+evaluateUsRemedyDeadline()
+evaluateRemedyDeadline()
+
+历史层本身主要只做：
+
+纯文本
+历史 candidate
+→ existing drawback route
+→ 四态映射
+→ batch counters
+→ boundary re-check
+
+没有发现第二套规则引擎或第二套 deadline engine。
+
+2. CUSTOMS_CLAIM_READY_FAIL_CLOSED = REVISE
+
+这是本轮唯一 blocker。
+
+你已有的 Historical Window Resolver 明确规定：
+
+纯文本
+CUSTOMS + jurisdiction missing
+→ MISSING_JURISDICTION
+→ blocksClaimReady = true
+
+但 PHASE 8 当前没有消费这个 gate。
+
+evaluateCustomsHistoricalCandidate() 直接：
+
+TypeScript
+evaluateDrawbackCandidateRoute({
+  ...input,
+  requestFiling: false
+})
+
+而既有 evaluateDrawbackCandidateRoute() 内部却有：
+
+TypeScript
+const jurisdictionInput = input.jurisdiction ?? 'US';
+
+所以理论上存在：
+
+纯文本
+jurisdiction = null
+evidenceChain = COMPLETE
+counterpartMatch = EXACT
+verifiedDeadlinePolicy = LEGAL_VERIFIED
+exportDate = valid
+
+随后：
+
+纯文本
+null jurisdiction
+→ 默认 US
+→ US rule pack
+→ verified deadline = ELIGIBLE_WINDOW
+→ CLAIM_READY
+
+这与 Historical Scan 自己已经封板的：
+
+纯文本
+MISSING_JURISDICTION → blocksClaimReady
+
+冲突。
+
+现有 PHASE 8 的 8 个测试没有覆盖“缺 jurisdiction + 其余条件全部满足”。
+
+因此不能把 CUSTOMS_CLAIM_READY_FAIL_CLOSED 判 PASS。
+
+最小修订
+
+不要新建任何 Customs engine。
+
+建议让 PHASE 8 显式继承已有 Historical Window gate，例如：
+
+纯文本
+historicalWindow.blocksClaimReady = true
+→ historical result 不得 CLAIM_READY
+
+或者至少在 historical wrapper 中要求显式 jurisdiction：
+
+纯文本
+missing jurisdiction
+→ NEEDS_MANUAL_REVIEW
+   或明确 fail-closed error
+→ never CLAIM_READY
+
+更推荐前者，因为 PHASE 4 已经统一处理了：
+
+纯文本
+MISSING_JURISDICTION
+RULE_UNVERIFIED
+MISSING_ANCHOR
+
+PHASE 8 不应该重新复制这些规则，只应消费 blocksClaimReady。
+
+至少补：
+
+纯文本
+jurisdiction=null
++ COMPLETE evidence
++ EXACT match
++ LEGAL_VERIFIED policy
+→ NOT CLAIM_READY
+→ MISSING_JURISDICTION reason preserved
+3. NO_SECOND_ENGINE = PASS
+
+当前历史模块没有：
+
+纯文本
+second eligibility engine
+second evidence engine
+second deadline engine
+second customs truth
+
+CUSTOMS_HISTORICAL_PIPELINE_BOUNDARY 的声明与实际 imports/实现一致。
+
+但要注意：这只是当前 PHASE 8 组合层结论，不代表 PHASE 10 runtime wiring 已完成。
+
+4. SCAN_VIEW_COVERAGE_HONESTY = PASS
+
+客户页面的完整覆盖判断是正确的：
+
+纯文本
+coverage === FULL
+AND coverageFrom != null
+AND coverageTo != null
+AND coverageFrom <= requestedFrom
+AND coverageTo >= requestedTo
+
+否则明确显示：
+
+数据源未覆盖完整请求区间，本次不是「全部历史检查完成」
+
+这满足你的要求：
+
+纯文本
+只有 FULL + 实际覆盖包住 requested range
+才不提示部分覆盖
+
+而且服务端提供的是规范化的 YYYY-MM-DD，这里字符串比较的时间顺序成立。
+
+有一个非阻断 hardening：buildScanSummaryView().disclaimerCodes 当前只在 coverage !== FULL 时加 COVERAGE_NOT_FULL，没有同时检查 FULL-but-range-insufficient。
+
+页面本身已经正确提示，所以客户 UI 不撒谎；但建议后续把 server disclaimer 也统一改为：
+
+纯文本
+!scanCoverageIsFull(summary)
+→ COVERAGE_NOT_FULL
+
+避免 API 与 UI 两套覆盖判断漂移。
+
+5. SCAN_VIEW_NO_EXTERNAL_ACTION = PASS
+
+实际路由是：
+
+纯文本
+GET /recovery-scans/:id
+
+只做：
+
+纯文本
+load RecoveryScanRun
+→ verify digest
+→ buildScanSummaryView
+→ JSON
+
+没有：
+
+scan trigger
+DB mutation
+filing
+platform write
+payment
+retry
+submit CTA
+
+buildScanSummaryView() 还固定：
+
+纯文本
+claimsFiled            = 0
+externalActionPerformed = false
+externalWritePerformed  = false
+filingPerformed         = false
+paymentPerformed        = false
+
+Web 页面也是纯 server-side GET + render，没有任何提交按钮。
+
+因此 PASS。
+
+6. SCAN_ROUTE_TENANT_SCOPED = PASS
+
+实际 HTTP 路由先：
+
+纯文本
+assertPermission(actor.role, 'reviewOpportunities')
+
+随后调用：
+
+纯文本
+loadRecoveryScanById({
+  organizationId: actor.organizationId,
+  scanId
+})
+
+底层查询：
+
+纯文本
+where: {
+  organizationId: input.organizationId,
+  id: input.scanId
+}
+
+找不到返回 null，HTTP 映射统一：
+
+纯文本
+404 RECOVERY_SCAN_NOT_FOUND
+
+因此：
+
+纯文本
+不存在 scan → 404
+别的 tenant scan → 404
+
+不会泄露跨租户存在性。
+
+另外读取时还会重新 verifyRecoveryScanDigest(row)，身份摘要异常也不会被正常消费。
+
+所以 SCAN_ROUTE_TENANT_SCOPED = PASS。
+
+CHANGES
+
+只需要一个很窄的 AUDIT-1 FINAL 修订：
+
+纯文本
+CHANGE 1
+PHASE 8 必须消费 Historical Window 的 blocksClaimReady，
+或等价地显式阻断 missing jurisdiction。
+
+禁止：
+missing jurisdiction → implicit US → CLAIM_READY
+
+建议补 3 个回归：
+
+纯文本
+1. missing jurisdiction + otherwise perfect candidate
+   → never CLAIM_READY
+
+2. blocksClaimReady=true + underlying drawback route would CLAIM_READY
+   → historical result downgraded / blocked
+
+3. blocksClaimReady=false + complete verified US candidate
+   → CLAIM_READY 仍正常
+
+不需要重写 drawback engine，也不要建立第二套 Customs eligibility。
+
+RISKS
+
+还有三个非阻断风险建议登记。
+
+第一，PHASE 8 的函数签名直接接受：
+
+纯文本
+evidenceChain
+counterpartMatch
+verifiedDeadlinePolicy
+
+它默认这些是可信的既有链输出。等 PHASE 10 真正接 ONE SI Runtime 时，必须保证这些值来自 server-owned existing engines/stores，不能让 connector/client 自报，否则“复用既有链”会退化成“信任调用方提交既有链结果”。
+
+第二，expired 目前通过 reason-code substring 识别。当前 reason code 集合下可用，但长期更稳的是由既有 deadline result 的结构化 status 派生，避免未来新增名称造成误计数。
+
+第三，GitHub Actions 对 exact HEAD：
+
+NOT_OBSERVED
+
+因此：
+
+纯文本
+customs historical 8/8
+UI render 219/219
+api tsc 0
+web tsc 0
+API_CONTRACT_OK
+
+仍只能记为 local/Codex evidence，不要写成 GitHub CI green。
+
+最终边界保持：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+
+SECOND_RUNTIME           = 0
+SECOND_POLICY_ENGINE     = 0
+SECOND_GUARD             = 0
+SECOND_FACT_SOURCE       = 0
+
+全部既有 HOLD / FORBIDDEN 不变。
+
+最终裁决：AUDIT-1 = PASS WITH REVISE。
+
+只要把 Historical Window 的 blocksClaimReady 真正接入 PHASE 8，封住“缺 jurisdiction 默认 US 后仍可能 CLAIM_READY” 这一条，再送一次窄复审即可；UI_RESULT_VIEW 这部分本轮可以视为通过。
+```

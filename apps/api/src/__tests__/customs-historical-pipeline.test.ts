@@ -9,7 +9,7 @@ import {
   evaluateCustomsHistoricalBatch,
   evaluateCustomsHistoricalCandidate,
 } from '../services/historical-scan/customs-historical-pipeline';
-import type { DrawbackCandidateRouteInput } from '../services/customs/drawback/drawback-candidate-route';
+import type { CustomsHistoricalCandidateInput } from '../services/historical-scan/customs-historical-pipeline';
 
 const NOW = new Date('2026-10-08T00:00:00.000Z');
 const SCOPE = { organizationId: 'org-1', platformAccountId: 'acct-1' };
@@ -28,7 +28,9 @@ const VERIFIED_POLICY = {
   verification: 'LEGAL_VERIFIED' as const,
 };
 
-function candidate(overrides: Partial<DrawbackCandidateRouteInput> = {}): DrawbackCandidateRouteInput {
+function candidate(
+  overrides: Partial<CustomsHistoricalCandidateInput> = {},
+): CustomsHistoricalCandidateInput {
   return {
     scope: SCOPE,
     entryNumber: 'ENTRY-1',
@@ -115,5 +117,36 @@ describe('PHASE 8 · customs historical pipeline（复用既有链）', () => {
     expect(batch.summary.paymentPerformed).toBe(false);
     expect(batch.summary.externalWritePerformed).toBe(false);
     expect(batch.summary.boundaryVerified).toBe(true);
+  });
+
+  // ============================================================
+  // AUDIT-1 / CHANGE 1（MSG-20261008-01）：必须消费 Historical Window 的 blocksClaimReady
+  // ============================================================
+  it('CHANGE 1-①：缺 jurisdiction（其余条件完美）→ 永不 CLAIM_READY，且保留 MISSING_JURISDICTION', () => {
+    const result = evaluateCustomsHistoricalCandidate(candidate({ jurisdiction: null }));
+    expect(result.outcome).not.toBe('CLAIM_READY');
+    expect(result.outcome).toBe('NEEDS_MANUAL_REVIEW');
+    expect(result.reasonCodes).toContain('MISSING_JURISDICTION');
+  });
+
+  it('CHANGE 1-②：blocksClaimReady=true 且底层 route 本会 CLAIM_READY → 历史结果被降级阻断', () => {
+    const result = evaluateCustomsHistoricalCandidate(
+      candidate({
+        historicalWindow: { blocksClaimReady: true, reasonCodes: ['RULE_UNVERIFIED', 'MISSING_ANCHOR'] },
+      }),
+    );
+    expect(result.outcome).toBe('NEEDS_MANUAL_REVIEW');
+    expect(result.reasonCodes).toContain('HISTORICAL_WINDOW_BLOCKS_CLAIM_READY');
+    expect(result.reasonCodes).toContain('RULE_UNVERIFIED');
+    expect(result.reasonCodes).toContain('MISSING_ANCHOR');
+    expect(result.filingPerformed).toBe(false);
+  });
+
+  it('CHANGE 1-③：blocksClaimReady=false + 完整已核验 US candidate → CLAIM_READY 仍正常', () => {
+    const result = evaluateCustomsHistoricalCandidate(
+      candidate({ historicalWindow: { blocksClaimReady: false, reasonCodes: ['FULL_COVERAGE'] } }),
+    );
+    expect(result.outcome).toBe('CLAIM_READY');
+    expect(result.reasonCodes).not.toContain('MISSING_JURISDICTION');
   });
 });
