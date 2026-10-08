@@ -452,3 +452,43 @@ domain step **恰好一次** → `scanId === 该 scan`、`status=COMPLETED`、`o
   这与 CHANGE 2 的结论一致 —— domain step 应挂在**裁决/续跑收口**处。
 * 实验用例已回退（分支保持全绿），未提交失败测试。下一步：读 ttachContinuationToController 暴露的方法集，
   确定 loop 调用的确切入口，再一次性实现 CHANGE 1+2。
+
+### 13.13 AUDIT-2R3 裁决（PASS WITH REVISE）+ 两条 CHANGE 完成（PASS-only 执行 / verdictWatcher 走 wrapped controller）
+
+**裁决（已逐字归档 `AI-ARCHITECT-INBOX.md` → `MSG-20261008-07`，FNV1A `1f2d1933`，compare = FULL_COPY_OK）**
+
+* REVIEWED_HEAD `bd3ab708`；`SYNTHETIC_5Y_E2E = REVISE`，`VERDICT = PASS WITH REVISE`。
+* CHANGE 1（wrapped controller 在 `createRsiEventLoop()` 之前组装、覆盖 `emit`/`tick`）= **CLOSED**；
+  scan execution port / durable scope reload / read-only pack 未改 `/ NO_SECOND_RUNTIME` 维持 PASS。
+* 仍差两条极窄修复（AUDIT-2R4）：
+  1. **域步骤只能由真实 PASS 裁决收口触发** —— REVISE / BLOCK 均不得执行（`BLOCK` 也不得推进 durable scan）；
+  2. **verdictWatcher 必须走 domain-step-aware controller** —— 生产 watcher 当时仍调用原始 `controller`。
+* 非阻断设计债（记入 RISKS，后续 production enablement 前处理）：
+  `pendingScanTaskKey` 目前是**进程内变量**，非 durable state；`claim → park → 进程重启 → verdict 到达`
+  会丢失 pending 归链，应由既有 restart/reconcile 机制从 durable task/scan 状态重建。
+
+**CHANGE A（domain step 只在真实 PASS 收口后执行）**
+
+* 旧的放行条件是 `event === 'JUDGE_VERDICT_RECEIVED' && !waitingForVerdict`；但 continuation engine 的真实语义是
+  `PASS → action=CONSUME_VERDICT`、`REVISE → action=REVISION`、`BLOCK → action=OWNER_ACTION_REQUIRED`，
+  **三者都会把 `waitingForVerdict` 置为 false** —— 因此旧条件会误放 REVISE / BLOCK（BLOCK 也推进 scan）。
+* 新判据（`rsi-run.ts`）：收口前 `controller.state().verdict === 'PASS'` **且** 收口 `outcome.action === 'CONSUME_VERDICT'`。
+* 同时移除已不再需要的 `parked` 放行兜底：裁决收口后引擎可能立刻为**下一个**任务重新 park（`awaitVerdict=true`），
+  用 parked 兜底会误伤本轮已获 PASS 授权的 scan；未裁决 / BLOCK / REVISE = 零执行已由精确 PASS 门覆盖。
+* 归一化断言：`PASS → 恰好一次`；`REVISE → 0`；`BLOCK → 0`；重复 verdict / 额外 tick → 不重复回填。
+
+**CHANGE B（verdictWatcher 走 wrapped controller）**
+
+* `isWaiting()` / `markWaitingForVerdict()` / `emit('JUDGE_VERDICT_RECEIVED')` 全部改走 `controllerWithDomainSteps`；
+  **生产 watcher 与测试现在使用同一条 runtime path**（此前 `composition.controller` 返回 wrapped、watcher 仍持有原始 controller）。
+
+**证据（`af328938` 之上；本单元提交后为送审 HEAD）**
+
+* `historical-scan-5y-e2e` 7/7（新增 5 条：watcher-PASS / BLOCK / REVISE / watchdog-PASS / 幂等去重）；
+  定向批次合计 **43/43**（+ `historical-scan-runtime-scope` 8、`rsi-si-runtime-e2e` 5、`agent-goal-runtime-wiring` 7、
+  `rsi-controller-continuation` 3、`rsi-run` 7、`rsi-park-for-judge` 3、`rsi-verdict-wiring` 3）；api tsc 0。
+* BLOCK / REVISE 负向断言 durable scan 仍为 `CREATED`（执行端口从未被调用 → 未认领、检查点未推进）。
+* 边界声明：`historicalScanDomainStepRequiresPassVerdict = true`、`verdictWatcherUsesDomainStepController = true`。
+* GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
+
+**下一步**：`AUDIT-2R4` 窄复审（CHANGE A + CHANGE B）；PASS 后 PHASE 10 方可 CLOSED，再进入 PHASE 11。

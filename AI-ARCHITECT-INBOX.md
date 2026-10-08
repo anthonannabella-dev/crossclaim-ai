@@ -162554,3 +162554,245 @@ SECOND_*                 = 0
 
 结论：execution port 本身 PASS，但 runtime composition 时序还没完全正确。当前 PHASE 10 仍是 PASS WITH REVISE / NOT CLOSED。
 ```
+
+### [MSG-20261008-07] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-2R3 窄复审（REVIEWED_HEAD bd3ab708）= PASS WITH REVISE；CHANGE 1 已 CLOSED（wrapped controller 在 createRsiEventLoop 之前组装、emit/tick 均覆盖）；CHANGE 2 仍差两项：domain step 必须仅真实 PASS verdict 后执行（REVISE/BLOCK 零执行）、verdictWatcher 必须改用 controllerWithDomainSteps。PHASE 10 = NOT CLOSED。
+
+```text
+SYNTHETIC_5Y_E2E = REVISE
+
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: bd3ab708d5a6940dcda8ccf224c734ab25436a34
+
+这轮 CHANGE 1 的主体已经修对：controllerWithDomainSteps 确实在 createRsiEventLoop() 之前完成组装，所以 event loop 的 emit() 与 watchdog tick() 都拿到了 wrapped controller。
+
+但 CHANGE 2 仍有两个实际 runtime 漏洞，所以 PHASE 10 还不能 CLOSED。
+
+1. BLOCK / REVISE verdict 现在仍会执行 historical backfill
+
+当前判断是：
+
+纯文本
+JUDGE_VERDICT_RECEIVED
++ waitingForVerdict === false
+→ run historicalScanDomainStep
+
+问题在于 continuation engine 的真实语义是：
+
+纯文本
+PASS   → waitingForVerdict = false
+REVISE → waitingForVerdict = false
+BLOCK  → waitingForVerdict = false
+
+因此现在实际会变成：
+
+纯文本
+PASS   → domain step 执行   ✅
+REVISE → domain step 也执行 ❌
+BLOCK  → domain step 也执行 ❌
+
+特别是 BLOCK 分支：
+
+TypeScript
+if (verdict === 'BLOCK') {
+  waitingForVerdict = false;
+  return {
+    action: 'OWNER_ACTION_REQUIRED',
+    reason: 'VERDICT_BLOCK'
+  };
+}
+
+而 wrapper 随后看到：
+
+纯文本
+waitingForVerdict = false
+
+就会执行：
+
+纯文本
+runHistoricalBackfill()
+
+这与“BLOCK 不得推进 scan”直接冲突。
+
+所以不能用：
+
+纯文本
+!waitingForVerdict
+
+代替：
+
+纯文本
+verdict === PASS
+最小修复
+
+domain step 应依据收口结果明确只接受 PASS。
+
+例如使用 event outcome：
+
+纯文本
+event === JUDGE_VERDICT_RECEIVED
+AND outcome.reason === VERDICT_PASS
+AND outcome.action === CONSUME_VERDICT
+→ execute domain step
+
+或在 emit 前保存 verdict，然后：
+
+纯文本
+verdictBeforeConsume === PASS
+
+再执行。
+
+必须保证：
+
+纯文本
+PASS   → exactly once
+REVISE → 0 executions
+BLOCK  → 0 executions
+2. 真实 verdictWatcher 仍绕过 wrapped controller
+
+虽然 createRsiEventLoop() 已经修成：
+
+纯文本
+controller: controllerWithDomainSteps
+
+但 verdictWatcher 仍然写的是：
+
+TypeScript
+controller.markWaitingForVerdict(parsed);
+await controller.emit('JUDGE_VERDICT_RECEIVED');
+
+这里用的是原始 controller，不是：
+
+纯文本
+controllerWithDomainSteps
+
+所以真实运行：
+
+纯文本
+composition.start()
+→ verdictWatcher
+→ 收到 PASS verdict
+→ 原始 controller.emit()
+→ verdict 被消费
+→ historicalScanDomainStep 根本不会运行
+
+而当前 E2E 是手工：
+
+纯文本
+composition.controller.markWaitingForVerdict('PASS')
+composition.controller.emit('JUDGE_VERDICT_RECEIVED')
+
+因为 composition.controller 返回的是 wrapped controller，所以测试能通过。
+
+也就是说：
+
+手工测试路径 PASS，但生产 verdict watcher 路径仍没有接上 domain step。
+
+这必须修。
+
+建议：
+
+纯文本
+verdictWatcher.isWaiting
+→ controllerWithDomainSteps.state()
+
+verdictWatcher.onVerdict
+→ controllerWithDomainSteps.markWaitingForVerdict(...)
+→ controllerWithDomainSteps.emit(...)
+
+这样真实 watcher 与测试使用同一条 runtime path。
+
+已经 PASS 的部分
+
+以下本轮可确认没有问题：
+
+纯文本
+event loop 使用 wrapped controller     = PASS
+watchdog tick 使用 wrapped controller  = PASS
+scan execution port                    = PASS
+durable scope reload                   = PASS
+non-scan task fail-closed               = PASS
+cross-tenant fail-closed                = PASS
+NO_SECOND_RUNTIME                       = PASS
+
+并且没有修改 read-only Recovery pack 的：
+
+纯文本
+writesDatabase=false
+executesActions=false
+
+这个架构选择是正确的。
+
+CHANGES
+
+只需一个很窄的 AUDIT-2R4：
+
+纯文本
+CHANGE A
+domain step 必须只在真实 PASS verdict 后执行，
+REVISE / BLOCK 均不得执行。
+
+CHANGE B
+verdictWatcher 必须通过 controllerWithDomainSteps，
+不能继续调用原始 controller。
+
+最少补 4 个测试：
+
+纯文本
+1. PASS verdict
+   → domain step exactly once
+   → scan COMPLETED
+
+2. BLOCK verdict
+   → domain step 0
+   → scan 未推进
+
+3. REVISE verdict
+   → domain step 0
+   → scan 未推进
+
+4. verdictWatcher / event-loop 真实路径
+   → PASS artifact
+   → wrapped controller
+   → domain step exactly once
+
+最好再补：
+
+纯文本
+重复 PASS verdict / watchdog
+→ 不重复执行 backfill
+RISKS
+
+还有一个非阻断设计债：
+
+pendingScanTaskKey 目前是进程内变量，不是 durable state。若：
+
+纯文本
+claim
+→ park for judge
+→ 进程重启
+→ verdict 后到
+
+这个 pending scan identity 会丢失。
+
+你现有系统已有 restart/reconcile 机制，因此后续 production enablement 前最好让这条 pending execution linkage 能从 durable task/scan 状态重建，而不是只靠内存变量。
+
+这不是当前 synthetic PHASE 10 的唯一 blocker，但属于真实生产恢复能力。
+
+GitHub Actions 对该 exact HEAD 仍：
+
+NOT_OBSERVED
+
+所以 25/25、api tsc 0 仍是 local/Codex evidence。
+
+最终边界继续：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+SECOND_*                 = 0
+全部 HOLD                = unchanged
+
+结论：CHANGE 1 已 CLOSED；CHANGE 2 仍差 “PASS-only execution + verdictWatcher 使用 wrapped controller” 两个极窄修复。PHASE 10 当前仍为 PASS WITH REVISE / NOT CLOSED。
+```
