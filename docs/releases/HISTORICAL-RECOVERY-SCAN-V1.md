@@ -97,10 +97,37 @@ Drawback 的 1825 天（exportDate 锚点）被明确定位为**合格窗口**�
 
 ## 10. 未完成（如实登记）
 
+### 10.0 本提交新增（PHASE 3 + PHASE 7）
+
+**PHASE 3 — durable scan scope → ONE SI Runtime（Recovery binding）**
+
+* 新增 `services/historical-scan/scan-scope-loader.ts`：
+  `loadScanScopeForClaimedTask()` 只接受 `organizationId + dedupeKey`（task identity 最小字段），
+  从 durable `RecoveryScanRun` **重新加载**范围与检查点；返回 `callerRangeTrusted: false`。
+  缺失 / 跨租户 / 账户不符 / digest 不符 → 一律 `BLOCK`（不回落到 caller 范围）；caller 若自报
+  from/to/months → 只记录 `CALLER_RANGE_IGNORED_NOT_TRUSTED`，**不采用**。
+  `assertScopeNotCallerOwned()` 拒绝把范围字段塞进 task payload（第二事实源）。
+* `runtime/recovery-si-pack.ts`：在 `run()` 的 `bind` 之后、任何策略/守卫/工具之前，扫描任务必须先装载
+  durable scope；未注入 `scanScope` 端口 → `BLOCK RECOVERY_SCAN_SCOPE_LOADER_NOT_WIRED`；
+  装载失败 → `BLOCK RECOVERY_SCAN_SCOPE_BLOCKED + <reason>`。普通任务不受影响；
+  **未放宽**任何既有 policy / guard / claim 语义（测试里 guard DENY 仍然 BLOCK）。
+
+**PHASE 7 — Connector 历史区间 + 覆盖诚实**
+
+* `connectors/types.ts`：`Fetcher.pull()` 新增可选 `range: ConnectorHistoricalRange`
+  （`{from, to, scanRunId}`，`scanRunId` 必填 = 服务端溯源锚点）；`FetcherPage` 新增
+  `actualCoverageFrom/actualCoverageTo/sourceCoverageStatus`；新增
+  `assertServerOwnedConnectorRange()`（缺 `scanRunId` → `CONNECTOR_RANGE_NOT_SERVER_OWNED`）。
+* `connectors/runner.ts`：调用 fetcher 前先做 server-owned 校验，并把区间透传；
+  `RunConnectorPullResult.coverage` 如实回传 provider 覆盖（缺省 `null`；未上报 → `UNKNOWN`，**不得默认 FULL**）。
+* 证据：`historical-scan-runtime-scope.test.ts` **8/8**、`historical-scan-connector-range.test.ts` **4/4**。
+
+### 10.1 仍未完成
+
 | PHASE | 内容 | 状态 |
 | --- | --- | --- |
-| 3 | Runtime claim → durable scan scope 装载（fail-closed BLOCK） | **未接线**（store 侧 `loadRecoveryScanScope` 已就绪，尚未在 Recovery SI claim 路径调用） |
-| 7 | Connector 历史区间 + coverage 元数据 | 未实现 |
+| 3 | Runtime claim → durable scan scope 装载（fail-closed BLOCK） | **已接线（本提交）**：`scan-scope-loader.ts` + `recovery-si-pack` 扫描任务守卫 |
+| 7 | Connector 历史区间 + coverage 元数据 | **已实现（本提交）**：`ConnectorHistoricalRange` + server-owned 校验 + coverage 回传 |
 | 8 | Customs 历史管线接线（entry → duty → discrepancy → eligibility → matching → evidence → drawback） | 未实现（既有链未改） |
 | 10 | ONE SI Runtime E2E（Goal → scan → shards → customs → summary） | 未实现 |
 | 11 | 生产边界验证（自动化断言 externalWrite/filing/payment = false 的端到端） | 部分（summary 层已固化，运行时尚无 E2E） |

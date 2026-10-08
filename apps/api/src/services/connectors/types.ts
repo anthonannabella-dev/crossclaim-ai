@@ -56,11 +56,48 @@ export interface FetcherRecord {
 export interface FetcherPage {
   records: FetcherRecord[];
   nextCursor: string | null;
+  /**
+   * HISTORICAL_RECOVERY_SCAN_V1 / PHASE 7：provider **实际覆盖**（不得由请求区间推断）。
+   * 若 provider 只能返回 90 天 / 1 年，必须如实上报，否则不得对外表述为完整覆盖。
+   */
+  actualCoverageFrom?: string | null;
+  actualCoverageTo?: string | null;
+  sourceCoverageStatus?: ConnectorCoverageStatus | null;
+}
+
+/** 数据源覆盖完整度（与 durable scan 的 coverage 口径一致） */
+export const CONNECTOR_COVERAGE_STATUSES = ['FULL', 'PARTIAL', 'SOURCE_LIMITED', 'UNKNOWN'] as const;
+export type ConnectorCoverageStatus = (typeof CONNECTOR_COVERAGE_STATUSES)[number];
+
+/**
+ * 历史区间：**必须**来自服务端 durable RecoveryScanRun（`scanRunId` 为必填的溯源锚点）。
+ * 调用方不得自报 from/to 后直接信任（见 `assertServerOwnedConnectorRange`）。
+ */
+export interface ConnectorHistoricalRange {
+  readonly from: string;
+  readonly to: string;
+  readonly scanRunId: string;
+}
+
+export function assertServerOwnedConnectorRange(range: ConnectorHistoricalRange | null | undefined): void {
+  if (range === null || range === undefined) return;
+  if (typeof range.scanRunId !== 'string' || range.scanRunId.trim() === '') {
+    throw new Error('CONNECTOR_RANGE_NOT_SERVER_OWNED');
+  }
+  const day = /^\d{4}-\d{2}-\d{2}$/;
+  if (!day.test(range.from) || !day.test(range.to)) throw new Error('CONNECTOR_RANGE_INVALID');
+  if (range.from > range.to) throw new Error('CONNECTOR_RANGE_INVERTED');
 }
 
 export interface Fetcher {
   /** 只读；不解析业务；不产生 ClaimItem */
-  pull(input: { resource: string; cursor: string | null; limit: number }): Promise<FetcherPage>;
+  pull(input: {
+    resource: string;
+    cursor: string | null;
+    limit: number;
+    /** server-derived 历史区间（缺省 = 不限定历史范围，保持既有行为） */
+    range?: ConnectorHistoricalRange | null;
+  }): Promise<FetcherPage>;
 }
 
 /** quarantine 只用于「无法理解数据」，禁止业务判断词（如 NOT_RECOVERABLE / LOW_VALUE）。 */

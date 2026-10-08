@@ -17,7 +17,15 @@ import { WorkflowError } from '../workflow/opportunity-review';
 import { assertPermission } from '../workflow/permissions';
 import type { CursorStore } from './cursor-store';
 import { inputFingerprintOf, type QuarantineSink } from './quarantine';
-import { assertReadonlyConnector, type ConnectorDescriptor, type Fetcher, type Normalizer } from './types';
+import {
+  assertReadonlyConnector,
+  assertServerOwnedConnectorRange,
+  type ConnectorCoverageStatus,
+  type ConnectorDescriptor,
+  type ConnectorHistoricalRange,
+  type Fetcher,
+  type Normalizer,
+} from './types';
 
 export const CONNECTOR_AUDIT = {
   pullStarted: 'connector.pull_started',
@@ -38,6 +46,11 @@ export interface RunConnectorPullInput {
   fetcher: Fetcher;
   normalizer: Normalizer;
   limit?: number;
+  /**
+   * HISTORICAL_RECOVERY_SCAN_V1 / PHASE 7：server-derived 历史区间。
+   * 必须带 `scanRunId`（durable scan 溯源锚点）；缺省时行为与既有完全一致。
+   */
+  range?: ConnectorHistoricalRange | null;
 }
 
 export interface RunConnectorPullResult {
@@ -51,6 +64,12 @@ export interface RunConnectorPullResult {
   exhausted: boolean;
   normalizerVersion: string;
   durationMs: number;
+  /** provider 实际上报的覆盖（缺省 null；非 FULL 时调用方不得声称"全区间完成"） */
+  coverage: {
+    readonly from: string | null;
+    readonly to: string | null;
+    readonly status: ConnectorCoverageStatus;
+  } | null;
 }
 
 export interface RunConnectorPullDeps {
@@ -152,10 +171,13 @@ export async function runConnectorPull(
     at: startedAt,
   });
 
+  // PHASE 7：区间只能来自 server-owned durable scan（缺 scanRunId 直接拒绝）
+  assertServerOwnedConnectorRange(input.range ?? null);
   const page = await input.fetcher.pull({
     resource: input.resource,
     cursor,
     limit: input.limit ?? DEFAULT_LIMIT,
+    range: input.range ?? null,
   });
 
   let created = 0;
@@ -252,6 +274,16 @@ export async function runConnectorPull(
     exhausted: page.nextCursor === null,
     normalizerVersion: input.normalizer.normalizerVersion,
     durationMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
+    coverage:
+      page.actualCoverageFrom === undefined &&
+      page.actualCoverageTo === undefined &&
+      page.sourceCoverageStatus === undefined
+        ? null
+        : {
+            from: page.actualCoverageFrom ?? null,
+            to: page.actualCoverageTo ?? null,
+            status: (page.sourceCoverageStatus ?? 'UNKNOWN') as ConnectorCoverageStatus,
+          },
   };
 
   await writeConnectorAudit(prisma, {

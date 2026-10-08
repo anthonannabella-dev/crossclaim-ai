@@ -35,6 +35,7 @@ import {
   type RecoveryReadPorts,
 } from '../services/intelligence/recovery-read-tools';
 import type { RsiDomainCapabilityPack, RsiDomainPackEvidence } from './rsi-domain-pack';
+import { isRecoveryScanTask } from '../services/historical-scan/scan-scope-loader';
 
 export const RECOVERY_SI_PACK_ID = 'recovery-si';
 
@@ -60,6 +61,18 @@ export interface RecoverySiPackDependencies {
   guard?: RsiRecoveryGuardPort;
   flags?: RsiFlags;
   nowMs?: () => number;
+  /**
+   * HISTORICAL_RECOVERY_SCAN_V1 / PHASE 3：
+   * 历史扫描任务（dedupeKey 含 scan 身份）的**范围只能来自 durable RecoveryScanRun**。
+   * 未注入该端口时扫描任务一律 BLOCK（fail-closed）；普通任务不受影响。
+   */
+  scanScope?: {
+    load(ref: {
+      readonly organizationId: string;
+      readonly dedupeKey: string;
+      readonly assertedRange?: { readonly from?: string; readonly to?: string; readonly months?: number } | null;
+    }): Promise<{ readonly ok: boolean; readonly reasonCodes: readonly string[] }>;
+  };
 }
 
 export const RECOVERY_SI_PACK_BOUNDARY = {
@@ -145,6 +158,23 @@ export function createRecoverySiPack(deps: RecoverySiPackDependencies): RsiDomai
     async run({ task, modelGateway }): Promise<RsiDomainPackEvidence> {
       const binding = deps.bind(task);
       if (binding === null) return block(['RECOVERY_PACK_UNBOUND_TASK']);
+
+      // HISTORICAL_RECOVERY_SCAN_V1 / PHASE 3（HOST）：
+      //   历史扫描任务的 scope 必须由 **durable server-owned scan** 提供；
+      //   task payload / caller 自报范围一律不采用；缺失 / 租户不符 / 账户不符 / digest 不符 → BLOCK。
+      if (isRecoveryScanTask(task.dedupeKey)) {
+        if (!deps.scanScope) return block(['RECOVERY_SCAN_SCOPE_LOADER_NOT_WIRED']);
+        let loaded: { readonly ok: boolean; readonly reasonCodes: readonly string[] };
+        try {
+          loaded = await deps.scanScope.load({
+            organizationId: binding.organizationId,
+            dedupeKey: task.dedupeKey,
+          });
+        } catch {
+          return block(['RECOVERY_SCAN_SCOPE_LOAD_FAILED']);
+        }
+        if (!loaded.ok) return block(['RECOVERY_SCAN_SCOPE_BLOCKED', ...loaded.reasonCodes]);
+      }
 
       // ① Recovery Policy Pack → 唯一 Policy Core
       const policy = decideRecoveryAction(
