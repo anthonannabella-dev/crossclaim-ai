@@ -266,11 +266,13 @@ describe('PHASE 2 / C5 · Recovery pack 生产装配', () => {
     try {
       const outcome = await composition.controller.tick();
       expect(outcome.claimed?.dedupeKey).toBe(key);
-      // 未绑定 ⇒ 显式记为「recovery 命名空间未认领」并 BLOCK（可追踪的 fail-closed，而非静默）
+      /**
+       * P2-CHANGE2 之后：无可信租户的任务在**派发前**就被执行前复核拒绝（比原先更早、更严格），
+       * 因此不再产生 recovery pack 的 dispatch 记录；拒绝以 `RSI_RECOVERY_PREFLIGHT_DENY=...`
+       * （原因码 NO_TRUSTED_TENANT）落到运行日志。
+       */
       const rows = composition.domainDispatchLog();
-      expect(rows).toHaveLength(1);
-      expect(rows[0]!.packId).toBe('(recovery-namespace-unclaimed)');
-      expect(rows[0]!.status).toBe('BLOCK');
+      expect(rows.some((row) => row.packId === 'recovery-si')).toBe(false);
       expect(seen).toEqual([]); // 也不回退 caller/no-op runner
     } finally {
       composition.stop();

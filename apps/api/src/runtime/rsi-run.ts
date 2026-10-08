@@ -226,6 +226,16 @@ export async function composeRsiRuntime(input: {
       priority: string;
       organizationId?: string;
     }) => RecoverySiTaskBinding | null;
+    /**
+     * PHASE 2 / P2-CHANGE2（复审 CHANGE 2）：**执行前二次授权复核**。
+     * claim 时授权通过 ≠ 未来动作永久获得授权 ⇒ 每次真正派发 recovery 任务前再核一次；
+     * 返回 not allowed 时以 BLOCK 收口（fail-closed），绝不落到执行器。
+     */
+    executionPreflight?: (task: {
+      id: string;
+      dedupeKey: string;
+      organizationId?: string;
+    }) => Promise<{ allowed: boolean; reason: string }>;
     /** HISTORICAL_RECOVERY_SCAN_V1：扫描任务必须装载 durable scan scope（缺省 = 该任务 BLOCK）。 */
     scanScope?: import('./recovery-si-pack').RecoverySiPackDependencies['scanScope'];
   };
@@ -282,13 +292,37 @@ export async function composeRsiRuntime(input: {
       'RECOVERY_SI_RESERVED_PACK_ID_REJECTED:recovery-si（Recovery 只能经 productRecoveryPack 组装，禁止经 domainPacks 注入自定义 guard）',
     );
   }
-  const domainRunner =
+  const domainRunnerBase =
     domainPackList.length === 0
       ? null
       : createRsiDomainPackRunner({
           packs: domainPackList,
           ...(siModelGateway === undefined ? {} : { modelGateway: siModelGateway }),
         });
+  /**
+   * P2-CHANGE2：recovery 任务在**真正派发前**必须再通过一次授权复核（防「claim 后撤销授权」竞态）。
+   * 未通过 ⇒ BLOCK（fail-closed），并记录原因码；不新增任何 runner/controller。
+   */
+  const executionPreflight = input.productRecoveryPack?.executionPreflight;
+  const domainRunner =
+    domainRunnerBase === null
+      ? null
+      : executionPreflight === undefined
+        ? domainRunnerBase
+        : {
+            async run(task: { id: string; dedupeKey: string; priority: string; organizationId?: string }) {
+              if (task.dedupeKey.startsWith('task:recovery:')) {
+                const verdict = await executionPreflight(task);
+                if (!verdict.allowed) {
+                  console.log('RSI_RECOVERY_PREFLIGHT_DENY=' + verdict.reason + ' task=' + task.id);
+                  return { status: 'BLOCK' as const };
+                }
+              }
+              return domainRunnerBase.run(task as never);
+            },
+            // 保持既有的 dispatch 可观察性（不新增日志系统）
+            dispatchLog: () => domainRunnerBase.dispatchLog(),
+          };
   // STEP 3 FINAL-7：唯一 runner mux —— Recovery 任务**永远**走 Recovery domain dispatch（保留路由），
   // 不得被 caller supplied input.runner 抢占；无正式 Recovery pack → BLOCK（不 fallback 给 caller runner）。
   const isRecoveryTask = (task: { dedupeKey: string }): boolean => task.dedupeKey.startsWith('task:recovery:');

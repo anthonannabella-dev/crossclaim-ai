@@ -571,3 +571,24 @@ node --env-file=.env dist/src/runtime/rsi-run.js      # 即 crossclaim-rsi.servi
 
 **仍未验证（如实标注）**：Linux/systemd 实机与同构容器验收 **NOT VERIFIED**（本机无 systemd、Docker 无响应）
 ⇒ 只声明「构建产物 + unit 一致性」通过，**不声称** Linux 实机 PASS。
+
+### 3.8 P2-CHANGE2（P0）可信租户来源与授权时效 —— 已实现并取证
+
+**新增能力**：**执行前二次授权复核**（productRecoveryPack.executionPreflight），每次派发 recovery 任务前重查
+「该任务的可信租户是否仍存在未撤销且未过期的 Standing Authorization」；不通过 ⇒ BLOCK 并记
+RSI_RECOVERY_PREFLIGHT_DENY=<原因码>（不新增任何 runner / controller / scheduler）。
+
+**真实 PostgreSQL 验收**（si-rsi-phase2-execution-preflight.test.ts，4/4 PASS）
+| 用例 | 断言 |
+| --- | --- |
+| C2-1 | 领取时授权有效 ⇒ 照常派发进 recovery-si |
+| **C2-2** | **领取后、执行前撤销授权** ⇒ 执行前复核拒绝（实测日志 RSI_RECOVERY_PREFLIGHT_DENY=EXEC_PREFLIGHT_AUTHORIZATION_REVOKED）、不进入业务链、不落 caller runner |
+| C2-3 | 原因码区分：无可信租户 EXEC_PREFLIGHT_NO_TRUSTED_TENANT / 授权撤销 EXEC_PREFLIGHT_AUTHORIZATION_REVOKED |
+| C2-4 | 读端口组织隔离：跨租户输入被既有 adapter 以 TENANT_MISMATCH 拒绝 |
+
+**行为变化（如实登记）**：执行前复核使「无可信租户」的拒绝**提前到派发之前**，因此原 R6 的
+(recovery-namespace-unclaimed) dispatch 记录不再产生（改为 RSI_RECOVERY_PREFLIGHT_DENY 日志）。
+R6 断言已按实测更新为「无 recovery-si 记录 + caller runner 0」——这是**更早更严**的 fail-closed，不是放宽。
+
+**口径**：organizationId 仍只由 durable claim（C4 门禁通过后）写入；JSON legacy 来源无该字段 ⇒ 两条防线
+（bind 未绑定 + 执行前复核）都会拒绝。回归：SI-RSI 全套件 **10 文件 / 58 tests 全绿**，api tsc 0。

@@ -48,12 +48,12 @@ const DEFAULT_STATE = {
   lastExitCode: null,
   openChanges: [
     
-    { id: 'P2-CHANGE2', phase: 2, title: 'P0 可信租户来源与授权时效（执行前二次授权复核）', priority: 'P0', status: 'OPEN' },
+
     { id: 'P2-CHANGE3', phase: 2, title: 'P1 任务完成状态真实性（PROMOTED 语义复审）', priority: 'P1', status: 'OPEN' },
     { id: 'P2-CHANGE4', phase: 2, title: 'P1 运行时稳定性与可观察性（持续运行验收）', priority: 'P1', status: 'OPEN' },
     { id: 'C5', phase: 2, title: 'PHASE 2：Recovery pack 生产装配', priority: 'P0', status: 'CODE_DONE_PENDING_AUDIT' },
   ],
-  closedChanges: ['C1', 'C2', 'C3', 'C4', 'C6', 'C7', 'AUDIT-P1', 'P2-CHANGE1'],
+  closedChanges: ['C1', 'C2', 'C3', 'C4', 'C6', 'C7', 'AUDIT-P1', 'P2-CHANGE1', 'P2-CHANGE2'],
   phases: { '1': 'CLOSED', '2': 'IN_PROGRESS', '3': 'NOT_STARTED', '4': 'NOT_STARTED', '5': 'NOT_STARTED', '6': 'NOT_STARTED' },
   lastAudit: { id: 'MSG-20261008-17', verdict: 'PASS_WITH_REVISE (PHASE1_CLOSED=PASS)', reviewedHead: 'cd555f26' },
 };

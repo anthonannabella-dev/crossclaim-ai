@@ -24,6 +24,12 @@ import type { RecoverySiPackDependencies, RecoverySiTaskBinding } from './recove
 /** 与既有 recovery read 适配器一致的角色口径（权限判定仍由既有服务执行，缺权限即拒绝） */
 export const RECOVERY_SI_PRODUCTION_READ_ROLE = 'OWNER';
 
+/** P2-CHANGE2：执行前二次授权复核的拒绝原因码（只回码，不回显取值） */
+export const RECOVERY_PREFLIGHT_DENY = {
+  NO_TRUSTED_TENANT: 'EXEC_PREFLIGHT_NO_TRUSTED_TENANT',
+  AUTHORIZATION_REVOKED: 'EXEC_PREFLIGHT_AUTHORIZATION_REVOKED',
+} as const;
+
 /** 受审的 recovery 任务命名空间（与 Goal/Runtime 绑定一致） */
 const RECOVERY_TASK_RE = /^task:recovery:([A-Z_]+):(.+)$/;
 
@@ -56,6 +62,12 @@ export function createProductionRecoveryPackDeps(input: {
     organizationId?: string;
   }) => RecoverySiTaskBinding | null;
   scanScope: NonNullable<RecoverySiPackDependencies['scanScope']>;
+  /** P2-CHANGE2：执行前二次授权复核（每次派发都跑，覆盖「claim 后撤销」竞态） */
+  executionPreflight: (task: {
+    id: string;
+    dedupeKey: string;
+    organizationId?: string;
+  }) => Promise<{ allowed: boolean; reason: string }>;
 } {
   const role = input.role ?? RECOVERY_SI_PRODUCTION_READ_ROLE;
 
@@ -102,6 +114,31 @@ export function createProductionRecoveryPackDeps(input: {
         });
         return { ok: loaded.ok, reasonCodes: loaded.reasonCodes };
       },
+    },
+    /**
+     * 执行前复核（每次派发）：
+     *   ① 任务必须携带 claim 时由服务端解析的可信租户；
+     *   ② 该租户必须仍存在**未撤销且未过期**的 Standing Authorization。
+     * 任一不满足 ⇒ 不允许（BLOCK），保证「领取时通过 ≠ 永久授权」。
+     */
+    async executionPreflight(task) {
+      const organizationId = task.organizationId;
+      if (typeof organizationId !== 'string' || organizationId === '') {
+        return { allowed: false, reason: RECOVERY_PREFLIGHT_DENY.NO_TRUSTED_TENANT };
+      }
+      const at = new Date();
+      const active = await input.prisma.standingAuthorization.count({
+        where: {
+          organizationId,
+          revocationState: 'ACTIVE',
+          effectiveAt: { lte: at },
+          expiresAt: { gt: at },
+        },
+      });
+      if (active < 1) {
+        return { allowed: false, reason: RECOVERY_PREFLIGHT_DENY.AUTHORIZATION_REVOKED };
+      }
+      return { allowed: true, reason: 'EXEC_PREFLIGHT_AUTHORIZED' };
     },
   };
 }
