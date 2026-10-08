@@ -163204,3 +163204,372 @@ HOLD / FORBIDDEN         = unchanged
 
 最终裁决：SYNTHETIC_5Y_E2E = PASS，PHASE 10 / AUDIT-2 = PASS / CLOSED。
 ```
+
+### [MSG-20261008-10] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-3 独立审计（PHASE 11/12；REVIEWED_HEAD 5062812a）= PASS WITH REVISE；TENANT_ISOLATION / EXTERNAL_WRITE_BOUNDARY / STALE_LEASE_HONESTY = PASS；RUNTIME_GUARD_POLICY_BOUNDARY = REVISE（composition writesDatabase=false 已过时，应拆为 coreWritesDatabase=false + historicalDomainStepWritesInternalScanState=true）；CONCURRENCY_CRASH_RESUME = REVISE（真实 blocker：scan backfill 缺 durable ownership/fencing，execution port 只凭 taskKey→scanId 即可写检查点）。PHASE 11/12 = NOT CLOSED。
+
+```text
+RUNTIME_GUARD_POLICY_BOUNDARY = REVISE
+TENANT_ISOLATION = PASS
+EXTERNAL_WRITE_BOUNDARY = PASS
+CONCURRENCY_CRASH_RESUME = REVISE
+STALE_LEASE_HONESTY = PASS
+
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 5062812aade2763fb446ed3c35e58d3206ccfaf7
+
+先说明锚点：5062812a 本身是 docs-only commit，但其完整树已经包含 PHASE 11/12 的测试；而且我确认 5062812a → 55288bbf 没有任何 apps/api/src/runtime/** 或 apps/api/src/services/** 实现变化，所以可以把 5062812a 作为本次 reviewed tree anchor。
+
+RUNTIME_GUARD_POLICY_BOUNDARY = REVISE
+
+Guard / Policy 的 fail-closed 主体是成立的：
+
+纯文本
+scan task without scanScope
+→ BLOCK
+
+domainPacks fake recovery-si
+→ RECOVERY_SI_RESERVED_PACK_ID_REJECTED
+
+product recovery pack without shared guard deps
+→ RECOVERY_SI_PRODUCT_GUARD_REQUIRED
+
+也没有第二 runtime / scheduler / guard / customs truth。
+
+但 PHASE 11 的一个静态边界声明已经与 PHASE 10 的真实行为不一致：
+
+纯文本
+RSI_RUNTIME_COMPOSITION_BOUNDARY.writesDatabase = false
+
+现在 composeRsiRuntime() 已经可以在 PASS verdict 后调用：
+
+纯文本
+historicalScanDomainStep
+→ createHistoricalScanExecutionPort()
+→ runHistoricalBackfill()
+→ update RecoveryScanRun checkpoint/status
+
+所以准确说法应该是：
+
+纯文本
+runtime core itself does not directly own Prisma writes
+BUT
+runtime composition may invoke a server-owned domain step
+that performs internal durable scan-state writes
+
+这不属于 External Write，但“整个 composition writesDatabase=false”已经不准确。
+
+最小修订建议把边界拆清：
+
+纯文本
+coreWritesDatabase = false
+historicalDomainStepMayWriteInternalState = true
+performsExternalWrite = false
+
+不要继续让测试只验证一个已经过时的常量。
+
+TENANT_ISOLATION = PASS
+
+这一项实际代码与测试一致。
+
+loadScanScopeForClaimedTask() 最终通过：
+
+纯文本
+organizationId + dedupeKey
+
+加载 durable scan。
+
+跨租户：
+
+纯文本
+ORG_B + ORG_A scan
+→ null/BLOCK
+
+并且测试前后确认原租户行：
+
+纯文本
+status
+recordsScanned
+nextShardIndex
+
+完全没有变化。
+
+执行端口也先经过同一 durable scope loader，没有 fallback 到 caller range。
+
+所以：
+
+TENANT_ISOLATION = PASS
+
+EXTERNAL_WRITE_BOUNDARY = PASS
+
+这里需要区分：
+
+纯文本
+internal database write ≠ external provider write
+
+Historical execution 确实会修改：
+
+纯文本
+RecoveryScanRun
+status
+checkpoint
+coverage
+counters
+
+但目前送审实现中没有：
+
+filing
+claim submit
+payment
+transport
+credentials
+provider mutation
+
+Customs historical pipeline 最高只到：
+
+纯文本
+CLAIM_READY
+
+summary 仍明确：
+
+纯文本
+claimsFiled = 0
+filingPerformed = false
+paymentPerformed = false
+externalWritePerformed = false
+
+historical-scan service 目录也没有新增 scheduler/network/external writer。
+
+所以在当前 HOLD 边界下：
+
+EXTERNAL_WRITE_BOUNDARY = PASS
+
+但静态源码扫描只能证明当前模块本身没有网络/文件外写，不能证明未来注入的 pagePort/ingestPort 永远无副作用；production adapter 接入时仍要单独审。
+
+CONCURRENCY_CRASH_RESUME = REVISE
+
+这是本轮真正的重要 blocker。
+
+你证明了：
+
+纯文本
+claimRecoveryScanRun()
+CREATED → RUNNING
+
+使用 updateMany(where status=CREATED)，所以两个 worker 并发 claim 时确实只有一个赢家。
+
+这一点：
+
+PASS。
+
+checkpoint resume 也是真的：
+
+纯文本
+maxPages=2
+→ nextShardIndex=2 durable
+→ 新进程重新 load row
+→ 从 index=2 继续
+
+也是：
+
+PASS。
+
+但是这两条目前没有真正连成一个受 ownership/fencing 保护的 production execution chain。
+
+实际缺口
+
+HistoricalScanExecutionPort.run() 当前是：
+
+纯文本
+loadScanScopeForClaimedTask()
+→ runHistoricalBackfill()
+
+它没有：
+
+纯文本
+claimRecoveryScanRun()
+leaseOwner check
+leaseExpiresAt check
+fencing token
+
+而 runHistoricalBackfill() 本身也只按：
+
+纯文本
+organizationId + scanId
+
+更新 checkpoint。
+
+advanceRecoveryScanShard() 同样没有：
+
+纯文本
+status = RUNNING
+leaseOwner = current worker
+fencingVersion = current version
+
+这样的写条件。
+
+所以理论上：
+
+纯文本
+worker A claim scan
+→ A 正在跑
+
+worker B 没有 claim 成功
+→ 但只要拿到 organizationId + scanId
+→ 仍然可以直接 runHistoricalBackfill()
+
+甚至 PHASE 12 的“崩溃恢复”测试本身就是：
+
+纯文本
+worker B 不重新 claim
+→ 直接 runHistoricalBackfill()
+
+这证明了 checkpoint 可恢复，但也同时证明：
+
+scan lease 当前并不约束实际 backfill 执行资格。
+
+更关键的是 PHASE 10 的 production execution port 本来就没有调用 scan claim，所以 PHASE 12 的“CAS 唯一赢家”目前并不是实际 runtime backfill 的硬前置条件。
+
+因此：
+
+CONCURRENCY_CRASH_RESUME = REVISE
+
+不是因为 checkpoint 不 durable，而是因为 execution ownership 没有被 durable fencing 强制执行。
+
+STALE_LEASE_HONESTY = PASS
+
+这一项我反而判 PASS，因为你没有虚报。
+
+代码真实语义确实是：
+
+纯文本
+claim only when status=CREATED
+
+一旦：
+
+纯文本
+status=RUNNING
+leaseExpiresAt < now
+
+另一个 worker 仍然：
+
+纯文本
+claim = null
+
+没有偷偷实现 reclaim。
+
+测试也准确记录：
+
+纯文本
+scan-level reclaim = absent
+scan-level fencing = absent
+PRODUCTION_DURABLE_QUEUE_REQUIRED = unresolved
+
+所以作为“边界诚实性”：
+
+STALE_LEASE_HONESTY = PASS
+
+不过“诚实”不等于“生产并发已经安全”。
+
+CHANGES
+
+建议 AUDIT-3R 只修两个窄点。
+
+第一，修正 runtime boundary metadata：
+
+纯文本
+不要再宣称 whole composition writesDatabase=false
+
+改成：
+coreWritesDatabase=false
+historicalDomainStepWritesInternalScanState=true
+externalWrite=false
+
+第二，也是关键项：把 runtime task ownership 与 scan backfill 写入绑定起来。
+
+最稳妥的是给 scan execution 引入 durable fencing，例如：
+
+纯文本
+claim / reclaim
+→ leaseOwner
+→ fencingVersion / executionToken
+
+每一次：
+coverage update
+checkpoint advance
+finish
+都必须 where:
+  organizationId
+  scanId
+  status=RUNNING
+  fencingVersion=current
+
+这样即使旧 worker A 复活，也不能覆盖已经由 worker B 接管的 checkpoint。
+
+至少新增这些真实 DB 测试：
+
+纯文本
+1. A claim 成功，B claim 失败
+   → B 调 execution port 也必须 BLOCK
+   → checkpoint 不变化
+
+2. A lease 过期
+   → B 通过正式 reclaim / ownership transfer
+   → 从 durable checkpoint 续跑
+
+3. B reclaim 后
+   → stale A 再写 checkpoint
+   → DB 条件更新 0 行 / BLOCK
+
+4. production execution port
+   → 必须消费合法 execution ownership
+   → 不能直接对 CREATED/RUNNING 任意 scan backfill
+
+如果你决定完全复用已有 durable runtime task lease，而不建立 scan-level第二套 lease，也可以，但必须让 execution port 携带并验证当前 runtime durable ownership/fencing token，不能继续只凭 taskKey → scanId 就执行。
+
+RISKS
+
+还有两个非阻断风险。
+
+第一，RSI_CONTINUATION_BOUNDARY.persistsLeaseToDatabase = false，而 rsi-restart-reconcile.ts 是独立的 durable reconcile abstraction。当前代码证据还不足以让我认定“runtime reconcile 自然就能替代 scan-level fencing”。因此不能仅凭 reconcile 20/20 就宣称同一 scan 不会有两个活 worker。
+
+第二，PHASE 11 的源码 regex 扫描是有价值的 architecture smoke test，但它属于负向启发式，不等同于完整静态能力证明。例如通过注入 port 发生的行为不会被目录 regex 自动识别。
+
+GitHub Actions 对 exact reviewed head：
+
+NOT_OBSERVED
+
+所以：
+
+纯文本
+historical-scan-boundary      7/7
+historical-scan-concurrency   4/4
+historical scan total         57/57
+targeted PHASE 12             40/40
+api tsc                       0
+
+继续只能记为 local/Codex evidence。
+
+最终状态：
+
+纯文本
+RUNTIME_GUARD_POLICY_BOUNDARY = REVISE
+TENANT_ISOLATION              = PASS
+EXTERNAL_WRITE_BOUNDARY       = PASS
+CONCURRENCY_CRASH_RESUME      = REVISE
+STALE_LEASE_HONESTY           = PASS
+
+AUDIT-3                       = PASS WITH REVISE
+PHASE 11/12                   = NOT CLOSED
+
+边界继续保持：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+SECOND_*                 = 0
+HOLD / FORBIDDEN         = unchanged
+
+这轮真正要补的不是更多测试数量，而是把 “谁有资格推进这个 scan” 从测试约定变成数据库可强制的 durable ownership/fencing 规则。
+```

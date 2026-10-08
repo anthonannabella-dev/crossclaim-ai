@@ -722,3 +722,35 @@ durable 行 `RUNNING / nextShardIndex=2`；第二次同一域步骤调用（新�
 * `historical-scan-http` 3/3；api tsc 0；`historical-scan-*` 全量批次保持全绿；全量回归仍为 4657/4658（唯一失败 = 既有 P2E-DB5 flake，隔离 20/20）。
 * **诚实记录**：该缺陷存在于 §10 的 UI_RESULT_VIEW 交付中，AUDIT-1（PHASE 8 + UI_RESULT_VIEW）当时**未发现**
   （其证据为视图渲染 + api-contract，未覆盖 HTTP 方法白名单）；本节为 PHASE 14 的补强，并将随 AUDIT-4 送审。
+### 19. AUDIT-3 裁决（PASS WITH REVISE）+ 待办 CHANGE（PHASE 11/12 = NOT CLOSED）
+
+**裁决（已逐字归档 `MSG-20261008-10`，FNV1A `12f9c2b9`，FULL_COPY_OK；REVIEWED_HEAD `5062812a`）**
+
+| 判项 | 结果 |
+| --- | --- |
+| TENANT_ISOLATION | **PASS**（跨租户 BLOCK 且原租户行零变化；执行端口先经同一 durable scope loader，无 caller range fallback） |
+| EXTERNAL_WRITE_BOUNDARY | **PASS**（无 filing / claim submit / payment / transport / credentials / provider mutation；customs 最高 CLAIM_READY；summary 三个 false） |
+| STALE_LEASE_HONESTY | **PASS**（未虚报：claim 仅接受 CREATED，无隐式 reclaim；测试准确记录 scan-level reclaim/fencing = absent） |
+| RUNTIME_GUARD_POLICY_BOUNDARY | **REVISE** —— 见 CHANGE 1 |
+| CONCURRENCY_CRASH_RESUME | **REVISE** —— 见 CHANGE 2（本轮真实 blocker） |
+
+**CHANGE 1（边界元数据过时）**：`RSI_RUNTIME_COMPOSITION_BOUNDARY.writesDatabase = false` 与 PHASE 10 的真实行为不一致 ——
+composition 在 PASS 收口后可经 `historicalScanDomainStep → execution port → runHistoricalBackfill()` 写 `RecoveryScanRun`。
+应拆清为：`coreWritesDatabase = false` + `historicalDomainStepWritesInternalScanState = true` + `performsExternalWrite = false`；
+测试不得继续只验证一个已过时常量。
+
+**CHANGE 2（durable ownership / fencing，关键项）**：`HistoricalScanExecutionPort.run()` 只做
+`loadScanScopeForClaimedTask() → runHistoricalBackfill()`，**没有** claim / `leaseOwner` 校验 / `leaseExpiresAt` 校验 / fencing token；
+`advanceRecoveryScanShard()` 也只按 `(organizationId, scanId)` 更新。因此：
+
+* 未 claim 成功的 worker（只要拿到 org + scanId）仍能直接推进 backfill；PHASE 12 的「CAS 唯一赢家」并非 runtime 写入的硬前置；
+* 旧 worker A 在 B 接管后复活，仍可覆盖 checkpoint（无 fencing）。
+
+审计要求（至少 4 条真实 DB 测试）：① A claim 成功、B claim 失败 ⇒ B 调 execution port 必须 BLOCK 且 checkpoint 不变；
+② A 租约过期 ⇒ B 经**正式 reclaim / ownership transfer** 后从 durable checkpoint 续跑；
+③ B reclaim 后 stale A 再写 checkpoint ⇒ 条件更新 0 行 / BLOCK；④ production execution port 必须消费合法 execution ownership，
+不能对任意 `CREATED`/`RUNNING` scan 直接 backfill。审计同时指出：若复用既有 runtime task lease，也必须让执行端口携带并校验 durable ownership/fencing token。
+
+**当前状态**：`AUDIT-3 = PASS WITH REVISE`，**PHASE 11/12 = NOT CLOSED**；下一步 `AUDIT-3R` 前需完成上述两条 CHANGE。
+（审计的两个非阻断 RISKS：`RSI_CONTINUATION_BOUNDARY.persistsLeaseToDatabase = false` 下不能仅凭 reconcile 20/20 宣称同一 scan 不会有两个活 worker；
+PHASE 11 的源码 regex 扫描属负向启发式，不等于完整静态能力证明。）
