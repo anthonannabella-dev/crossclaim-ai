@@ -15,6 +15,7 @@
 
 import type { RsiReconcileStore } from './rsi-restart-reconcile';
 import type { RsiDurableTaskSource } from './rsi-durable-task-source';
+import type { PrismaClient } from '@prisma/client';
 
 export type RsiReconcileBootstrapKind = 'PRISMA' | 'NOT_CONFIGURED' | 'REQUIRED_BUT_MISSING_DATABASE_URL';
 
@@ -57,6 +58,8 @@ export function planReconcileBootstrap(
 
 export interface OpenedRsiReconcile {
   spec: { store: RsiReconcileStore; ownerRef: string; trigger: 'BOOT' };
+  /** PHASE 2 / C5：同一 PrismaClient 供 Recovery pack 的读工具与共享 guard 使用 */
+  prisma: PrismaClient;
   /**
    * PHASE 1：与 reconcile 共用**同一个** PrismaClient 的 durable 任务源。
    * 运行中的实例靠它领取新任务（无需重启），且与 API 使用**同一**持久化源。
@@ -78,6 +81,7 @@ export async function openPrismaReconcile(ownerRef: string): Promise<OpenedRsiRe
   const prisma = new PrismaClient();
   return {
     spec: { store: createPrismaRsiReconcileStore(prisma), ownerRef, trigger: 'BOOT' },
+    prisma,
     taskSource: createAutonomyTaskSource({ prisma, ownerRef }),
     disconnect: async () => {
       await prisma.$disconnect();

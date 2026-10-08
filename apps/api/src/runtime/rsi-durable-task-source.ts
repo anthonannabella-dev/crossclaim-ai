@@ -170,6 +170,7 @@ export function createAutonomyTaskSource(input: {
 
       const claimed: RsiSafeTask[] = [];
       for (const row of candidates) {
+        let claimedOrganizationId: string | null = null;
         // C4：执行前授权重解析 —— 拒绝者持久化 BLOCK，且**不**进入本轮领取结果
         if (input.authorizeOnClaim !== false) {
           const decision = await authorizeClaim(row, at);
@@ -180,6 +181,10 @@ export function createAutonomyTaskSource(input: {
             });
             continue;
           }
+          // C5：把**可信解析出的租户**随任务交给执行链（Recovery pack 的 bind 依赖它，缺失则 fail-closed）
+          claimedOrganizationId = decision.organizationId ?? null;
+        } else {
+          claimedOrganizationId = null;
         }
         const expiresAt = new Date(at.getTime() + leaseMs);
         /**
@@ -213,7 +218,14 @@ export function createAutonomyTaskSource(input: {
           });
           return true;
         });
-        if (won) claimed.push({ id: row.id, priority, dedupeKey: row.dedupeKey });
+        if (won) {
+          claimed.push({
+            id: row.id,
+            priority,
+            dedupeKey: row.dedupeKey,
+            ...(claimedOrganizationId === null ? {} : { organizationId: claimedOrganizationId }),
+          });
+        }
       }
       return claimed;
     },

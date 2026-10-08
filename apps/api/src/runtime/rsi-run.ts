@@ -38,6 +38,7 @@ import {
   type RsiReconcileTrigger,
 } from './rsi-restart-reconcile';
 import { openPrismaReconcile, planReconcileBootstrap } from './rsi-run-bootstrap';
+import { createProductionRecoveryPackDeps } from './recovery-si-production-composition';
 import {
   generateRsiWork,
   parseRsiSignals,
@@ -215,7 +216,16 @@ export async function composeRsiRuntime(input: {
     modelGateway?: import("./rsi-si-model-gateway").RsiSiModelGatewayPort;
     appActionGuardDeps: AppActionGuardDeps;
     readPorts: RecoveryReadPorts;
-    bind: (task: { id: string; dedupeKey: string; priority: string }) => RecoverySiTaskBinding | null;
+    /**
+     * PHASE 2 / C5：`organizationId` 由 durable 任务源在 claim 时解析（可信事实），
+     * 随任务传入；缺失即由 bind 返回 null ⇒ pack fail-closed（RECOVERY_PACK_UNBOUND_TASK）。
+     */
+    bind: (task: {
+      id: string;
+      dedupeKey: string;
+      priority: string;
+      organizationId?: string;
+    }) => RecoverySiTaskBinding | null;
     /** HISTORICAL_RECOVERY_SCAN_V1：扫描任务必须装载 durable scan scope（缺省 = 该任务 BLOCK）。 */
     scanScope?: import('./recovery-si-pack').RecoverySiPackDependencies['scanScope'];
   };
@@ -549,6 +559,18 @@ if (isDirectRun) {
       'RSI_RECONCILE_SOURCE=' + reconcileDecision.kind + ' reason=' + reconcileDecision.reason,
     );
 
+    /**
+     * PHASE 2 / C5：生产启动入口装配 Recovery SI pack（关闭 P0-B）。
+     * 仅在拿到 Prisma 客户端时装配（读工具与 guard 都依赖 DB）；不新增第二套 runtime/controller/scheduler。
+     */
+    const productionRecoveryPack =
+      openedReconcile === null
+        ? undefined
+        : createProductionRecoveryPackDeps({ prisma: openedReconcile.prisma });
+    console.log(
+      'RSI_RECOVERY_PACK=' + (productionRecoveryPack === undefined ? 'NOT_CONFIGURED' : 'PRODUCT_RECOVERY_SI'),
+    );
+
     const composition = await composeRsiRuntime({
       readFile: async (path) => fsPromises.readFile(path, 'utf8'),
       tasksPath: process.env.RSI_TASKS_PATH,
@@ -561,6 +583,7 @@ if (isDirectRun) {
       ...(openedReconcile === null ? {} : { reconcile: openedReconcile.spec }),
       // PHASE 1：与 API 使用同一 durable 任务源 ⇒ 运行中无需重启即可发现并领取新任务
       ...(openedReconcile === null ? {} : { taskSource: openedReconcile.taskSource }),
+      ...(productionRecoveryPack === undefined ? {} : { productRecoveryPack: productionRecoveryPack }),
     });
     const reconcile = await composition.reconcileNow();
     console.log(

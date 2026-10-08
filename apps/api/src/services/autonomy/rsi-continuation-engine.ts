@@ -26,6 +26,11 @@ export interface RsiSafeTask {
   id: string;
   priority: RsiPriority;
   dedupeKey: string;
+  /**
+   * PHASE 2 / C5：领取时（C4 授权门禁通过后）从**可信持久化事实**解析出的租户。
+   * 仅由 durable 任务源填充；JSON legacy 队列不含该字段（此时 Recovery pack 会 fail-closed 拒绝绑定）。
+   */
+  organizationId?: string;
 }
 
 export interface RsiContinuationState {
