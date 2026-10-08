@@ -165544,3 +165544,346 @@ PHASE3_AUTHORIZED = NO
 REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
 PRODUCTION_READY = NO
 ```
+
+### [MSG-20261008-19] SI-RSI PHASE 2 独立审计（reviewed ref 56074920）**完整正文**（含逐项裁决表 / 4 项 CHANGE / 风险表 / 终裁）= PASS_WITH_REVISE；PHASE2_CLOSED=NO、P0_B_CLOSED=NO；CHANGE1(P0 生产启动入口一致性) / CHANGE2(P0 可信租户来源与授权时效) / CHANGE3(P1 完成状态真实性：禁止把 dispatch 当追回成功) / CHANGE4(P1 运行时稳定性与可观察性)；PHASE3_AUTHORIZED=NO。【更正】MSG-20261008-18 系误按「最小 div」抽取，只捕获到机器可读页脚（317 字）而漏掉正文，本条为同一回复的完整逐字副本
+
+```text
+CROSSCLAIM · SI-RSI PHASE 2 独立审计裁决
+PASS WITH REVISE
+
+审计编号：MSG-20261008-18 / CODEX-SI-RSI-P2
+
+REVIEWED_HEAD：56074920
+
+审计依据：本轮 Codex 提交的实现说明、6 项真实 PostgreSQL E2E 测试结果及测试汇总。以下为基于所提交证据的独立裁决，不代表已经直接检出 Git 源码或重新运行测试。
+
+一、逐项裁决
+
+审计项目
+
+	
+
+裁决
+
+	
+
+理由
+
+
+
+
+C5_RECOVERY_PACK_PRODUCTION_WIRING
+
+	
+
+PASS
+
+	
+
+已在 rsi-run 装配 Recovery SI pack，消除原先 recovery 任务恒 BLOCK 的装配缺口
+
+
+
+
+C5_RUNTIME_COMPOSITION_CORRECTNESS
+
+	
+
+PASS WITH REVISE
+
+	
+
+复用唯一 Runtime 和 Prisma client，但需确认实际生产启动路径与生命周期一致
+
+
+
+
+C5_E2E_REAL_PG
+
+	
+
+PASS
+
+	
+
+6/6 真实 PostgreSQL 测试通过，覆盖 dispatch、撤销、跨租户和崩溃接管
+
+
+
+
+C5_TENANT_AND_AUTHORIZATION_BOUNDARY
+
+	
+
+PASS
+
+	
+
+organizationId 由 durable claim 提供，授权撤销与跨租户行为有测试支持
+
+
+
+
+C5_FAIL_CLOSED_HONESTY
+
+	
+
+PASS
+
+	
+
+无 Provider 或证据时明确 BLOCK，没有伪造业务成功
+
+
+
+
+P0_B_CLOSED
+
+	
+
+REVISE
+
+	
+
+核心缺口已修复，但尚未证明最终部署入口和真实服务启动链完成装配
+
+二、核心判断
+
+本轮 C5 实现方向正确，关键业务链已经接通。
+
+此前：
+
+AutonomyTask → ONE SI Runtime → Recovery pack 未绑定 → BLOCK
+
+现在：
+
+AutonomyTask → durable claim → 授权校验 → ONE SI Runtime → Recovery SI pack → Policy / Guard / ReadPorts → 业务状态
+
+本轮 R1–R6 提供的证据支持以下结论：
+
+Recovery 任务能够进入既有业务 dispatch。
+
+不需要建立第二套 SI/RSI Runtime。
+
+不允许由 JSON legacy 队列自行声明可信租户。
+
+授权撤销后，任务不能继续被领取执行。
+
+租约到期后，新 owner 能重新领取任务。
+
+缺少真实 Provider 时保持 BLOCK，而不是宣称追回成功。
+
+这意味着 SI-RSI 已从单纯的运行时基础设施，推进到能够调用 CrossClaim 既有追回业务链的阶段。
+
+但 rsi-run 接通，不自动等于所有 Linux/systemd 生产启动路径都接通。
+
+三、必须修订的 CHANGE
+CHANGE 1 — P0：生产启动入口一致性
+
+检查实际 systemd ExecStart 是否进入本轮修改的组合根。
+
+必须证明：
+
+systemd → rsi-run → Prisma → Recovery pack → ONE SI Runtime
+
+验收要求：
+
+实际部署入口包含 PRODUCT_RECOVERY_SI。
+
+不得存在另一条遗漏 Recovery pack 的正式启动路径。
+
+API/Web/RSI 服务的分工明确。
+
+不创建第二套 scheduler/controller。
+
+使用与生产一致的构建产物进行验证。
+
+Linux 实机不可用时，允许先使用与发布配置同构的容器验收，但不得宣称 Linux 实机 PASS。
+
+CHANGE 2 — P0：可信租户来源及授权时效
+
+核查 organizationId 是否只能由成功通过服务端授权门禁的 durable claim 写入。
+
+补充验证：
+
+外部 JSON、API 输入不得伪造可信 organizationId。
+
+任务领取后、执行外部动作前撤销授权，必须再次被 Guard 拒绝。
+
+任务被重新领取后，必须重新验证授权。
+
+所有读端口必须保持组织隔离。
+
+尤其要确认：claim 时授权通过，不等于未来所有动作永久获得授权。
+
+CHANGE 3 — P1：任务完成状态的真实性
+
+当前 PROMOTED 终态映射应进行语义复审。
+
+区分：
+
+已进入业务链
+
+已形成有效追回机会
+
+已准备索赔
+
+已提交索赔
+
+Provider 已确认
+
+已收到回款
+
+不得因为 Recovery pack 成功 dispatch，就把客户任务标记成「追回成功」。
+
+BLOCK、WAITING_ON_PROVIDER、WAITING_ON_CUSTOMER 等状态也不能被误映射为业务完成。
+
+CHANGE 4 — P1：运行时稳定性与可观察性
+
+建议补充持续运行测试，覆盖：
+
+多 worker 并发。
+
+租约到期与续租竞争。
+
+任务执行中进程退出。
+
+重启后幂等恢复。
+
+DB 短暂中断与恢复。
+
+Dispatch 日志与 durable 状态一致性。
+
+现有 6/6 测试是积极证据，但不能替代长时间运行验收。
+
+四、风险与边界
+
+风险
+
+	
+
+当前判断
+
+
+
+
+第二 Runtime / Scheduler
+
+	
+
+提交证据未发现
+
+
+
+
+跨租户访问
+
+	
+
+已有针对性防护与测试
+
+
+
+
+授权撤销竞态
+
+	
+
+仍需执行时二次复核
+
+
+
+
+固定 P2 priority
+
+	
+
+非 C5 阻断项，后续优化
+
+
+
+
+缺少独立 leaseEpoch
+
+	
+
+需复核 fencing 是否足够
+
+
+
+
+Provider 真实写入
+
+	
+
+HOLD
+
+
+
+
+关税正式申报
+
+	
+
+HOLD
+
+
+
+
+自动扣取 15% 佣金
+
+	
+
+HOLD
+
+
+
+
+生产部署及真实回款
+
+	
+
+未验证
+
+五、最终执行裁决
+
+PHASE 2 / C5
+
+PASS WITH REVISE
+
+允许事项
+
+继续 CHANGE 1–4 的安全范围修订及回归验收。
+
+暂不授权事项
+
+PHASE 3–6 自动实施、真实 Provider 写入、正式关税申报、自动支付和生产开闸。
+
+最终状态：
+
+纯文本
+REVIEWED_HEAD = 56074920
+
+C5_IMPLEMENTATION = PASS
+C5_REAL_PG_E2E = PASS
+C5_SECURITY_BOUNDARY = PASS
+
+PHASE2_VERDICT = PASS_WITH_REVISE
+PHASE2_CLOSED = NO
+P0_B_CLOSED = NO
+
+CHANGES_REQUIRED = 4
+PHASE2_SAFE_REVISIONS_AUTHORIZED = YES
+
+PHASE3_AUTHORIZED = NO
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+PRODUCTION_READY = NO
+
+NEXT： Codex 应先完成 CHANGE 1–4，提交新的 REVIEWED_HEAD、实际部署入口验证、授权竞态测试及业务终态映射证据，再进行 PHASE 2 FINAL 复审。
+
+不要求重写已经通过的 Recovery SI pack，不允许为解决装配问题而建立第二个 Runtime，也不允许擅自修改封板 RC。
+
+本轮结论：C5 的核心工程目标已实现，值得保留；剩余是部署一致性、安全竞态与状态真实性的收口。
+
+本裁决仅在当前会话给出，未写入仓库。
+```

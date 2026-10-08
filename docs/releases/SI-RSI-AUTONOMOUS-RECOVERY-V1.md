@@ -522,3 +522,29 @@ PRODUCTION_READY = NO
 **注意**：`C5_SECURITY_BOUNDARY = PASS` 但 `P0_B_CLOSED = NO` —— 说明接线本身被认可，
 关闭 P0-B 还依赖那 4 项修订；**不得**在实施与复审前声明 P0-B 关闭或进入 PHASE 3
 （`PHASE3_AUTHORIZED = NO`）。
+
+### 3.6 PHASE 2 裁决完整正文与 4 项 CHANGE（更正归档 MSG-20261008-19）
+【归档缺陷更正】MSG-20261008-18 是按「最小 div 含 VERDICT」抽取的，只拿到机器可读页脚（317 字），**漏了正文**。
+已重新完整抽取同一回复（3231 字，连续子串校验通过，sha256 `e9927f83…`）并归档为** `MSG-20261008-19`（FULL_COPY_OK）**。
+教训：抽取时必须用「回复末尾唯一句 + 关键小节」双条件定位，不能只按 VERDICT 取最小节点。
+
+**4 项 CHANGE（复审逐字要点）**
+1. **CHANGE 1 — P0 生产启动入口一致性**：证明 `systemd → rsi-run → Prisma → Recovery pack → ONE SI Runtime`；
+   实际部署入口须包含 `PRODUCT_RECOVERY_SI`；不得存在另一条遗漏 pack 的正式启动路径；使用与生产一致的构建产物验证。
+   （Linux 实机不可用时可用同构容器验收，但**不得**宣称 Linux 实机 PASS。）
+2. **CHANGE 2 — P0 可信租户来源与授权时效**：核查 `organizationId` 只能由通过服务端授权门禁的 durable claim 写入；
+   外部 JSON/API 输入不得伪造；**任务领取后、执行外部动作前撤销授权必须再次被 Guard 拒绝**；重新领取须重新验证授权；所有读端口保持组织隔离。
+   要点：**claim 时通过 ≠ 未来动作永久获得授权**。
+3. **CHANGE 3 — P1 任务完成状态真实性**：`PROMOTED` 终态映射需语义复审，区分「进入业务链 / 形成有效机会 / 已准备索赔 /
+   已提交索赔 / Provider 已确认 / 已收到回款」；**不得因 pack 成功 dispatch 就标记客户任务「追回成功」**；
+   `BLOCK` / `WAITING_ON_PROVIDER` / `WAITING_ON_CUSTOMER` 不得误映射为业务完成。
+4. **CHANGE 4 — P1 运行时稳定性与可观察性**：补充持续运行验收（多 worker 并发 / 租约到期与续租竞争 / 执行中进程退出 /
+   重启幂等恢复 / DB 短暂中断与恢复 / dispatch 日志与 durable 状态一致性）；6/6 不能替代长时间运行验收。
+
+**风险表要点**：第二 Runtime/Scheduler = 未发现；跨租户 = 已有防护与测试；**授权撤销竞态 = 仍需执行时二次复核**；
+固定 P2 priority = 非阻断；缺独立 `leaseEpoch` = 需复核 fencing 充分性；Provider 写入 / 关税申报 / 自动 15% 扣佣 = HOLD；生产部署与真实回款 = 未验证。
+
+**终裁**：`PHASE 2 / C5 = PASS WITH REVISE`；允许继续 CHANGE 1–4 的安全范围修订与回归验收；
+**暂不授权** PHASE 3–6 自动实施、真实 Provider 写入、正式关税申报、自动支付与生产开闸；
+`NEXT` = 完成 CHANGE 1–4 → 提交新 REVIEWED_HEAD + 部署入口验证 + 授权竞态测试 + 业务终态映射证据 → PHASE 2 FINAL 复审。
+**不要求重写已通过的 Recovery SI pack，不允许为装配问题建第二个 Runtime，也不允许擅自修改封板 RC。**

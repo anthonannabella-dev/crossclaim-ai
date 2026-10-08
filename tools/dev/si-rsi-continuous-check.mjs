@@ -47,7 +47,10 @@ const DEFAULT_STATE = {
   lastResult: null,
   lastExitCode: null,
   openChanges: [
-    { id: 'AUDIT-P2-CHANGES', phase: 2, title: '向审计方索取 PHASE 2 的 4 项 CHANGE 明细（裁决正文未列出）并实施', priority: 'P0', status: 'OPEN' },
+        { id: 'P2-CHANGE1', phase: 2, title: 'P0 生产启动入口一致性（systemd→rsi-run→Prisma→Recovery pack）', priority: 'P0', status: 'OPEN' },
+    { id: 'P2-CHANGE2', phase: 2, title: 'P0 可信租户来源与授权时效（执行前二次授权复核）', priority: 'P0', status: 'OPEN' },
+    { id: 'P2-CHANGE3', phase: 2, title: 'P1 任务完成状态真实性（PROMOTED 语义复审）', priority: 'P1', status: 'OPEN' },
+    { id: 'P2-CHANGE4', phase: 2, title: 'P1 运行时稳定性与可观察性（持续运行验收）', priority: 'P1', status: 'OPEN' },
     { id: 'C5', phase: 2, title: 'PHASE 2：Recovery pack 生产装配', priority: 'P0', status: 'CODE_DONE_PENDING_AUDIT' },
   ],
   closedChanges: ['C1', 'C2', 'C3', 'C4', 'C6', 'C7', 'AUDIT-P1'],
