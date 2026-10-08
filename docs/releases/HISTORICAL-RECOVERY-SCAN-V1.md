@@ -403,3 +403,12 @@ claim → Recovery pack proposal → park-for-judge → verdict 收口（既有�
 verdict watcher 的收口回调）确定最小接线点，再实现；同时补齐 CHANGE 1 的 loop 驱动用例。
 在接线点确定前不改 runtime 语义，避免引入「裁决前即完成 scan」的新旁路。
 
+### 13.10 CHANGE 1 实测发现：loop 走的是 emit() 而不是 tick()
+
+* 实测（临时用例，未提交）：composition.loop.pollOnce() 驱动时，historicalScanDomainStep **未被调用**
+  （loopStepCalls === []），即：仅把 	ick() 包一层还不够 —— 既有 event loop 的续跑路径调用的是
+  controller 的 mit()/续跑入口（评审原文亦指出「事件路径 controller.emit() 也一样绕过 wrapper」）。
+* 结论：CHANGE 1 的修复面应覆盖 **loop 实际使用的 controller 方法**（emit/续跑入口），而不是只覆盖 tick()；
+  这与 CHANGE 2 的结论一致 —— domain step 应挂在**裁决/续跑收口**处。
+* 实验用例已回退（分支保持全绿），未提交失败测试。下一步：读 ttachContinuationToController 暴露的方法集，
+  确定 loop 调用的确切入口，再一次性实现 CHANGE 1+2。
