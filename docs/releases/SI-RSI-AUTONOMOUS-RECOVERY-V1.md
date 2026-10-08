@@ -1915,3 +1915,31 @@ git -c safe.directory=D:/crossclaim-ai -C D:/crossclaim-ai branch release/rc-202
 
 **当前口径**：PHASE 3 = CLOSED（`MSG-20261009-05`）；`FAILURE_RECOVERY_LOCAL = PASS`、`FAILURE_RECOVERY_LINUX = NOT_VERIFIED`；
 发布集成审计 = **AUTHORIZED 但尚未执行**（等待上述第 1/2 项授权）；`PRODUCTION_READY = NO`；封板 RC 与 `main` 未修改。
+
+### 3.42 发布集成 CHANGE 2/3 本地重验 —— 已取得**精确阻断项**与**生产构建含已审计实现**的证据
+
+**① `node deploy/verify-release.mjs --json`（在已审计线 `4efdbd4d` 上运行，只读、不连服务器）**
+- **已通过**：`manifest.readable`、`git.branch.readable`、`git.worktree.clean`、`artifacts.present`（unit 与产物入口均存在）、
+  **`gate.api.build = ok`**（API 构建 + 类型检查通过）、**`gate.tests.pass`（10 个必需测试文件通过）**。
+  ⇒ 说明**已审计代码本身已满足部署门禁的构建与合同测试部分**。
+- **阻断项恰为两项（与审计 CHANGE 1/2 的预判一致）**：
+  1. `git.branch.allowed` **FAIL**：分支 `feat/si-rsi-customer-autonomous-recovery-v1` 命中禁用项 **`feat/*（禁止部署）`**
+     ⇒ **候选分支不得是 `feat/*`**，必须新建 `release/*` 形态的候选；
+  2. `release.commit.locked` **FAIL**：HEAD 与 `releaseCommit`（`04a93666`）差异**超出** `sealingCommitPolicy.allowedPaths`（列出 66 个文件）
+     ⇒ 候选**必须携带新的 releaseCommit 锚点**，**旧锚点 04a93666 的历史通过结果不得继承**。
+
+**② CHANGE 3 的生产构建取证（artifact 级，只读检查）**
+构建后直接检查 `apps/api/dist/` 产物中的关键标记：
+| 产物 | 命中标记 |
+| --- | --- |
+| `dist/src/runtime/rsi-run.js` | **`PRODUCT_RECOVERY_SI`**、**`RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT`** |
+| `dist/src/runtime/recovery-verdict-settlement.js` | `RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT`、**`VERDICT_PASS_AWAITING_BUSINESS_PROOF`**、**`RECOVERY_SETTLEMENT_INTENT`** |
+| `dist/src/runtime/recovery-terminal-evidence.js` | **`TERMINAL_EVIDENCE_SOURCE_DISABLED`**（可信终局证据白名单） |
+
+⇒ **生产构建产物中确实包含已审计实现**：Recovery pack 装配、verdict-aware fenced settlement（含非完成口径与 INTENT 审计）、可信终局证据白名单。
+**尚未做**（留下一单元）：用**正式生产启动入口**在**隔离环境**实际启动并观测启动标记（`RSI_RECOVERY_PACK` / `RSI_VERDICT_SETTLEMENT`）—— 审计明确"不得以源码存在或单测通过替代生产构建验收"，故该项必须实测。
+
+**证据冻存**：`tools/verification/release-integration/release-integration-prep.json`。
+
+**③ 仍待 HOST 授权**（沿用 §3.41 的四项）：① 新建并推送 `release/*` 候选分支（当前指令限定 push 仅限功能分支）；② 新 `releaseId` 命名；
+③ 残留 schema 清理；④ 后台 `rsi-run` 进程处置；另需 ⑤ **Linux 实机/staging**（`FAILURE_RECOVERY_LINUX` 的 L1–L6）。

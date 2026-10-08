@@ -1,0 +1,85 @@
+{
+  "id": "RELEASE_INTEGRATION_AUDIT_PREP",
+  "auditRef": "MSG-20261009-06（RELEASE_INTEGRATION_AUDIT = AUTHORIZED；CHANGE 1/2/3）",
+  "checkedHead": "4efdbd4d",
+  "auditedImplementationHead": "73538175",
+  "sealingRc": {
+    "branch": "release/rc-20261008-linux-deploy-v1",
+    "commit": "ceb65ab73d39eb027df02e4661de82e84c6f4615",
+    "modified": false
+  },
+  "main": {
+    "commit": "444a246c39f8699befbc7314bef2784c75d43caf",
+    "modified": false
+  },
+  "topology": {
+    "rcIsAncestorOfFeatureBranch": true,
+    "commitsAheadOfSealingRc": 56,
+    "filesChangedAheadOfSealingRc": 66,
+    "commitsAfterAuditedHead": 1,
+    "filesChangedAfterAuditedHead": [
+      "AI-ARCHITECT-INBOX.md",
+      "docs/releases/SI-RSI-AUTONOMOUS-RECOVERY-V1.md"
+    ],
+    "stowawayCode": false
+  },
+  "verifierRun": {
+    "command": "node deploy/verify-release.mjs --json",
+    "exitCode": 1,
+    "passed": [
+      "manifest.readable",
+      "git.branch.readable",
+      "git.worktree.clean",
+      "artifacts.present（unit 与构建产物入口均存在）",
+      "gate.api.build = ok（API 构建 + 类型检查通过）",
+      "gate.tests.pass = 10 个必需测试文件通过"
+    ],
+    "blocked": [
+      {
+        "id": "git.branch.allowed",
+        "detail": "分支 feat/si-rsi-customer-autonomous-recovery-v1 命中禁用项：feat/*（禁止部署）",
+        "implication": "CHANGE 1：候选分支**不得**是 feat/* ⇒ 必须新建 release/* 形态的候选分支"
+      },
+      {
+        "id": "release.commit.locked",
+        "detail": "HEAD 与 releaseCommit 差异超出 sealingCommitPolicy.allowedPaths（列出 66 个文件）",
+        "implication": "CHANGE 2：候选必须携带**新的 releaseCommit 锚点**，旧锚点 04a93666 的结果不得继承"
+      }
+    ]
+  },
+  "change3ProductionBuildArtifacts": {
+    "method": "构建后直接检查 dist 产物中的关键标记（只读）",
+    "results": [
+      {
+        "file": "apps/api/dist/src/runtime/rsi-run.js",
+        "markers": {
+          "PRODUCT_RECOVERY_SI": true,
+          "RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT": true
+        }
+      },
+      {
+        "file": "apps/api/dist/src/runtime/recovery-verdict-settlement.js",
+        "markers": {
+          "RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT": true,
+          "VERDICT_PASS_AWAITING_BUSINESS_PROOF": true,
+          "RECOVERY_SETTLEMENT_INTENT": true
+        }
+      },
+      {
+        "file": "apps/api/dist/src/runtime/recovery-terminal-evidence.js",
+        "markers": {
+          "TERMINAL_EVIDENCE_SOURCE_DISABLED": true
+        }
+      }
+    ],
+    "conclusion": "生产构建产物中确实包含已审计实现：Recovery pack 装配（PRODUCT_RECOVERY_SI）、verdict-aware fenced settlement（含非完成口径与 INTENT 审计）、可信终局证据白名单（TERMINAL_EVIDENCE_SOURCE_DISABLED）",
+    "notYetDone": "尚未用**正式生产启动入口**在隔离环境实际启动并观测启动标记（RSI_RECOVERY_PACK / RSI_VERDICT_SETTLEMENT），留待下一单元"
+  },
+  "pendingHostAuthorization": {
+    "createAndPushCandidateBranch": "需要授权（当前 HOST 指令限定 push 仅限功能分支）；建议名 release/rc-20261009-si-rsi-integration",
+    "newReleaseId": "建议 rc-20261009-si-rsi-integration-v1",
+    "schemaCleanup": "rc_c3_fresh_check 是否删除（用例已按 schema 过滤，现属卫生项）",
+    "backgroundProcesses": "3 个 rsi-run 进程是否停止/迁移",
+    "linuxHost": "FAILURE_RECOVERY_LINUX 的 L1–L6 需 Linux 实机/staging"
+  }
+}
