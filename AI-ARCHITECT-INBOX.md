@@ -162965,3 +162965,242 @@ SECOND_*                 = 0
 
 结论：AUDIT-2R4 已把上一轮两个直接 blocker 修掉，但还差最后一个“stale pending scan 不得被后续其他任务 PASS 消费”的 task-binding 修订。修完这一条，我预计 SYNTHETIC_5Y_E2E = PASS。
 ```
+
+### [MSG-20261008-09] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-2R5 窄复审（重发；REVIEWED_HEAD e76e92a2）= PASS；SYNTHETIC_5Y_E2E / CHECKPOINT_RESUME / SOURCE_COVERAGE_HONESTY / NO_EXTERNAL_ACTION / NO_SECOND_RUNTIME = PASS；AUDIT-2 / PHASE 10 = PASS / CLOSED；无新增 CHANGE（不需要 AUDIT-2R6）；保留唯一生产设计债 armedScanTaskKey = process memory。
+
+```text
+SYNTHETIC_5Y_E2E = PASS
+
+VERDICT: PASS
+
+REVIEWED_HEAD: e76e92a29ddfe680ae632f9b9ae55e0270cc6d18
+
+这次最后一个 stale-pending / 跨任务误消费问题已经真正闭合。PHASE 10 的 synthetic 5Y runtime E2E 可以封板。
+
+纯文本
+SYNTHETIC_5Y_E2E        = PASS
+CHECKPOINT_RESUME       = PASS
+SOURCE_COVERAGE_HONESTY = PASS
+NO_EXTERNAL_ACTION      = PASS
+NO_SECOND_RUNTIME       = PASS
+
+AUDIT-2 / PHASE 10      = PASS / CLOSED
+
+核心原因是新的状态机顺序已经正确：
+
+纯文本
+当前 scan 被 claim
+→ armedScanTaskKey = 当前 scan
+
+Judge verdict 收口
+→ 先结算当前 armed
+→ PASS / REVISE / BLOCK 一律先清 armed
+→ 只有 PASS + CONSUME_VERDICT 才执行旧 armed scan
+→ 再根据本次 outcome.claimed 武装下一任务
+
+这解决了上一轮的两个关键串任务问题。
+
+REVISE stale pending 已 CLOSED
+
+实际代码现在：
+
+纯文本
+REVISION
+→ isVerdictClosure = true
+→ armedScanTaskKey = null
+→ consumeOutcomeIsPass = false
+→ 不执行 scan
+
+因此：
+
+纯文本
+scan A → REVISE
+→ revision task
+→ revision task 后续 PASS
+→ scan A 不会被执行
+
+新增回归也确实覆盖了这个完整序列，并验证原 scan：
+
+纯文本
+status         = CREATED
+recordsScanned = 0
+domainStep     = 0 calls
+
+不是只验证 REVISE 当下。
+
+多 scan 同轮 claim 顺序也已 CLOSED
+
+这是这版非常关键的修正。
+
+PASS 收口时 continuation engine 可以：
+
+纯文本
+完成 A
+→ 同一次 handleEvent 立即 claim B
+
+旧实现如果先 capture 新 claim，B 会覆盖 A。
+
+现在顺序明确是：
+
+TypeScript
+await settleArmedScanTask(verdictBeforeConsume, outcome);
+armClaimedScanTask(outcome);
+
+所以：
+
+纯文本
+armed = A
+A PASS 收口，outcome 同时 claimed B
+
+先：
+execute A
+clear A
+
+后：
+arm B
+
+实际回归证明：
+
+纯文本
+A PASS
+→ A COMPLETED
+→ B 仍 CREATED
+
+B 自己获得 PASS
+→ B 才执行
+
+因此 task-binding 语义成立。
+
+BLOCK 生命周期也正确
+
+虽然新增的跨后续任务回归重点覆盖的是 REVISE，但实现对 BLOCK 使用同一个 terminal closure：
+
+纯文本
+OWNER_ACTION_REQUIRED
+→ isVerdictClosure = true
+→ 先清 armed
+→ verdictBeforeConsume != PASS
+→ 不执行
+
+所以不会留下 stale scan key 给未来其他 PASS 使用。
+
+PASS-only 门成立
+
+当前必须同时满足：
+
+纯文本
+verdictBeforeConsume === PASS
+AND
+outcome.action === CONSUME_VERDICT
+
+才调用 historical domain step。
+
+因此：
+
+纯文本
+无裁决 → 0
+REVISE  → 0
+BLOCK   → 0
+PASS    → execute
+
+这个比上一版用 !waitingForVerdict 强很多，也与 continuation engine 的真实状态机一致。
+
+Production runtime 路径保持正确
+
+上一轮修好的部分没有回退：
+
+纯文本
+event loop
+→ controllerWithDomainSteps
+
+watchdog tick
+→ controllerWithDomainSteps
+
+verdictWatcher
+→ controllerWithDomainSteps
+
+所以不是只有手工 composition.controller.* 测试路径成立。
+
+并且：
+
+纯文本
+productRecoveryPack
+→ existing Recovery SI pack
+→ durable scanScope
+→ Judge PASS
+→ historical domain step
+→ existing scan execution port
+→ existing runHistoricalBackfill()
+
+没有新增第二 runtime / scheduler / policy engine。
+
+CHANGES
+
+无新的阻断性 CHANGE。
+
+不需要 AUDIT-2R6。
+
+PHASE 10 这条可以停止继续修。
+
+RISKS
+
+只保留你已经登记的生产设计债：
+
+纯文本
+armedScanTaskKey = process memory
+
+如果发生：
+
+纯文本
+claim scan
+→ park waiting for Judge
+→ process restart
+→ PASS verdict arrives
+
+内存 armed linkage 会丢失。
+
+这不再阻断当前 synthetic E2E closure，但在 production enablement 前应从 durable task/scan/lease 状态恢复该归链，或者建立持久化 execution-intent linkage。
+
+还有一个口径修正：566a1218 并非严格“仅一个文档文件”，实际修改：
+
+纯文本
+AI-ARCHITECT-INBOX.md
+docs/releases/HISTORICAL-RECOVERY-SCAN-V1.md
+
+两者都是归档/文档性质，不影响 reviewed runtime code。
+
+另外我确认：
+
+纯文本
+e76e92a2 → branch tip 2de7b691
+
+后续没有任何：
+
+纯文本
+apps/api/src/runtime/**
+apps/api/src/services/historical-scan/**
+
+运行时代码变化；新增的是 acceptance、测试与文档，所以 e76e92a2 仍是这次正确的 runtime review anchor。
+
+GitHub Actions 对 exact reviewed head：
+
+NOT_OBSERVED
+
+因此 48/48 和 api tsc 0 仍应表述为 local/Codex evidence，不能称为 GitHub CI green。
+
+最终边界保持：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+
+SECOND_RUNTIME           = 0
+SECOND_SCHEDULER         = 0
+SECOND_GUARD             = 0
+SECOND_POLICY_ENGINE     = 0
+
+HOLD / FORBIDDEN         = unchanged
+
+最终裁决：SYNTHETIC_5Y_E2E = PASS，PHASE 10 / AUDIT-2 = PASS / CLOSED。
+```

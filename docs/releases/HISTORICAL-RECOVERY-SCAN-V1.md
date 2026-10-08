@@ -169,11 +169,11 @@ Drawback 的 1825 天（exportDate 锚点）被明确定位为**合格窗口**�
 | 7 | Connector 历史区间 + coverage 元数据 | **已实现（本提交）**：`ConnectorHistoricalRange` + server-owned 校验 + coverage 回传 |
 | 8 | Customs 历史管线接线（entry → duty → discrepancy → eligibility → matching → evidence → drawback） | **已实现（复用既有链）**：`customs-historical-pipeline.ts` + 8/8 测试 |
 | UI_RESULT_VIEW | 客户可见结果页（范围/覆盖/状态/计数/完整度） | **DONE**：视图组件 + 5 语言 + 只读端点 `GET /recovery-scans/:id` + 页面 `/recoveries/scans/:id`（api-contract OK） |
-| 10 | ONE SI Runtime E2E（Goal → scan → shards → customs → summary） | 未实现 |
-| 11 | 生产边界验证（自动化断言 externalWrite/filing/payment = false 的端到端） | 部分（summary 层已固化，运行时尚无 E2E） |
-| 12 | durability / 并发 / crash recovery 的运行时验证 | 部分（store + executor 级已测；运行时级未测） |
-| 13 | 完整测试矩阵 B–G（range propagation / resume E2E / coverage limitation / customs 全矩阵 / tenant isolation E2E） | 部分（A/C/D/E 及 customs 纯函数已覆盖） |
-| 14 | 验收 + synthetic E2E | 未完成 |
+| 10 | ONE SI Runtime E2E（Goal → scan → shards → customs → summary） | **CLOSED（AUDIT-2 = PASS，MSG-20261008-09，REVIEWED_HEAD e76e92a2）**；见 §13、§13.16 |
+| 11 | 生产边界验证（自动化断言 externalWrite/filing/payment = false 的端到端） | **DONE**：`historical-scan-boundary` 7/7；见 §14（AUDIT-3 待送审） |
+| 12 | durability / 并发 / crash recovery 的运行时验证 | **DONE**：`historical-scan-concurrency` 4/4（+ runtime reconcile 20/20）；见 §15（AUDIT-3 待送审） |
+| 13 | 完整测试矩阵 B–G（range propagation / resume E2E / coverage limitation / customs 全矩阵 / tenant isolation E2E） | **DONE**：`historical-scan-matrix` 6/6；见 §16（AUDIT-4 待送审） |
+| 14 | 验收 + synthetic E2E | **进行中**：prisma validate / fresh DB / api+web tsc / web build / UI render 219 / i18n / api-contract 全 PASS；全量回归与浏览器旅程收尾中；见 §17 |
 
 **未完成的原因**：PHASE 3/7/8/10 需要改动 ONE SI Runtime 的 claim → Recovery SI 装配路径与 connector 契约，
 必须与 runtime 级 E2E、并发/崩溃验证一起完成并跑全量回归（单次约 27 分钟）；在未完成该闭环前不把它们部分合入，
@@ -664,3 +664,26 @@ durable 行 `RUNNING / nextShardIndex=2`；第二次同一域步骤调用（新�
 
 > 边界不变：`REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`、`REAL_VALIDATION_COMPLETE = NO`、`PRODUCTION_READY = NO`；
 > `SECOND_* = 0`；全部外部写 / 凭据 / 运输 = HOLD。GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
+
+### 13.16 AUDIT-2R5 = PASS —— **PHASE 10 / AUDIT-2 CLOSED**（裁决逐字归档 MSG-20261008-09）
+
+**裁决（`MSG-20261008-09`，FNV1A `9612f81b`，compare = FULL_COPY_OK）**
+
+* `SYNTHETIC_5Y_E2E = PASS`、`VERDICT = PASS`、REVIEWED_HEAD = `e76e92a2`。
+* 逐项：`SYNTHETIC_5Y_E2E / CHECKPOINT_RESUME / SOURCE_COVERAGE_HONESTY / NO_EXTERNAL_ACTION / NO_SECOND_RUNTIME = PASS`；
+  **`AUDIT-2 / PHASE 10 = PASS / CLOSED`**；**无新增 CHANGE，不需要 AUDIT-2R6**。
+* 审计明确认可本轮两项闭合：① **REVISE stale pending 已 CLOSED**（`REVISION → isVerdictClosure → armed=null → 不执行`，
+  且回归覆盖「scan A → REVISE → revision task → 后续 PASS → 原 scan 仍 `CREATED / recordsScanned=0 / 0 calls`」的完整序列，
+  而非只验证 REVISE 当下）；② **多 scan 同轮 claim 顺序已 CLOSED**
+  （`await settleArmedScanTask(...)` 先于 `armClaimedScanTask(...)`，A PASS 只执行 A、B 仍需自己的 PASS）。
+* 审计确认 production runtime 路径未回退：event loop / watchdog tick / verdictWatcher 均走 wrapped controller；
+  `productRecoveryPack → 既有 Recovery SI pack → durable scanScope → Judge PASS → historical domain step →
+  既有 scan execution port → 既有 runHistoricalBackfill()`，**未新增第二 runtime / scheduler / policy engine**。
+* 保留的唯一生产设计债（不阻断 synthetic 收口）：`armedScanTaskKey` 仍是进程内变量；production enablement 前需从
+  durable task/scan/lease 状态恢复该归链或建立持久化 execution-intent linkage。
+* 口径修正接受：`566a1218`（与 `352a0e33`）同时改了 `AI-ARCHITECT-INBOX.md` 与 `docs/...`，均为归档/文档性质，不影响 reviewed runtime code；
+  且 `e76e92a2 → 2de7b691` 之间无 `apps/api/src/runtime/**` 或 `apps/api/src/services/historical-scan/**` 变化。
+
+**对 §13.15 的更正**：该节记录的「AUDIT-2R5 已投递」在本会话侧当时确实通过了三项投递校验，但**服务端未持久化**该消息
+（会话恢复后可见最后一条用户轮为单个「在」，无 2R5 标记）——已按协议重发并在本会话重新校验（composer 清空 + 标记出现在新用户轮 + 生成中），
+随后收到上表裁决。审计通道在该时段对**该会话**不可用（重试 / 重载 / 新标签均失败），现已恢复。
