@@ -179,16 +179,23 @@ const main = () => {
           let exitCode = 0;
           let durationMs = 0;
           const parts = [];
+          const fileResults = [];
           for (const file of files) {
             const perFileLog = path.join(logsDir, `${args.label}-round${round}-${path.basename(file)}.log`);
             const one = runVitest(apiDir, [file], perFileLog);
+            fileResults.push({
+              file,
+              exitCode: one.exitCode,
+              testsLine: summaryLines(one.log).testsLine,
+              failedTestNames: extractFailures(one.log).failedTestNames,
+            });
             exitCode = exitCode === 0 && one.exitCode !== 0 ? one.exitCode : exitCode;
             durationMs += one.durationMs;
             parts.push(`#### FILE ${file} exit=${one.exitCode}\n${one.log}`);
           }
           const raw = parts.join('\n');
           writeFileSync(logPath, raw, 'utf8');
-          return { exitCode, durationMs, log: raw, startedAt };
+          return { exitCode, durationMs, log: raw, startedAt, fileResults };
         })()
       : runVitest(apiDir, files, logPath);
 
@@ -203,6 +210,7 @@ const main = () => {
       failedTestNames: failures.failedTestNames,
       stackLines: failures.stackLines.slice(0, 20),
       failureExcerpt: failures.failureExcerpt,
+      ...(run.fileResults === undefined ? {} : { fileResults: run.fileResults }),
       logPath: path.relative(root, logPath).replace(/\\/g, '/'),
     };
     rounds.push(roundRecord);
