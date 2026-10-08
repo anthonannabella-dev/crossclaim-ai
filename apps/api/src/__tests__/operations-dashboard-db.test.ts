@@ -28,11 +28,37 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-beforeEach(async () => {
-  await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "RecoveryPayout", "ClaimItemEvidence", "ClaimItem", "PaymentProcessingAttempt", "Payment", "PaymentEvent", "AuditLog", "BillingInvoice", "FeeCalculation", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RecoveryOpportunity", "Membership", "User", "Organization" CASCADE;',
-  );
-  await prisma.organization.createMany({
+const TRUNCATE_ALL_SQL =
+  'TRUNCATE TABLE "RecoveryPayout", "ClaimItemEvidence", "ClaimItem", "PaymentProcessingAttempt", "Payment", "PaymentEvent", "AuditLog", "BillingInvoice", "FeeCalculation", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RecoveryOpportunity", "Membership", "User", "Organization" CASCADE;';
+
+/**
+ * P3_FINAL_REGRESSION_GATE：全量回归实测本文件出现 `Hook timed out in 10000ms`（单文件隔离运行 9/9 通过）。
+ * 根因与 email-verification-db 同类：`beforeEach` 的 TRUNCATE 需要 ACCESS EXCLUSIVE 锁，
+ * 共享开发库上若有其它连接持锁（本机后台 rsi-run 进程 / 上一个测试文件尚未释放的连接）就会一直等到默认 hookTimeout。
+ * 处置（判据零变化）：事务内 `SET LOCAL lock_timeout = '3s'` 把等待变为有界 + 退避重试 + 该钩子显式 30s 超时。
+ */
+async function truncateAll(attempts = 6): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '3s'");
+        await tx.$executeRawUnsafe(TRUNCATE_ALL_SQL);
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) break;
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
+  throw lastError;
+}
+
+beforeEach(
+  async () => {
+    await truncateAll();
+    await prisma.organization.createMany({
     data: [
       { id: ORG, name: '看板租户', slug: 'dash-org' },
       { id: ORG_B, name: '外部租户', slug: 'dash-org-b' },
@@ -141,7 +167,9 @@ beforeEach(async () => {
       sourceType: 'PLATFORM_SETTLEMENT',
     },
   });
-});
+  },
+  30_000,
+);
 
 const deps = { prisma, now: () => NOW };
 
