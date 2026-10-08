@@ -754,3 +754,32 @@ composition 在 PASS 收口后可经 `historicalScanDomainStep → execution por
 **当前状态**：`AUDIT-3 = PASS WITH REVISE`，**PHASE 11/12 = NOT CLOSED**；下一步 `AUDIT-3R` 前需完成上述两条 CHANGE。
 （审计的两个非阻断 RISKS：`RSI_CONTINUATION_BOUNDARY.persistsLeaseToDatabase = false` 下不能仅凭 reconcile 20/20 宣称同一 scan 不会有两个活 worker；
 PHASE 11 的源码 regex 扫描属负向启发式，不等于完整静态能力证明。）
+### 20. AUDIT-3 CHANGE 1/2 完成 —— durable ownership + fencing（代码 `5b343429`）
+
+**CHANGE 1（边界元数据拆分，`rsi-run.ts`）**
+
+* `RSI_RUNTIME_COMPOSITION_BOUNDARY` 不再宣称整个 composition 不写库，改为：
+  `coreWritesDatabase = false`、`historicalDomainStepWritesInternalScanState = true`、`performsExternalWrite = false`
+  （内部扫描状态写入 ≠ 外部写；原因见 §19 CHANGE 1）。
+* 同步更新断言：`historical-scan-boundary`、`rsi-run.test` 改为验证拆分后的两个字段。
+
+**CHANGE 2（durable ownership / fencing，关键项）**
+
+| 层 | 变更 |
+| --- | --- |
+| `scan-store.ts` | 新增 `updateScanFenced()`：携带 `expectedLeaseOwner` 的写入一律改为**条件更新**（`where … leaseOwner = owner`），0 行 ⇒ 抛 `RECOVERY_SCAN_LEASE_FENCED`；`advanceRecoveryScanShard / setRecoveryScanCoverage / finishRecoveryScan` 均支持 `expectedLeaseOwner`；新增 `reclaimRecoveryScanLease()`（CAS：仅 `RUNNING` 且 `leaseExpiresAt < now` 可被接管） |
+| `backfill-executor.ts` | 新增 `expectedLeaseOwner`：所有权不符 ⇒ `RECOVERY_SCAN_LEASE_NOT_HELD`；租约过期 ⇒ `RECOVERY_SCAN_LEASE_EXPIRED`；全部 checkpoint / coverage / finish 写入携带该 owner（fenced） |
+| `scan-execution-port.ts` | `ownerRef` 为**必填**：空 ⇒ `RECOVERY_SCAN_OWNER_REQUIRED`；`CREATED` ⇒ 先 claim（败者 `RECOVERY_SCAN_CLAIM_RACE`）；`RUNNING` 且由自己持有且未过期 ⇒ 继续；`RUNNING` 且已过期 ⇒ 正式 reclaim（失败 ⇒ `RECOVERY_SCAN_LEASE_RECLAIM_FAILED`）；他人持有 ⇒ `RECOVERY_SCAN_LEASE_NOT_HELD`；执行期间被接管 ⇒ 捕获 `RECOVERY_SCAN_LEASE_FENCED` 返回 BLOCKED。边界新增 `requiresDurableOwnership / claimsOrReclaimsBeforeBackfill / fencingOnCheckpointWrites = true` |
+| `rsi-run.ts` | 扫描域步骤携带 composition 的 durable 执行身份：`historicalScanDomainStep({ dedupeKey, ownerRef })`，`ownerRef` 缺省 `rsi-runtime:<pid>`（可用 `runtimeOwnerRef` 覆盖） |
+
+**新增回归 `historical-scan-fencing.test.ts`（4/4，真实 PostgreSQL，逐条对应审计要求）**
+
+1. A 已持有租约 ⇒ **B 调 execution port 必须 BLOCK**（`RECOVERY_SCAN_LEASE_NOT_HELD`）、零分片、checkpoint 不变、owner 仍为 A；
+2. A 租约过期 ⇒ B 经**正式 reclaim** 接管，从 durable checkpoint 续跑到 `COMPLETED`，分片零重复，finish 后释放租约；
+3. B 接管后 stale A 写 checkpoint ⇒ **条件更新 0 行 / `RECOVERY_SCAN_LEASE_FENCED`**，DB 未被旧 worker 覆盖（`recordsScanned` / `nextShardIndex` / owner 均不变）；
+4. execution port 必须消费合法 ownership：空 `ownerRef` ⇒ `RECOVERY_SCAN_OWNER_REQUIRED` 且不产生任何写（行仍 `CREATED`、无 owner）；合法 ownership 下由端口自行 claim 后推进到 `COMPLETED`。
+
+**证据**：定向批次 **17 文件 / 95 tests 全绿**（含 5 年 E2E 9、边界 7、矩阵 6、并发 4、fencing 4、HTTP 3、runtime reconcile 等）；api tsc 0。
+GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
+
+**下一步**：`AUDIT-3R` 窄复审（REVIEWED_HEAD 见送审正文），随后才可宣布 PHASE 11/12 CLOSED。
