@@ -479,3 +479,18 @@ AUDIT_BASIS=CODEX_REPORTED_EVIDENCE_NOT_INDEPENDENTLY_EXECUTED
 `tools/dev/logs/`、`tools/dev/*.flag`、`tools/dev/.continuous-check.lock`、
 `tools/dev/continuous-execution-state.json` 已加入 `.gitignore`（每 3 分钟重写，避免污染工作树与发布门禁）。
 权威进度仍以本文件 + `AI-ARCHITECT-INBOX.md` 为准。
+
+### 3.4 实现进展（接线侧已完成，提交 4f0ae85a）
+
+- RsiSafeTask 增加可选 organizationId（仅 durable 任务源在 claim 时填充；JSON legacy 队列不含 ⇒
+  Recovery pack fail-closed 拒绝绑定）；
+- 新增 untime/recovery-si-production-composition.ts：createProductionRecoveryPackDeps({ prisma })
+  —— 共享 guard 只给构造依赖 { prisma }；读端口复用既有 createPrismaRecoveryReadPorts（按调用绑定 actor）；
+  ind 的 organizationId 必须来自可信 claim，domain 经**显式映射** LOGISTICS → CARRIER，未知域 unbound；
+  scanScope 复用 loadScanScopeForClaimedTask；
+- si-run 直跑入口在拿到 Prisma 时装配 productRecoveryPack 并打印 RSI_RECOVERY_PACK=PRODUCT_RECOVERY_SI；
+- 验收：si-rsi-phase2-recovery-wiring.test.ts（真实 PG 1/1）—— recovery 任务进入**既有 recovery-si dispatch**
+  （domainDispatchLog 非空、packId=recovery-si），caller runner 调用数 0；对照 PHASE 0-B1（0 条 dispatch、恒 BLOCK）。
+
+**仍未完成（下一单元）**：完整 PHASE 2 端到端（真实 PG 全链路 + 故障注入 + 授权复核 + durable 恢复 + 跨租户）
+与 **AUDIT-P2**；P0_B_CLOSED 需该端到端验收通过后才可声明。
