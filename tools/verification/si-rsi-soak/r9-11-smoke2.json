@@ -1,0 +1,317 @@
+{
+  "label": "r9-11-smoke2",
+  "minutes": 2,
+  "roundSeconds": 3,
+  "workers": 3,
+  "batchSize": 2,
+  "databaseMarker": "127.0.0.1:55432/crossclaim",
+  "soakOrganizationId": "soak-org-4e2a84b6",
+  "startedAt": "2026-10-08T19:14:19.569Z",
+  "finishedAt": "2026-10-08T19:16:21.421Z",
+  "durationSec": 122,
+  "rounds": 40,
+  "tasksAdmitted": 20,
+  "settlementsApplied": 25,
+  "settlementIntents": 25,
+  "tasksTerminal": 20,
+  "nonTerminalTasks": [],
+  "activeLeases": 0,
+  "externalWriteRows": 0,
+  "domainStepDoubleExecutions": 0,
+  "faultsInjected": [
+    "F1_INTENT_RESUME round=7 resumed=1",
+    "F2_WORKER_RESTART round=13 owner=soak-w2",
+    "F1_INTENT_RESUME round=14 resumed=1",
+    "F1_INTENT_RESUME round=21 resumed=1",
+    "F2_WORKER_RESTART round=26 owner=soak-w3",
+    "F1_INTENT_RESUME round=28 resumed=1",
+    "F1_INTENT_RESUME round=35 resumed=1",
+    "F2_WORKER_RESTART round=39 owner=soak-w1"
+  ],
+  "invariantViolations": [],
+  "result": "SOAK_PASS",
+  "roundDetail": [
+    {
+      "round": 1,
+      "admitted": 2,
+      "settledTotal": 1,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 2,
+      "admitted": 2,
+      "settledTotal": 3,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 3,
+      "admitted": 2,
+      "settledTotal": 5,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 4,
+      "admitted": 2,
+      "settledTotal": 7,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 5,
+      "admitted": 2,
+      "settledTotal": 9,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 6,
+      "admitted": 2,
+      "settledTotal": 11,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 7,
+      "admitted": 2,
+      "settledTotal": 14,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 8,
+      "admitted": 2,
+      "settledTotal": 15,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 9,
+      "admitted": 2,
+      "settledTotal": 17,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 10,
+      "admitted": 2,
+      "settledTotal": 19,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 11,
+      "admitted": 0,
+      "settledTotal": 20,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 12,
+      "admitted": 0,
+      "settledTotal": 21,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 13,
+      "admitted": 0,
+      "settledTotal": 21,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 14,
+      "admitted": 0,
+      "settledTotal": 22,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 15,
+      "admitted": 0,
+      "settledTotal": 22,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 16,
+      "admitted": 0,
+      "settledTotal": 22,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 17,
+      "admitted": 0,
+      "settledTotal": 22,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 18,
+      "admitted": 0,
+      "settledTotal": 22,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 19,
+      "admitted": 0,
+      "settledTotal": 22,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 20,
+      "admitted": 0,
+      "settledTotal": 22,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 21,
+      "admitted": 0,
+      "settledTotal": 23,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 22,
+      "admitted": 0,
+      "settledTotal": 23,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 23,
+      "admitted": 0,
+      "settledTotal": 23,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 24,
+      "admitted": 0,
+      "settledTotal": 23,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 25,
+      "admitted": 0,
+      "settledTotal": 23,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 26,
+      "admitted": 0,
+      "settledTotal": 23,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 27,
+      "admitted": 0,
+      "settledTotal": 23,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 28,
+      "admitted": 0,
+      "settledTotal": 24,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 29,
+      "admitted": 0,
+      "settledTotal": 24,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 30,
+      "admitted": 0,
+      "settledTotal": 24,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 31,
+      "admitted": 0,
+      "settledTotal": 24,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 32,
+      "admitted": 0,
+      "settledTotal": 24,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 33,
+      "admitted": 0,
+      "settledTotal": 24,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 34,
+      "admitted": 0,
+      "settledTotal": 24,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 35,
+      "admitted": 0,
+      "settledTotal": 25,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 36,
+      "admitted": 0,
+      "settledTotal": 25,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 37,
+      "admitted": 0,
+      "settledTotal": 25,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 38,
+      "admitted": 0,
+      "settledTotal": 25,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 39,
+      "admitted": 0,
+      "settledTotal": 25,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 40,
+      "admitted": 0,
+      "settledTotal": 25,
+      "active": 0,
+      "pending": 0
+    }
+  ],
+  "note": "R9-11 连续运行取证：全部走既有 composeRsiRuntime()/durable 源/生产 pack/既有 verdictWatcher；未替换被测路径（R9-12）；未缩短租约 TTL；无第二套 runtime/scheduler/controller",
+  "purpose": "修正 F2 与收尾 drain 后的复验冒烟（2 分钟）"
+}

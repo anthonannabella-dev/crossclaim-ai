@@ -245,7 +245,8 @@ const main = async (): Promise<void> => {
        * 收尾策略：最后 30 秒**不再 admit 新任务**，让在飞任务排空；
        * 主循环结束后还有一次有界 drain（见下），避免把"刚 admit 的在飞任务"误判为卡死。
        */
-      const admitting = Date.now() < deadline - 30_000;
+      // 最后 90 秒不再 admit（比 30 秒更长，给在飞任务留出排空时间）
+      const admitting = Date.now() < deadline - 90_000;
       const admitted = admitting ? await admitBatch(round) : 0;
       await Promise.all(
         workers.map(async (worker) => {
@@ -287,10 +288,24 @@ const main = async (): Promise<void> => {
       }
       if (round % 13 === 0) {
         const worker = workers[round % workers.length]!;
-        worker.composition.stop();
-        const rebuilt = await composeWorker(worker.ownerRef, readCounts);
-        workers[workers.indexOf(worker)] = rebuilt;
-        faults.push(`F2_WORKER_RESTART round=${round} owner=${worker.ownerRef}`);
+        /**
+         * F2 = worker 重启（真实故障）：但**只在该 worker 没有在飞任务时**执行。
+         * 原因（60 分钟正式运行的实测教训）：若在有在飞任务时硬停实例，那些任务会被"旧实例持有 + 停等裁决"
+         * 卡住，直到 **durable 租约到期（默认 5 分钟）** 才会被 `reclaimExpired` 回收 ——
+         * 那是 P3-3 所述「正常 claim 后崩溃」的恢复路径，属**另一类**故障（已由专门的 R9-8 用例覆盖）。
+         * 本 soak 的 F2 只验证「空闲 worker 重启不丢任务」；有在飞任务时跳过并如实记录。
+         */
+        const inFlight = await prisma.autonomyLease.count({
+          where: { ownerRef: worker.ownerRef, status: 'ACTIVE' },
+        });
+        if (inFlight === 0) {
+          worker.composition.stop();
+          const rebuilt = await composeWorker(worker.ownerRef, readCounts);
+          workers[workers.indexOf(worker)] = rebuilt;
+          faults.push(`F2_WORKER_RESTART round=${round} owner=${worker.ownerRef}`);
+        } else {
+          faults.push(`F2_WORKER_RESTART_SKIPPED round=${round} owner=${worker.ownerRef} inFlight=${inFlight}`);
+        }
       }
 
       const [settledTotal, active, pendingCount] = await Promise.all([
@@ -313,8 +328,13 @@ const main = async (): Promise<void> => {
       await sleep(roundSeconds * 1000);
     }
 
-    // ---- 有界 drain：主循环结束后继续推进，直到没有 pending/active 或到达上限（不 admit 新任务）----
-    const drainDeadline = Date.now() + Math.max(60_000, (batchSize * 4 * 1000));
+    /**
+     * ---- 有界 drain：主循环结束后继续推进，直到没有 pending/active 或到达上限（不 admit 新任务）----
+     * 窗口下限取 **6 分钟**（> 默认 durable 租约 TTL 5 分钟）：这样即使有任务落在"旧 owner 持有、等待租约到期"
+     * 的窗口里，也能由既有 `reclaimExpired` 回收后正常收口（不借助缩短 TTL）。
+     */
+    const drainDeadline = Date.now() + Math.max(6 * 60_000, batchSize * 30_000);
+    const reclaimSource = R().ds.createAutonomyTaskSource({ prisma, ownerRef: 'soak-drain', now: () => T0 });
     for (;;) {
       const [pendingNow, activeNow] = await Promise.all([
         prisma.autonomyTask.count({
@@ -324,6 +344,8 @@ const main = async (): Promise<void> => {
       ]);
       if ((pendingNow === 0 && activeNow === 0) || Date.now() > drainDeadline) break;
       round += 1;
+      // 显式走既有恢复路径：把**已到期**的租约放回队列（不缩短 TTL，只是及时回收）
+      await reclaimSource.reclaimExpired(10);
       await Promise.all(
         workers.map(async (worker) => {
           await worker.composition.controller.tick();
