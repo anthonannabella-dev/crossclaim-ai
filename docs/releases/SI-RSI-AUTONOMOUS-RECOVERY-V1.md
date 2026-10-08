@@ -1187,3 +1187,33 @@ node tools/dev/run-si-rsi-suite.mjs --rounds 1 --all --label full-api-3x     # h
 实现前先确认该工件的格式与判据（只读既有测试与实现），不猜格式。
 
 **状态**：小时级 soak = **NOT VERIFIED（未完成）**；真实断电 / 断连与 Linux 实机 systemd 验收仍为 **HOST_ACTION_REQUIRED**。
+
+### 3.24 【真实发现】Recovery 任务缺少「裁决 → durable 收口」：裁决通过后仍会被租约过期重领并**重复执行**
+
+承接 §3.23（soak 冒烟看到「29 轮只执行 3 次、却堆积 55 条 parked 任务」）。本轮按纪律先**只读**既有裁决通道
+（`rsi-verdict-watcher.ts` / `rsi-local-sources.ts` / PHASE 10 测试的 `{ messageId, verdict }` 内存裁决工件），
+再把实测行为**特征化**为一个可复现测试：`apps/api/src/__tests__/si-rsi-phase3-recovery-closure-gap.test.ts`（**4/4 PASS**，真实 PostgreSQL）。
+
+| 用例 | 实测结论 |
+| --- | --- |
+| G1 | 认领即执行：`tick()` 内 pack 被调用 ⇒ domain step 结论**当场**落 1 条 durable 审计；随后引擎**强制 park-for-judge**（`waitingForVerdict = true`） |
+| G2 | **真实 verdictWatcher** 收口 PASS（内存裁决工件）⇒ `waitingForVerdict = false`；但 durable `AutonomyTask` **仍 `IN_PROGRESS`**、租约**仍 `ACTIVE`** ⇒ **引擎不认识 durable 终态** |
+| G3 | **缺口后果（本轮新增证据）**：租约到期后同一任务被**重新领取**，只读端口被**第 2 次**调用（domain step 真的又跑了一次）；但审计行**仍是 1 条** —— 因为 `evidenceRef` 是对 (taskId, dedupeKey, org, opportunityRef, guardAction, tools) 的**确定性摘要**，记录器按 (taskId, evidenceRef) 幂等去重。⇒ **执行会重复、审计不会重复** |
+| G4 | **收口路径**：补一次 fenced `settle(BLOCKED)` ⇒ 任务终态 + 租约 `RELEASED`；此后即使租约过期/再次 tick，也**不再**重复领取与执行（只读端口不再被调用） |
+
+**为什么这是重要发现（而不是测试噪音）**
+- 生产上每个 recovery 任务在裁决通过后**不会**被收口：租约到期（默认 5 分钟）即被 `reclaimExpired()` 放回 READY，
+  下一轮被任意 worker 重新领取并**再次执行** domain step —— 对一个只会做只读检查的 domain step 尚可容忍（且审计幂等），
+  但这是**语义错误**：已经裁决通过的任务不应再被执行；
+- 这也解释了 §3.23 冒烟里「大量 parked 任务」的成因机制（引擎 park 后无人收口 ⇒ 任务永不终态）；
+- 因此 **hour-level soak 的循环单元必须是**「认领 → 执行 → 裁决 → **durable 收口**」四步，
+  否则 soak 只是在重复制造重复执行与 parked 堆积，不能作为稳定性证据。
+
+**登记（不擅自扩大改动面）**：本 tick **只**交付特征化测试（固定行为 + 给出收口路径），**未**修改运行时语义。
+「在 runtime 内把裁决结果自动落 durable 终态」属于**运行时行为变更**，应作为独立 CHANGE 提交独立审计后再实现
+（候选口径：裁决 PASS 且 domain step 为只读 ⇒ `settle(BLOCKED)` 或新增明确的非完成终态；**不得**据此产生完成级业务结果）。
+
+**回归**：SI-RSI 全套件 **15 文件 / 87 tests 全绿**（含新增 1 文件 / 4 tests）；`api tsc --noEmit` = **0**。
+
+**状态**：小时级 soak 仍为 **NOT VERIFIED**（现在有了正确的循环单元定义）；运行时收口 = **待独立审计的 CHANGE 候选**；
+`PRODUCTION_READY = NO`、外写/申报/支付/扣佣继续 HOLD。
