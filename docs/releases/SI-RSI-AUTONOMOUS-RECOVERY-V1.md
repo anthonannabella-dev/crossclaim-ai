@@ -1793,3 +1793,29 @@ NEXT = ARCHIVE_PHASE3_FINAL_R2_VERDICT; PRESERVE_EXISTING_RELEASE_GATES; EXECUTE
 **不得以人工直接修改任务终态替代恢复流程**。生产红线继续：未经明确授权不得真实 Provider 写入、关税正式申报、支付扣款、自动佣金扣取或生产部署。
 
 **下一步（本线程）**：进入 `FAILURE_RECOVERY` 门禁实现与取证（隔离 PG + 真实运行时路径、故障注入但不伪造恢复），通过后按审计要求**在部署前请求发布集成审计**。
+
+### 3.39 `FAILURE_RECOVERY` 门禁 —— 已实现并取证（真实在飞中断 / 租约接管 / 进程恢复 / 断连 / 副作用防护）
+
+审计在 `MSG-20261009-05` 指定：优先完成**独立的 FAILURE_RECOVERY 门禁**，重点验证真实在飞任务中断、租约过期接管、
+进程恢复、数据库断连与**重复外部副作用防护**；**必须使用真实运行时路径**，**不得以人工直接修改任务终态替代恢复流程**。
+
+**新增** `apps/api/src/__tests__/si-rsi-phase3-failure-recovery.test.ts`（**3/3 PASS**，真实 PostgreSQL）
+
+| 用例 | 做了什么 | 断言结果 |
+| --- | --- | --- |
+| **FR-1/2/5** 真实在飞任务中断 | 进程 A 经**真实运行时路径**认领并在飞 → **直接停止进程 A**（不 settle、不投裁决、**不改任务终态**）→ 断言租约仍 `ACTIVE`、任务仍 `IN_PROGRESS` → 等租约**自然到期**（3s）→ 进程 B（新 owner）经既有 `reclaimExpired + claim` 接管并收口 | 任务终态 `BLOCKED`、租约 `RELEASED`、**恰好 1 条 APPLIED**；**旧 owner 复活 settle 被拒**（`applied=false`，reason ∈ `FENCED_*`/`LEASE_*`）且状态不变；**外部业务事实 0** |
+| **FR-3** 进程恢复 | 3 个任务在崩溃后由新进程排空 | 全部终态、每任务恰好 1 条 APPLIED、无残留 ACTIVE 租约、零外部业务事实 |
+| **FR-4** 数据库断连 | 用**派生不可达 URL**（由真实测试库 URL 只改端口/库名，不硬编码凭据）构造断连客户端执行 `claim` | claim **rejects（fail-closed）**；durable 状态**零变化**（任务仍 `READY`、零租约）；真实连接恢复后经真实路径继续 ⇒ 终态 + APPLIED = 1；零外部业务事实 |
+
+**如实登记（不夸大）**
+- 在"中断 + 接管"下，**只读 domain step 会被执行 2 次**（at-least-once）—— 本用例直接断言 `readCounts = 2`；
+  与之相对，**审计记录与业务副作用各 1 次**（APPLIED = 1、外部事实 = 0）。这与审计方"不得把审计幂等当作执行幂等"的口径一致：
+  只读步骤可重复，**已提交的业务副作用**不重复。
+- 租约 TTL 取 **3 秒**（仅测试场景；与审计在 `MSG-20261009-03` 给出的 5–10s 建议同量级），**不是**用缩短 TTL 掩盖预租缺陷。
+- **仍未覆盖**：真实断电 / 宿主机强杀、真实网络分区下的多实例长时行为、Linux systemd 启停重启 —— 均属 Linux 实机门禁，保持 **NOT VERIFIED**。
+
+**回归**：SI-RSI 全套件 **19 文件 / 104 tests 全绿**；`api tsc --noEmit` = **0**。
+**证据冻存**：`tools/verification/si-rsi-suite-runs/failure-recovery-gate.json`。
+
+**下一步**：把该门禁作为独立议题送审（审计方要求"在独立门禁下执行 FAILURE_RECOVERY 审计"），随后按 `MSG-20261009-05` 的
+`NEXT` 在部署前请求**发布集成审计**（合入目标 / 部署锚点 / 生产构建包含已审计代码）。

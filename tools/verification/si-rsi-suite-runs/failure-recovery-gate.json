@@ -1,0 +1,65 @@
+{
+  "id": "FAILURE_RECOVERY_GATE",
+  "auditRef": "MSG-20261009-05（第五节：优先完成独立的 FAILURE_RECOVERY 门禁）",
+  "reviewedHead": "26be0bef",
+  "testFile": "apps/api/src/__tests__/si-rsi-phase3-failure-recovery.test.ts",
+  "constraintsFollowed": [
+    "必须使用真实运行时路径 —— 全部经既有 composeRsiRuntime() / durable 任务源 / 生产 Recovery pack / 既有 verdictWatcher / 既有 fenced settle",
+    "不得以人工直接修改任务终态替代恢复流程 —— 本文件没有任何直接 update 任务状态为终态的调用（仅模拟\"进程死亡\"：停止 composition + 让租约自然到期）",
+    "测试参数：租约 TTL = 3 秒（审计在 MSG-20261009-03 为 hook-level 场景建议的 5–10s 同量级），非用于掩盖预租缺陷"
+  ],
+  "cases": [
+    {
+      "id": "FR-1/2/5",
+      "title": "真实在飞任务中断（进程持有任务时\"死亡\"）⇒ 租约过期后新进程接管并收口，零重复外部副作用",
+      "steps": [
+        "进程 A（真实运行时路径）tick ⇒ 认领并在飞；只读 domain step 执行 1 次",
+        "直接停止进程 A（不 settle、不投裁决，且不改任务终态）⇒ 租约保持 ACTIVE、任务保持 IN_PROGRESS（如实断言）",
+        "等待租约自然到期（3s）",
+        "进程 B（新 owner）tick ⇒ 既有 reclaimExpired + claim 接管，再由既有 verdictWatcher + fenced settle 收口"
+      ],
+      "assertions": [
+        "任务终态 BLOCKED、租约 RELEASED、恰好 1 条 RECOVERY_SETTLEMENT_APPLIED",
+        "旧 owner 复活后 settle 被拒绝（applied=false，reason ∈ FENCED_* / LEASE_*），任务状态不变",
+        "外部业务事实（claim/payment/settlement/ledger/billing/platformWrite）全部为 0",
+        "如实登记：只读 domain step 在\"中断+接管\"下执行了 2 次（at-least-once），而审计与业务副作用各 1 次"
+      ]
+    },
+    {
+      "id": "FR-3",
+      "title": "进程恢复：多任务在崩溃后由新进程全部排空（不丢任务、不重复收口）",
+      "assertions": [
+        "3 个任务全部终态 BLOCKED",
+        "每任务恰好 1 条 APPLIED",
+        "无残留 ACTIVE 租约",
+        "零外部业务事实"
+      ]
+    },
+    {
+      "id": "FR-4",
+      "title": "数据库断连：连接不可用时 fail-closed，durable 状态零变化，恢复后仍可继续",
+      "steps": [
+        "用**派生不可达 URL**（由真实测试库 URL 只改端口/库名得到，不硬编码凭据）构造断连客户端",
+        "在该客户端上执行 claim ⇒ 必须 rejects",
+        "核对 durable 状态零变化（任务仍 READY、无租约）",
+        "真实连接恢复后用真实运行时路径继续 ⇒ 正常收口"
+      ],
+      "assertions": [
+        "claim 拒绝（fail-closed）",
+        "任务仍 READY 且零租约",
+        "恢复后终态 BLOCKED 且 APPLIED = 1",
+        "零外部业务事实"
+      ]
+    }
+  ],
+  "verification": {
+    "typecheck": "api tsc --noEmit = 0",
+    "targeted": "Test Files 1 passed (1) / Tests 3 passed (3)",
+    "siRsiSuite": "Test Files 19 passed (19) / Tests 104 passed (104)（ALL_GREEN）"
+  },
+  "notCoveredYet": [
+    "真实断电 / 宿主机强杀（本机无法制造）—— 需 Linux 实机门禁",
+    "真实网络分区下的多实例长时间行为 —— 需 Linux/staging 门禁",
+    "Linux systemd 启停与重启恢复 —— 需 Linux 实机门禁"
+  ]
+}
