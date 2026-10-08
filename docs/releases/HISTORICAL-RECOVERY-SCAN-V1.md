@@ -611,3 +611,36 @@ rsi-event-loop 3）；api tsc 0。GitHub Actions = NOT_OBSERVED（仅 local/Code
 GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
 
 **审计**：`AUDIT-3`（PHASE 11/12）待审计通道恢复后送审。
+
+### 16. PHASE 13 完成 —— 完整测试矩阵 B–G（内部单元，DONE）
+
+新增 `apps/api/src/__tests__/historical-scan-matrix.test.ts`（6/6，真实 PostgreSQL + 真实模块链）。
+
+**B · range propagation**：请求 5 年 → `resolveRecoveryWindow` 按数据源收窄为 `effectiveFrom = 2025-10-08`（`SOURCE_LIMITED`）；
+durable scope 装载时 `assertedRange`（1990–2030 / 999 月）被忽略（`callerRangeTrusted = false`、`requestedMonths = 60`）；
+分片计划按 **effective** 窗口展开（`shards[0].from === effectiveFrom`，不含被收窄掉的区间）。
+
+**C · resume E2E（runtime 域步骤维度）**：第一次 `historicalScanExecutionPort.run(maxPages=2)` → `PARTIAL` 且 `blocked=false`，
+durable 行 `RUNNING / nextShardIndex=2`；第二次同一域步骤调用（新调用、同一条链）→ `COMPLETED`，`scanId` 为同一 durable scan，分片零重复。
+
+**D · coverage limitation（负向 + 正向对照）**：数据源只覆盖最近 1 年 → `coverage=SOURCE_LIMITED`、`scanCoverageIsFull=false`、
+`disclaimerCodes` 含 `COVERAGE_NOT_FULL`，且 `requestedMonths=60 / requestedFrom=2021-10-08` 原样保留（不按请求反推 FULL）；
+数据源覆盖全窗口的正向对照 → `coverage=FULL`、`scanCoverageIsFull=true`、不含 `COVERAGE_NOT_FULL`。
+
+**E · customs 全矩阵**（表驱动，6 格全中）：
+`PERFECT → CLAIM_READY`；`NO_EVIDENCE → NEEDS_EVIDENCE`；`SPECIAL_PROVISION(9801) → NOT_CANDIDATE`；
+缺 `historicalWindow` → `NEEDS_MANUAL_REVIEW + HISTORICAL_WINDOW_GATE_MISSING`；
+`blocksClaimReady=true` → `NEEDS_MANUAL_REVIEW + HISTORICAL_WINDOW_BLOCKS_CLAIM_READY`；
+缺 `jurisdiction` → `NEEDS_MANUAL_REVIEW + MISSING_JURISDICTION`。
+每格恒定边界：`filingPerformed / paymentPerformed / externalWritePerformed / autoFilingAllowed = false`。
+批次汇总与单条一致（claimReady 1 / needsEvidence 1 / notCandidate 1 / needsManualReview 3）。
+
+**F · tenant isolation E2E**：用 ORG 的 runtime 上下文执行 **ORG_B** 的扫描任务 → `BLOCKED` 且 `scanId=null`；非扫描任务同样 fail-closed；
+两个租户的 durable 行均保持 `CREATED / recordsScanned=0`（跨租户尝试不产生任何写）；跨租户 scope 装载 `ok=false`。
+
+**G · 外部动作 / 第二事实源不变式**：矩阵跑完后 summary 的 `filingPerformed / paymentPerformed / externalWritePerformed = false`、
+`claimsFiled = 0`，且 `RecoveryScanRun` **行数不变**（只改既有行，无第二事实源）。
+
+**证据**：`historical-scan-matrix` 6/6；历史扫描全量批次 **57/57**（8 文件）；api tsc 0。GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
+
+**审计**：`AUDIT-4`（PHASE 13/14）待审计通道恢复后送审。
