@@ -124,6 +124,26 @@ Drawback 的 1825 天（exportDate 锚点）被明确定位为**合格窗口**�
 
 ### 10.1 仍未完成
 
+### 10.0b 本提交新增（PHASE 8）
+
+**PHASE 8 — Customs 历史管线（复用既有链，不建第二套）**
+
+新增 `services/historical-scan/customs-historical-pipeline.ts`：
+
+* `evaluateCustomsHistoricalCandidate()` 把历史 entry 交给**既有** `evaluateDrawbackCandidateRoute()`
+  （其内部已复用 rule pack / evidence chain / counterpart match / deadline engine），把 disposition
+  映射为四种历史结果：`CLAIM_READY` / `NEEDS_EVIDENCE` / `NEEDS_MANUAL_REVIEW` / `NOT_CANDIDATE`；
+* 每条记录复核边界：`filingPerformed` / `billable` / `autoFilingAllowed` 必须为 false，否则抛
+  `CUSTOMS_HISTORICAL_BOUNDARY_VIOLATION`；`requestFiling=true` 直接拒绝（历史扫描永不申报）；
+* `evaluateCustomsHistoricalBatch()` 产出扫描级计数（scanned / claimReady / needsEvidence /
+  needsManualReview / notCandidate / expired / opportunitiesSurfaced）供 durable scan 与 summary 使用；
+* `CUSTOMS_HISTORICAL_PIPELINE_BOUNDARY` 明确：`reusesExistingChain=true`、`secondCustomsTruth=false`、
+  `secondEligibilityEngine=false`、`secondEvidenceEngine=false`、`secondDeadlineEngine=false`、
+  `llmDecidesDeadlines=false`、`maxDisposition=CLAIM_READY`。
+
+证据：`customs-historical-pipeline.test.ts` **8/8**（含 HTS 9801/9802 非 drawback、缺证据、非 EXACT 匹配、
+未核验政策、申报请求被拒、批量计数与边界恒 false）。
+
 | PHASE | 内容 | 状态 |
 | --- | --- | --- |
 | 3 | Runtime claim → durable scan scope 装载（fail-closed BLOCK） | **已接线（本提交）**：`scan-scope-loader.ts` + `recovery-si-pack` 扫描任务守卫 |
