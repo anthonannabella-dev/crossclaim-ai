@@ -1128,3 +1128,33 @@ TRUNCATE 需要 **ACCESS EXCLUSIVE** 锁；共享开发库上若有其它连接�
 **仍未验证**：未重跑全量 480 文件 ⇒ 该文件与 `reconciliation-schema-s1-db` 的全量稳定性需下一次全量回归确认。
 **该修复同时说明**：三个后台 `rsi-run` 进程共享开发库会**实质影响测试稳定性**（不只是"潜在"），
 故「停止/迁移这 3 个进程」与「删除残留 schema `rc_c3_fresh_check`」两项仍请 HOST 决定。
+
+### 3.22 第三次全量 API 回归 —— 失败项收敛到 **1**（仅剩环境漂移，待 HOST）
+
+```
+node tools/dev/run-si-rsi-suite.mjs --rounds 1 --all --label full-api-3x     # head c41c78b4，工作树 clean
+```
+
+| 轮次 | 文件 | 用例 | 耗时 | 失败 |
+| --- | --- | --- | --- | --- |
+| 第一次（`69af211f` 前） | 480：477 通过 | 4800：4796 通过 | 1462.67 s | P2E-DB5、reconciliation-schema-s1、claim-items-db×2 |
+| 第二次（`8fc058db`） | 480：478 通过 | 4800：4798 通过 | 1514.34 s | reconciliation-schema-s1、email-verification-db |
+| **第三次（`c41c78b4`）** | **480：479 通过** | **4800：4799 通过** | 1475.59 s | **仅 reconciliation-schema-s1** |
+
+**本轮确认的三处修复（全量下实测）**
+- `recovery-si-phase2-e-db.test.ts`（**P2E-DB5**）→ ✓ 20 tests（连续两次全量通过）
+- `claim-items-db.test.ts` → ✓ 7 tests（连续两次全量通过）
+- `email-verification-db.test.ts` → ✓ 8 tests（第二次全量报 `Hook timed out in 10000ms`，本轮全量通过）
+
+**唯一剩余失败（阻塞在 HOST 决定，未擅自处置）**
+- `reconciliation-schema-s1-db.test.ts` → `R45 S1 · 结构 > 七个枚举全部存在`
+  **确定性环境漂移**：开发库残留 schema `rc_c3_fresh_check` 与 `public` 各含同一套 73 个枚举，
+  而该用例按 `typname` 查 `pg_type` 未按 schema 过滤；三次全量与单跑均失败。
+  处置二选一（**均未执行**）：① 删除 dev 库残留 schema（破坏性）；② 让该用例按 `current_schema()` / `pg_namespace` 过滤。
+
+**证据冻存**：`tools/verification/si-rsi-suite-runs/full-api-3x.json`（含三轮对比与失败分类）；
+原始日志 `tools/dev/logs/si-rsi-suite/full-api-3x-round1.log`（运行时产物，已 gitignore）。
+
+**口径**：`FULL_API_REGRESSION = COMPLETED（480/480 文件已执行；479 通过；4799/4800 用例通过）`；
+**唯一**剩余失败为**环境漂移**（非代码缺陷），等待 HOST 处置决定；`PRODUCTION_READY = NO` 不变，
+外写 / 申报 / 支付 / 扣佣继续 HOLD。
