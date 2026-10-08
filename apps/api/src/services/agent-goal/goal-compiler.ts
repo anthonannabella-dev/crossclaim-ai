@@ -13,6 +13,7 @@ import { ACTION_GUARD_CATALOG } from '../action-guard/action-guard';
 import { GOAL_PROVIDER_DOMAINS } from './goal-contract';
 import {
   GOAL_MAX_INTENT_LENGTH,
+  GOAL_MAX_MONTHS,
   type AgentGoalDraft,
   type GoalApprovalCurrency,
   type GoalDomain,
@@ -63,7 +64,19 @@ const DOMAIN_SIGNALS: ReadonlyArray<{ domain: GoalDomain; patterns: readonly Reg
   },
   {
     domain: 'CUSTOMS',
-    patterns: [/customs/i, /\bduty\b/i, /\bduties\b/i, /tariff/i, /\b7501\b/i, /\bentry\b/i, /关税/, /海关/, /报关/],
+    patterns: [
+      /customs/i,
+      /\bduty\b/i,
+      /\bduties\b/i,
+      /tariff/i,
+      /\b7501\b/i,
+      /\bentry\b/i,
+      /\bimport(?:s|ed|ing)?\b/i,
+      /关税/,
+      /海关/,
+      /报关/,
+      /进口/,
+    ],
   },
   {
     domain: 'INDEPENDENT_SITE',
@@ -79,6 +92,21 @@ const AUTO_SIGNAL = /(自动|直接处理|直接执行|无需确认|不用问我
 const APPROVAL_EACH_SIGNAL = /(每个都(要|需要)?(批准|审批)|每次(都)?(要|需要)?(批准|审批)|approve\s*each|always\s*ask)/i;
 
 const MONTHS_SIGNAL = /(\d{1,2})\s*(?:个)?\s*(?:月|months?)/i;
+/** HISTORICAL_RECOVERY_SCAN_V1：显式「年」信号（阿拉伯数字 + 中文数字），必须先于默认 12 个月判定 */
+const YEARS_DIGIT_SIGNAL = /(\d{1,3})\s*(?:个)?\s*(?:年|years?|yrs?)/i;
+const YEARS_CJK_SIGNAL = /([一二两三四五六七八九十]{1,3})\s*年/;
+const CJK_DIGITS: Readonly<Record<string, number>> = {
+  '一': 1,
+  '二': 2,
+  '两': 2,
+  '三': 3,
+  '四': 4,
+  '五': 5,
+  '六': 6,
+  '七': 7,
+  '八': 8,
+  '九': 9,
+};
 const LAST_YEAR_SIGNAL = /(过去|最近|last|past)\s*(?:一|1|one)?\s*(?:年|year)/i;
 const YTD_SIGNAL = /(今年|本年|year\s*to\s*date|\bytd\b)/i;
 const ALL_TIME_SIGNAL = /(全部|所有|历史|有史以来|all\s*time|\ball\b|ever)/i;
@@ -137,10 +165,51 @@ function resolveProviders(text: string): GoalProvider[] {
   return providers.sort();
 }
 
+/** 中文数字 → 数值（支持 一…十 / 十一…十九 / 二十…九十九） */
+function parseCjkNumber(raw: string): number | null {
+  const text = raw.trim();
+  if (text === '') return null;
+  if (text === '十') return 10;
+  if (!text.includes('十')) return CJK_DIGITS[text] ?? null;
+  const [tensRaw, onesRaw] = text.split('十');
+  const tens = tensRaw === '' ? 1 : (CJK_DIGITS[tensRaw] ?? null);
+  if (tens === null) return null;
+  const ones = onesRaw === '' ? 0 : (CJK_DIGITS[onesRaw] ?? null);
+  if (ones === null) return null;
+  return tens * 10 + ones;
+}
+
+/**
+ * 显式「年」解析（deterministic-first；不做任何意图猜测）。
+ * 命中即返回请求月数，**不静默回落默认 12 个月**。
+ */
+function resolveRequestedYears(text: string): number | null {
+  const digit = YEARS_DIGIT_SIGNAL.exec(text);
+  if (digit) {
+    const years = Number(digit[1]);
+    return Number.isFinite(years) && years > 0 ? Math.trunc(years) : null;
+  }
+  const cjk = YEARS_CJK_SIGNAL.exec(text);
+  if (cjk) return parseCjkNumber(cjk[1]);
+  return null;
+}
+
 function resolveTimeRange(text: string): { timeRange: GoalTimeRange; signal: string | null } {
   const months = MONTHS_SIGNAL.exec(text);
   if (months) {
     return { timeRange: { kind: 'LAST_N_MONTHS', months: Number(months[1]) }, signal: 'TIME:LAST_N_MONTHS' };
+  }
+  const requestedYears = resolveRequestedYears(text);
+  if (requestedYears !== null) {
+    const requestedMonths = requestedYears * 12;
+    if (requestedMonths > GOAL_MAX_MONTHS) {
+      // 显式请求超上限：夹紧到 bounded max 并**记录信号**（可审计，绝不静默）
+      return {
+        timeRange: { kind: 'LAST_N_MONTHS', months: GOAL_MAX_MONTHS },
+        signal: 'TIME:CLAMPED_TO_MAX',
+      };
+    }
+    return { timeRange: { kind: 'LAST_N_MONTHS', months: requestedMonths }, signal: 'TIME:LAST_N_YEARS' };
   }
   if (LAST_YEAR_SIGNAL.test(text)) {
     return { timeRange: { kind: 'LAST_N_MONTHS', months: 12 }, signal: 'TIME:LAST_12_MONTHS' };

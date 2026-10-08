@@ -53,15 +53,27 @@ function requireServerContext(context: GoalServerContext): void {
   }
 }
 
-/** 时间窗口夹紧：确定性、有界，不构成「意图猜测」 */
+/**
+ * 时间窗口归一：确定性、有界，**不构成意图猜测，也不静默收缩**。
+ * HISTORICAL_RECOVERY_SCAN_V1：
+ *   · 1..GOAL_MAX_MONTHS 内原样接受；
+ *   · **超过上限一律显式拒绝**（GOAL_TIME_RANGE_EXCEEDS_MAX）——未受信 draft 不得被静默夹紧；
+ *   · 编译器对显式年数的夹紧是**可审计**的（matchedSignal = TIME:CLAMPED_TO_MAX）。
+ */
 function normalizeTimeRange(range: GoalTimeRange): GoalTimeRange {
   if (range.kind === 'LAST_N_MONTHS') {
     const raw = Number(range.months);
     if (!Number.isFinite(raw)) {
       throw new AgentGoalError('GOAL_UNSUPPORTED_TIME_RANGE', 'LAST_N_MONTHS 的 months 必须是有限数值。');
     }
-    const months = Math.min(GOAL_MAX_MONTHS, Math.max(1, Math.trunc(raw)));
-    return { kind: 'LAST_N_MONTHS', months };
+    const truncated = Math.trunc(raw);
+    if (truncated > GOAL_MAX_MONTHS) {
+      throw new AgentGoalError(
+        'GOAL_TIME_RANGE_EXCEEDS_MAX',
+        'LAST_N_MONTHS 超过当前上限（' + GOAL_MAX_MONTHS + ' 个月）；不得静默收缩，请显式选择更小的范围。',
+      );
+    }
+    return { kind: 'LAST_N_MONTHS', months: Math.max(1, truncated) };
   }
   return { kind: range.kind };
 }

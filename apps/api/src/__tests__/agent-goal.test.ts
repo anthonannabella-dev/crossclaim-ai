@@ -237,12 +237,23 @@ describe('P1 · Goal Validator（server truth + 白名单）', () => {
     ).toThrowError(/服务端上下文/);
   });
 
-  it('时间窗口被确定性夹紧（1..36），不是猜测意图', () => {
-    const goal = validateAgentGoalDraft({
-      draft: validDraft({ timeRange: { kind: 'LAST_N_MONTHS', months: 999 } }),
-      context: CONTEXT,
-    });
-    expect(goal.timeRange).toEqual({ kind: 'LAST_N_MONTHS', months: 36 });
+  it('时间窗口：1..60 内原样接受（不再静默夹紧）', () => {
+    for (const months of [1, 12, 36, 60]) {
+      const goal = validateAgentGoalDraft({
+        draft: validDraft({ timeRange: { kind: 'LAST_N_MONTHS', months } }),
+        context: CONTEXT,
+      });
+      expect(goal.timeRange).toEqual({ kind: 'LAST_N_MONTHS', months });
+    }
+  });
+
+  it('时间窗口超过上限 → 显式拒绝（GOAL_TIME_RANGE_EXCEEDS_MAX，不静默收缩）', () => {
+    expect(() =>
+      validateAgentGoalDraft({
+        draft: validDraft({ timeRange: { kind: 'LAST_N_MONTHS', months: 61 } }),
+        context: CONTEXT,
+      }),
+    ).toThrowError(/上限/);
   });
 });
 
@@ -416,4 +427,72 @@ describe('P1 · Task Planner + Runtime Adapter（不新增 runtime）', () => {
     expect(AGENT_GOAL_BOUNDARY.createsSecondGuard).toBe(false);
     expect(AGENT_GOAL_BOUNDARY.createsSecondPolicyEngine).toBe(false);
   });
+});
+
+
+describe('HISTORICAL_RECOVERY_SCAN_V1 · 5 年时间范围（deterministic-first）', () => {
+  function timeRangeOf(text: string): { months?: number; kind: string; signals: readonly string[] } {
+    const result = compileAgentGoal({ text });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('compile failed: ' + result.reason);
+    const range = result.draft.timeRange;
+    return {
+      kind: range.kind,
+      months: range.kind === 'LAST_N_MONTHS' ? range.months : undefined,
+      signals: result.matchedSignals,
+    };
+  }
+
+  it('中文「过去 5 年」→ 60 个月（旧行为会静默回落 12 个月）', () => {
+    const range = timeRangeOf('检查我过去 5 年的关税损失，能追回的全部处理');
+    expect(range.months).toBe(60);
+    expect(range.months).not.toBe(12);
+    expect(range.signals).toContain('TIME:LAST_N_YEARS');
+  });
+
+  it('中文数字「过去五年」→ 60 个月', () => {
+    expect(timeRangeOf('把过去五年的进口记录都检查一下').months).toBe(60);
+  });
+
+  it('英文 last/past N years → N*12 个月', () => {
+    expect(timeRangeOf('scan my last 5 years of customs activity').months).toBe(60);
+    expect(timeRangeOf('review the past 5 years of customs activity for recoverable losses').months).toBe(60);
+  });
+
+  it('显式一年 → 12 个月（中文 / 英文）', () => {
+    expect(timeRangeOf('检查过去一年的关税损失').months).toBe(12);
+    expect(timeRangeOf('review my last 1 year of customs activity').months).toBe(12);
+    expect(timeRangeOf('check my past one year of customs duties').months).toBe(12);
+  });
+
+  it('月份与年数边界：12 / 36 / 60 个月原样解析', () => {
+    expect(timeRangeOf('检查过去 12 个月的关税损失').months).toBe(12);
+    expect(timeRangeOf('检查过去 36 个月的关税损失').months).toBe(36);
+    expect(timeRangeOf('检查过去 60 个月的关税损失').months).toBe(60);
+    expect(timeRangeOf('检查过去 5 年的关税损失').months).toBe(60);
+  });
+
+  it('超过上限的年数 → 夹紧到 bounded max 且**可审计**（TIME:CLAMPED_TO_MAX）', () => {
+    const range = timeRangeOf('扫描过去 10 年的进口记录');
+    expect(range.months).toBe(60);
+    expect(range.signals).toContain('TIME:CLAMPED_TO_MAX');
+  });
+
+  it('ALL_TIME 仍然可用（「全部历史」不因年数规则被吞掉）', () => {
+    expect(timeRangeOf('检查全部历史的关税记录').kind).toBe('ALL_TIME');
+  });
+
+  it('时间范围进入 goal identity：同一文本 → 同一 digest/goalId（确定性）', () => {
+    const a = validateAgentGoalDraft({ draft: compileDraft('检查我过去 5 年的关税损失'), context: CONTEXT });
+    const b = validateAgentGoalDraft({ draft: compileDraft('检查我过去 5 年的关税损失'), context: CONTEXT });
+    expect(a.goalDigest).toBe(b.goalDigest);
+    expect(a.goalId).toBe(b.goalId);
+    expect(a.timeRange).toEqual({ kind: 'LAST_N_MONTHS', months: 60 });
+  });
+
+  function compileDraft(text: string) {
+    const result = compileAgentGoal({ text });
+    if (!result.ok) throw new Error('compile failed: ' + result.reason);
+    return result.draft;
+  }
 });

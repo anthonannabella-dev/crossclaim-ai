@@ -49,7 +49,13 @@ export type GoalTimeRangeKind = (typeof GOAL_TIME_RANGE_KINDS)[number];
 export const GOAL_APPROVAL_CURRENCIES = ['USD'] as const;
 export type GoalApprovalCurrency = (typeof GOAL_APPROVAL_CURRENCIES)[number];
 
-export const GOAL_MAX_MONTHS = 36;
+/**
+ * 时间窗口上限（bounded max）。HISTORICAL_RECOVERY_SCAN_V1：36 → 60，
+ * 以支持「过去 5 年」的确定性解析；**不得静默收缩**：
+ *   · 编译器命中显式年数时，超出上限会夹紧到本值并写入 matchedSignal `TIME:CLAMPED_TO_MAX`（可审计）；
+ *   · 未受信 draft 直接给出超过本值的 months → 校验器显式拒绝（GOAL_TIME_RANGE_EXCEEDS_MAX）。
+ */
+export const GOAL_MAX_MONTHS = 60;
 export const GOAL_MAX_INTENT_LENGTH = 600;
 
 export type GoalTimeRange =
@@ -161,6 +167,8 @@ export type GoalErrorCode =
   | 'GOAL_UNSUPPORTED_DOMAIN'
   | 'GOAL_UNSUPPORTED_EXECUTION_MODE'
   | 'GOAL_UNSUPPORTED_TIME_RANGE'
+  /** HISTORICAL_RECOVERY_SCAN_V1：显式请求的时间窗口超过 bounded max（不得静默收缩） */
+  | 'GOAL_TIME_RANGE_EXCEEDS_MAX'
   | 'GOAL_TENANT_FORGED'
   | 'GOAL_ACTION_INJECTION'
   | 'GOAL_SERVICE_INJECTION'
