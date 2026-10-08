@@ -529,3 +529,15 @@ rsi-event-loop 3）；api tsc 0。GitHub Actions = NOT_OBSERVED（仅 local/Code
 `claim → park → 进程重启 → verdict 到达` 会丢失 pending 归链；production enablement 前需从 durable task/scan 状态重建。
 
 **下一步**：`AUDIT-2R5` 窄复审（task-binding 收口）。
+
+### 13.15 AUDIT-2R5 送审与「审计通道阻塞」记录（裁决未读）
+
+* 送审：`AUDIT-2R5`，REVIEWED_HEAD = `e76e92a2`（记录提交 `566a1218`，已 push、工作树 clean）。
+* **投递已校验通过**：composer 清空（0 字符）＋ marker `[CODEX-HIST-AUDIT-2R5]` 作为新的用户轮出现＋生成中指示出现。
+* **随后通道阻塞**：该会话进入错误态 `无法加载此 ChatGPT 对话` / `无法加载历史记录`（仅剩侧边栏）。
+  已尝试：点击「重试」×2、`reload()`、离开再返回同一 URL、**新开标签页打开同一会话** —— 均同样失败；
+  对照同一浏览器的其它会话可正常加载 ⇒ 会话级（服务端）载入失败，不是账户 / 扩展 / 标签页问题。
+* 依审计协议：**停止浏览器操作**，保存审计包，报告阻塞；**不虚构裁决、不自行宣告 PASS**。
+  审计包留存：`work/hist-scan/audit-2r5-package.md`（含请求原文与投递校验记录；该目录为本地工作产物，未随仓库提交）。
+* 状态：**PHASE 10 仍未 CLOSED**（既未收到 2R5 裁决，也无 PASS 依据）。
+* 下一步：下一 tick 重试读取该会话；若持续不可用，请宿主恢复该会话或指定替代审计会话。
