@@ -7,11 +7,38 @@
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright-core';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+/**
+ * HISTORICAL_RECOVERY_SCAN_V1 / PHASE 14：为当前旅程客户播种一条 **真实 durable** 扫描结果
+ * （acceptance-only 脚本，只调用既有 server-owned 链路），返回 scanId 供结果页渲染。
+ */
+function seedScanForEmail(email) {
+  const apiRoot = path.join(REPO_ROOT, 'apps', 'api');
+  const script = path.join(apiRoot, 'acceptance', 'seed-recovery-scan.ts');
+  const result = spawnSync('npx', ['tsx', script, '--email', email], {
+    cwd: apiRoot,
+    encoding: 'utf8',
+    shell: true,
+    windowsHide: true,
+    timeout: 240_000,
+  });
+  const output = String(result.stdout ?? '') + String(result.stderr ?? '');
+  const match = /SCAN_ID=([0-9a-fA-F-]{8,})/.exec(output);
+  if (match === null) {
+    console.log('SEED_SCAN_OUTPUT=' + output.slice(-400));
+    return null;
+  }
+  return match[1];
+}
 
 export async function runJourney(input) {
   const {
@@ -492,6 +519,24 @@ export async function runJourney(input) {
   check('relogin.keeps.connection', body.includes(connectionLabel), '');
   await shot(page, '07-after-relogin');
 
+  /* -------- 7.5 HISTORICAL_RECOVERY_SCAN_V1 · 扫描结果页（UI_RESULT_VIEW，只读投影） -------- */
+  const scanId = seedScanForEmail(email);
+  check('scan.result.seeded', scanId !== null, 'acceptance seeder 未返回 SCAN_ID');
+  if (scanId !== null) {
+    await open(page, webBase + '/recoveries/scans/' + scanId);
+    const scanBody = await text(page);
+    check('scan.result.title.visible', scanBody.includes('历史追回扫描'), scanBody.slice(0, 160));
+    check('scan.result.coverage.notice', scanBody.includes('数据源未覆盖完整请求区间'), scanBody.slice(0, 200));
+    check('scan.result.boundary.note', scanBody.includes('尚未向任何平台'), '');
+    check(
+      'scan.result.no.raw.enum',
+      !/SOURCE_LIMITED|COVERAGE_NOT_FULL|CLAIM_READY|NEEDS_EVIDENCE|NEEDS_MANUAL_REVIEW/.test(scanBody),
+      '结果页泄漏了原始枚举',
+    );
+    check('scan.result.no.filed.claim', !scanBody.includes('已提交'), scanBody.slice(0, 200));
+    await shot(page, '07b-scan-result-desktop');
+  }
+
   /* ---------------- 8. Mobile viewport ---------------- */
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'zh-CN', isMobile: true });
   // 同一客户在同一浏览器里换设备：会话必须延续（否则测的是「未登录」而不是移动端体验）。
@@ -527,6 +572,23 @@ export async function runJourney(input) {
   await open(mPage, webBase + '/recoveries');
   const mRecoveries = await mPage.innerText('body');
   check('mobile.recoveries.visible', mRecoveries.includes('追回进度'), mRecoveries.slice(0, 120));
+  /* -------- 移动端：扫描结果页（390×844，同一会话） -------- */
+  if (scanId !== null) {
+    await open(mPage, webBase + '/recoveries/scans/' + scanId);
+    const mScan = await mPage.innerText('body');
+    check('mobile.scan.result.visible', mScan.includes('历史追回扫描'), mScan.slice(0, 120));
+    check('mobile.scan.result.coverage.notice', mScan.includes('数据源未覆盖完整请求区间'), mScan.slice(0, 160));
+    const mScanGeometry = await mPage.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    check(
+      'mobile.scan.result.no.horizontal.overflow',
+      mScanGeometry.scrollWidth <= mScanGeometry.clientWidth + 1,
+      mScanGeometry.scrollWidth + '/' + mScanGeometry.clientWidth,
+    );
+    await mPage.screenshot({ path: path.join(outDir, 'm2b-mobile-scan-result.png'), fullPage: true });
+  }
   await open(mPage, webBase + '/cases');
   const mCases = await mPage.innerText('body');
   check('mobile.cases.visible', mCases.includes('追回任务'), mCases.slice(0, 120));
