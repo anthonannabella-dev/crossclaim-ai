@@ -548,3 +548,26 @@ PRODUCTION_READY = NO
 **暂不授权** PHASE 3–6 自动实施、真实 Provider 写入、正式关税申报、自动支付与生产开闸；
 `NEXT` = 完成 CHANGE 1–4 → 提交新 REVIEWED_HEAD + 部署入口验证 + 授权竞态测试 + 业务终态映射证据 → PHASE 2 FINAL 复审。
 **不要求重写已通过的 Recovery SI pack，不允许为装配问题建第二个 Runtime，也不允许擅自修改封板 RC。**
+
+### 3.7 P2-CHANGE1（P0）生产启动入口一致性 —— 已实现并取证
+
+**复审要求**：证明 `systemd → rsi-run → Prisma → Recovery pack → ONE SI Runtime`，且部署入口包含 `PRODUCT_RECOVERY_SI`。
+
+**真实运行取证（与 systemd ExecStart 同一构建产物）**
+```
+node --env-file=.env dist/src/runtime/rsi-run.js      # 即 crossclaim-rsi.service 的 ExecStart 目标
+→ RSI_RECONCILE_SOURCE=PRISMA reason=DATABASE_URL_PRESENT
+→ RSI_RECOVERY_PACK=PRODUCT_RECOVERY_SI
+→ RSI_RUN_STARTED eventDriven=true watchdogIntervalMs=60000
+```
+（构建产物 `dist/src/runtime/rsi-run.js` 内已含 `createProductionRecoveryPackDeps` 与 `PRODUCT_RECOVERY_SI` 标记。）
+
+**契约测试** `si-rsi-phase2-startup-parity.test.ts`（5/5 PASS）覆盖验收五条：
+① RSI unit ExecStart == `apps/api/dist/src/runtime/rsi-run.js`，且该产物含装配与标记；
+② 只有 RSI unit 引用 `rsi-run.js`，安装脚本不另起一套（无第二条遗漏 pack 的启动路径）；
+③ API/Web/RSI 三者 ExecStart 各不相同（`server.js` / `next` / `rsi-run.js`）；
+④ 无 `@` 模板实例、无 unit 互相 `systemctl start`，源码边界 `secondRuntime: 0`；
+⑤ 使用生产同构构建产物核对，unit 不含明文凭据且由 `EnvironmentFile` 注入。
+
+**仍未验证（如实标注）**：Linux/systemd 实机与同构容器验收 **NOT VERIFIED**（本机无 systemd、Docker 无响应）
+⇒ 只声明「构建产物 + unit 一致性」通过，**不声称** Linux 实机 PASS。
