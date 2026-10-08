@@ -541,3 +541,37 @@ rsi-event-loop 3）；api tsc 0。GitHub Actions = NOT_OBSERVED（仅 local/Code
   审计包留存：`work/hist-scan/audit-2r5-package.md`（含请求原文与投递校验记录；该目录为本地工作产物，未随仓库提交）。
 * 状态：**PHASE 10 仍未 CLOSED**（既未收到 2R5 裁决，也无 PASS 依据）。
 * 下一步：下一 tick 重试读取该会话；若持续不可用，请宿主恢复该会话或指定替代审计会话。
+
+### 14. PHASE 11 完成 —— Runtime / Guard / Policy / 租户 / 外写 边界验证（内部单元，DONE）
+
+新增 `apps/api/src/__tests__/historical-scan-boundary.test.ts`（7/7）。**只做边界与负向验证，不新增执行路径、不引入第二 runtime。**
+
+**① 静态边界（SECOND_* = 0）**
+
+* `RSI_RUNTIME_COMPOSITION_BOUNDARY`：`secondRuntime = 0`、`performsExternalWrite/writesDatabase/readsCredentials = false`；
+  PHASE 10 收口语义仍在（`historicalScanDomainStepRequiresPassVerdict = true`、`verdictWatcherUsesDomainStepController = true`、
+  `historicalScanPendingBinding` 含 `ARMED`）。
+* `RSI_CONTROLLER_CONTINUATION_BOUNDARY`：`holdsProviderCredentials/writesDatabase = false`、`proposalIsNotVerdict/runnerCannotWriteVerdict/parkForJudgeSupported = true`。
+* `RECOVERY_SI_PACK_BOUNDARY`：`isSecondRuntime = false`、`executesActions/writesDatabase = false`、`networkCalls = 0`、`realModelCalls = 0`。
+* `RECOVERY_SI_PRODUCT_COMPOSITION_BOUNDARY.secondGuardImplementation = FORBIDDEN`；
+  `RECOVERY_GUARD_ADAPTER_BOUNDARY`：`secondGuardImplementation = FORBIDDEN`、复用 `createAppActionGuard`、不可用时 `DENY`（fail-closed）。
+* `HISTORICAL_SCAN_EXECUTION_PORT_BOUNDARY`：`secondRuntime/secondScheduler = false`、`insideExistingOneSiRuntime = true`、`scopeFromDurableScanOnly = true`、`externalWritePerformed = false`。
+* `CUSTOMS_HISTORICAL_PIPELINE_BOUNDARY`：`reusesExistingChain = true`、`secondCustomsTruth = false`、`autoFilingAllowed/filingPerformed/paymentPerformed = false`、`maxDisposition = 'CLAIM_READY'`。
+* 源码扫描 `src/services/historical-scan/**`（>5 文件）：禁止 `setInterval/setTimeout`（第二调度器）、`new Worker/child_process`（第二 runtime）、
+  `bullmq/agenda/pg-boss/node-cron`（第二队列）、`fetch/axios/http.request/undici`（外部网络）、`writeFile/createWriteStream`（外部写）—— 命中数 = 0。
+
+**② Guard / Policy 边界（fail-closed，不可绕过）**
+
+* 扫描任务缺 durable `scanScope` → pack 侧 `BLOCK` + `RECOVERY_SCAN_SCOPE_LOADER_NOT_WIRED`（不执行任何工具）。
+* `domainPacks` 注入 `packId='recovery-si'` → 抛 `RECOVERY_SI_RESERVED_PACK_ID_REJECTED`（不能冒充 Recovery pack 绕过共享 Action Guard）。
+* 生产组装点缺共享 guard 依赖 → 抛 `RECOVERY_SI_PRODUCT_GUARD_REQUIRED`（不静默降级、不接受手写 guard 实例）。
+
+**③ 租户 / 外写边界（真实 PostgreSQL）**
+
+* 跨租户装载 durable scan scope → `ok = false`，且目标租户扫描行的 `status / recordsScanned / nextShardIndex` **完全未被修改**。
+* 执行端口跑完整回填后：`RecoveryScanRun` **行数不变**（只改既有行，无第二事实源、无外部写副作用），`status = COMPLETED`；
+  summary 的 `filingPerformed / paymentPerformed / externalWritePerformed = false`、`claimsFiled = 0`、`coverage = SOURCE_LIMITED`（覆盖诚实）。
+
+**证据**：`historical-scan-boundary` 7/7；与 5 年 E2E 合并定向批次 16/16；api tsc 0。GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
+
+**审计**：`AUDIT-3` 覆盖 PHASE 11/12 —— 受审计通道阻塞影响，待通道恢复后送审。
