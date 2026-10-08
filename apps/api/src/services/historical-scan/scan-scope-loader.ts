@@ -61,6 +61,16 @@ export function isRecoveryScanTask(dedupeKey: string): boolean {
   return typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:');
 }
 
+/**
+ * 从既有 task identity（planner 生成的 `task:recovery:<DOMAIN>:<suffix>`）中**确定性**取出
+ * durable scan 的 dedupeKey（`scan:v1:...`）。不做任何猜测：取 token 起始到结尾的原样子串。
+ */
+export function scanDedupeKeyFromTaskKey(taskKey: string): string | null {
+  if (typeof taskKey !== 'string') return null;
+  const index = taskKey.indexOf('scan:v1:');
+  return index < 0 ? null : taskKey.slice(index);
+}
+
 function toScope(row: RecoveryScanRun): LoadedScanScope {
   return {
     scanId: row.id,
@@ -109,11 +119,16 @@ export async function loadScanScopeForClaimedTask(
     return { ok: false, block: true, reasonCodes: [...reasonCodes, 'NOT_A_HISTORICAL_SCAN_TASK'] };
   }
 
+  const scanKey = scanDedupeKeyFromTaskKey(ref.dedupeKey);
+  if (scanKey === null) {
+    return { ok: false, block: true, reasonCodes: [...reasonCodes, 'NOT_A_HISTORICAL_SCAN_TASK'] };
+  }
+
   let row: RecoveryScanRun | null;
   try {
     row = await loadRecoveryScanScope(prisma, {
       organizationId: ref.organizationId,
-      dedupeKey: ref.dedupeKey,
+      dedupeKey: scanKey,
     });
   } catch {
     // digest 不一致等 → 一律 BLOCK（不泄露细节、不回落到 caller 范围）

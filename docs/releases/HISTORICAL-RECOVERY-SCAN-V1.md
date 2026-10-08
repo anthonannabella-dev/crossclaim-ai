@@ -280,3 +280,16 @@ claimRecoveryScanRun + loadScanScopeForClaimedTask（caller 自报范围被忽�
 * CHANGE（下一步实现）：PHASE 10 E2E 改为经**既有 ONE SI Runtime composition** 认领并投影（保持 SECOND_RUNTIME = 0、不新增执行路径），
   再送 AUDIT-2 窄复审。
 
+### 13.3 AUDIT-2 CHANGE 进展（runtime composition leg）
+
+* 已完成：scan-scope-loader.ts 新增确定性 scanDedupeKeyFromTaskKey()——从既有 planner 生成的
+  	ask:recovery:<DOMAIN>:<suffix> 中**原样**取出 scan:v1:... token 作为 durable scan 查询键（不猜测）；
+  runtime 侧装载因此可以直接吃 **claimed task 的 dedupeKey**。
+* 已定位（尚未接线）：唯一 runtime 拒绝经 domainPacks 注入 recovery pack ——
+  RECOVERY_SI_RESERVED_PACK_ID_REJECTED:recovery-si（Recovery 只能经 productRecoveryPack 组装）。
+  因此 E2E 的 runtime leg 必须用 composeRsiRuntime({ productRecoveryPack: { appActionGuardDeps, readPorts, bind, <scanScope?> } })；
+  而 productRecoveryPack 目前**没有** scanScope 透传（rsi-run.ts:181–187 组装处只传 appActionGuardDeps/readPorts/bind）。
+* 下一步（本 tick 后立即做）：① 在 productRecoveryPack 类型与 createRecoverySiPack() 调用处补 scanScope 透传（不改任何 guard/claim 语义）；
+  ② E2E runtime leg 用 productRecoveryPack + 真实 DB loader（loadScanScopeForClaimedTask）断言 runtime 自己装载 durable scope；③ 再送 AUDIT-2 窄复审。
+* 本 tick 未提交失败的测试（已回退未提交改动，分支保持全绿：historical-scan-5y-e2e 1/1、runtime-scope 8/8）。
+
