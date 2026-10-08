@@ -123,6 +123,7 @@ export function createHistoricalScanExecutionPort(prisma: PrismaClient): Histori
           pagePort: request.pagePort,
           ingestPort: request.ingestPort,
           expectedLeaseOwner: ownerRef,
+          leaseMs: request.leaseMs,
           ...(request.grain === undefined ? {} : { grain: request.grain }),
           ...(request.maxPages === undefined ? {} : { maxPages: request.maxPages }),
           ...(request.now === undefined ? {} : { now: request.now }),

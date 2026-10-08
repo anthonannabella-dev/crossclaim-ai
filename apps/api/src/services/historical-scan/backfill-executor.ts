@@ -9,7 +9,14 @@
 
 import type { PrismaClient, RecoveryScanRun } from '@prisma/client';
 
-import { advanceRecoveryScanShard, finishRecoveryScan, loadRecoveryScanById, setRecoveryScanCoverage } from './scan-store';
+import {
+  advanceRecoveryScanShard,
+  finishRecoveryScan,
+  loadRecoveryScanById,
+  renewRecoveryScanLease,
+  setRecoveryScanCoverage,
+  setRecoveryScanShardsTotal,
+} from './scan-store';
 import { planScanShards, type ScanShard } from './shard-plan';
 import type { ScanCoverageStatus, ShardGrain } from './scan-identity';
 
@@ -76,6 +83,8 @@ export async function runHistoricalBackfill(
      * 所有权不符 / 租约过期 → BLOCKED；写入期间被他人 reclaim → BLOCKED（RECOVERY_SCAN_LEASE_FENCED）。
      */
     readonly expectedLeaseOwner?: string;
+    /** 续租时长（毫秒，默认 60s）；仅在 expectedLeaseOwner 存在时使用 */
+    readonly leaseMs?: number;
     readonly now?: () => Date;
   },
 ): Promise<BackfillRunResult> {
@@ -132,9 +141,14 @@ export async function runHistoricalBackfill(
 
   const shards = planScanShards({ from: scan.effectiveFrom, to: scan.effectiveTo, grain: input.grain });
   if (scan.shardsTotal !== shards.length) {
-    scan = await prisma.recoveryScanRun.update({
-      where: { organizationId_id: { organizationId: input.organizationId, id: input.scanId } },
-      data: { shardsTotal: shards.length, updatedAt: now() },
+    // AUDIT-3R2 CHANGE 1：shardsTotal 初始化同属 durable execution state，必须走同一 fenced 路径，
+    // 否则「A 校验通过 → B reclaim → A 的裸 update 仍能写」的竞态依然存在。
+    scan = await setRecoveryScanShardsTotal(prisma, {
+      organizationId: input.organizationId,
+      scanId: input.scanId,
+      shardsTotal: shards.length,
+      now: now(),
+      ...lease(),
     });
   }
 
@@ -158,6 +172,29 @@ export async function runHistoricalBackfill(
           reasonCodes: ['PAGE_BUDGET_REACHED'],
         };
       }
+      // AUDIT-3R2 CHANGE 2：每页取数前续租（CAS：自己仍是 owner 且当前租约未过期）。
+      // 续租失败 ⇒ 立即停止，绝不 ingest 下一页（避免 fencing 失败前已产生副作用）。
+      if (input.expectedLeaseOwner !== undefined) {
+        const at = now();
+        const renewed = await renewRecoveryScanLease(prisma, {
+          organizationId: input.organizationId,
+          scanId: input.scanId,
+          leaseOwner: input.expectedLeaseOwner,
+          leaseExpiresAt: new Date(at.getTime() + (input.leaseMs ?? 60_000)),
+          now: at,
+        });
+        if (!renewed) {
+          return {
+            status: 'BLOCKED',
+            shardsCompleted: scan.shardsCompleted,
+            shardsTotal: scan.shardsTotal,
+            recordsScanned: scan.recordsScanned,
+            blocked: true,
+            reasonCodes: ['RECOVERY_SCAN_LEASE_RENEW_FAILED'],
+          };
+        }
+      }
+
       const page = await input.pagePort.fetchPage({
         organizationId: input.organizationId,
         scanId: input.scanId,

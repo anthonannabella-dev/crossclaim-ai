@@ -19,9 +19,11 @@ import {
   createOrGetRecoveryScan,
   loadRecoveryScanById,
   reclaimRecoveryScanLease,
+  runHistoricalBackfill,
 } from '../services/historical-scan';
 import { evaluateCustomsHistoricalBatch } from '../services/historical-scan/customs-historical-pipeline';
 import { createHistoricalScanExecutionPort } from '../services/historical-scan/scan-execution-port';
+import { DEFAULT_RUNTIME_OWNER_REF } from '../runtime/rsi-run';
 
 const prisma = new PrismaClient();
 
@@ -274,8 +276,137 @@ describe('PHASE 12 · durable ownership / fencing（AUDIT-3 CHANGE 2）', () => 
       ingestPort,
       now: () => NOW,
     });
-    expect(executed.status).toBe('COMPLETED');
+    expect(executed).toMatchObject({ status: 'COMPLETED' });
     const done = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId });
     expect(done!.status).toBe('COMPLETED');
+  });
+
+  it('AUDIT-3R2-① B 接管后 stale A 连 shardsTotal 初始化都写不进去（FENCED 路径）', async () => {
+    const { scanId } = await seedScan(INTENT + '，shardsTotal 竞态');
+    await claimRecoveryScanRun(prisma, {
+      organizationId: ORG,
+      scanId,
+      leaseOwner: 'worker-a',
+      leaseExpiresAt: new Date(NOW.getTime() + 1_000),
+      now: NOW,
+    });
+    const later = new Date(NOW.getTime() + 2_000);
+    const reclaimed = await reclaimRecoveryScanLease(prisma, {
+      organizationId: ORG,
+      scanId,
+      leaseOwner: 'worker-b',
+      leaseExpiresAt: new Date(NOW.getTime() + 600_000),
+      now: later,
+    });
+    expect(reclaimed).not.toBeNull();
+    const before = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId });
+
+    // stale A 尝试初始化 shardsTotal（runHistoricalBackfill 的第一处写入）
+    const result = await runHistoricalBackfill(prisma, {
+      organizationId: ORG,
+      scanId,
+      pagePort: pagePort([]),
+      ingestPort,
+      expectedLeaseOwner: 'worker-a',
+      now: () => new Date(NOW.getTime() + 3_000),
+    });
+    expect(result.status).toBe('BLOCKED');
+    expect(result.reasonCodes).toContain('RECOVERY_SCAN_LEASE_NOT_HELD');
+
+    const after = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId });
+    expect(after!.shardsTotal).toBe(before!.shardsTotal); // 0：初始化未被 stale A 写入
+    expect(after!.leaseOwner).toBe('worker-b');
+  });
+
+  it('AUDIT-3R2-② owner 仍是 A 但租约已过期 ⇒ store 写入 FENCED、executor 立即 BLOCK 且零分片', async () => {
+    const { scanId } = await seedScan(INTENT + '，过期 owner 写入');
+    await claimRecoveryScanRun(prisma, {
+      organizationId: ORG,
+      scanId,
+      leaseOwner: 'worker-a',
+      leaseExpiresAt: new Date(NOW.getTime() + 1_000),
+      now: NOW,
+    });
+    const expired = new Date(NOW.getTime() + 60_000);
+
+    // 写路径：owner 相符但租约过期 ⇒ 条件更新 0 行 ⇒ FENCED
+    await expect(
+      advanceRecoveryScanShard(prisma, {
+        organizationId: ORG,
+        scanId,
+        shardIndex: 0,
+        shardKey: 'expired-a',
+        cursor: null,
+        recordsScanned: 7,
+        expectedLeaseOwner: 'worker-a',
+        now: expired,
+      }),
+    ).rejects.toMatchObject({ code: 'RECOVERY_SCAN_LEASE_FENCED' });
+    const afterWrite = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId });
+    expect(afterWrite!.recordsScanned).toBe(0);
+
+    // 执行路径：过期 ⇒ BLOCK（且一行分片都不取）
+    const seen: string[] = [];
+    const blocked = await runHistoricalBackfill(prisma, {
+      organizationId: ORG,
+      scanId,
+      pagePort: pagePort(seen),
+      ingestPort,
+      expectedLeaseOwner: 'worker-a',
+      now: () => expired,
+    });
+    expect(blocked.status).toBe('BLOCKED');
+    expect(blocked.reasonCodes).toContain('RECOVERY_SCAN_LEASE_EXPIRED');
+    expect(seen).toHaveLength(0);
+  });
+
+  it('AUDIT-3R2-③ 同 pid 不同实例身份不得被视为同 owner；默认 ownerRef 含启动 UUID', async () => {
+    const { scanId, taskKey } = await seedScan(INTENT + '，实例身份');
+    const ownerA = 'rsi-runtime:11111111-1111-4111-8111-111111111111:123';
+    const ownerB = 'rsi-runtime:22222222-2222-4222-8222-222222222222:123';
+    await claimRecoveryScanRun(prisma, {
+      organizationId: ORG,
+      scanId,
+      leaseOwner: ownerA,
+      leaseExpiresAt: new Date(NOW.getTime() + 600_000),
+      now: NOW,
+    });
+
+    const blocked = await createHistoricalScanExecutionPort(prisma).run({
+      organizationId: ORG,
+      taskKey,
+      ownerRef: ownerB,
+      pagePort: pagePort([]),
+      ingestPort,
+      now: () => NOW,
+    });
+    expect(blocked.blocked).toBe(true);
+    expect(blocked.reasonCodes).toContain('RECOVERY_SCAN_LEASE_NOT_HELD');
+
+    expect(DEFAULT_RUNTIME_OWNER_REF).toMatch(
+      /^rsi-runtime:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:\d+$/,
+    );
+  });
+
+  it('AUDIT-3R2-④ 长扫描跨过原租约边界：每页续租后继续到 COMPLETED', async () => {
+    const { scanId, taskKey } = await seedScan(INTENT + '，长扫描续租');
+    const seen: string[] = [];
+    // 时钟每次调用前进 3s，而租约 10s ⇒ 分片执行会跨过**首次**租约边界，靠续租续命
+    let ticks = 0;
+    const clock = () => new Date(NOW.getTime() + ticks++ * 3_000);
+    const executed = await createHistoricalScanExecutionPort(prisma).run({
+      organizationId: ORG,
+      taskKey,
+      ownerRef: 'worker-long',
+      pagePort: pagePort(seen),
+      ingestPort,
+      leaseMs: 10_000,
+      now: clock,
+    });
+    expect(executed).toMatchObject({ status: 'COMPLETED' });
+    expect(new Set(seen).size).toBe(seen.length);
+    const done = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId });
+    expect(done!.status).toBe('COMPLETED');
+    expect(done!.leaseOwner).toBeNull(); // finish 释放
   });
 });

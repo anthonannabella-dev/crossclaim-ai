@@ -13,6 +13,7 @@
  */
 
 import { attachContinuationToController, type RsiTaskRunner } from './rsi-controller-continuation';
+import { randomUUID } from 'node:crypto';
 import { createRsiEventLoop, type RsiEventSources, type RsiEventLoopHandle } from './rsi-event-loop';
 import { createLocalEventSources, type RsiReadFile } from './rsi-local-sources';
 import {
@@ -112,6 +113,14 @@ export function normalizeRsiVerdict(value: unknown): 'PASS' | 'REVISE' | 'BLOCK'
   const upper = raw.trim().toUpperCase();
   return upper === 'PASS' || upper === 'REVISE' || upper === 'BLOCK' ? (upper as 'PASS' | 'REVISE' | 'BLOCK') : null;
 }
+
+/**
+ * AUDIT-3R2 CHANGE 3：runtime 的默认 durable 执行身份必须是**全局唯一**的。
+ * 仅用 pid 会在跨 host / 跨 container 时碰撞（两边都可能是 `rsi-runtime:123`），
+ * 从而让另一实例误判「这是我自己的租约」。这里用进程启动 UUID + pid，进程生命周期内固定。
+ */
+const RSI_RUNTIME_BOOT_ID = randomUUID();
+export const DEFAULT_RUNTIME_OWNER_REF = 'rsi-runtime:' + RSI_RUNTIME_BOOT_ID + ':' + String(process.pid);
 
 export interface RsiRuntimeComposition {
   loop: RsiEventLoopHandle;
@@ -289,7 +298,7 @@ export async function composeRsiRuntime(input: {
   // **先**组装 domain-step-aware controller，**再**交给 event loop —— 否则 loop.start() / controller.emit()
   // 持有的是原始 controller，domain step 永远不会运行（只在手动 tick 时运行）。
   const domainStep = input.historicalScanDomainStep;
-  const runtimeOwnerRef = input.runtimeOwnerRef ?? 'rsi-runtime:' + String(process.pid);
+  const runtimeOwnerRef = input.runtimeOwnerRef ?? DEFAULT_RUNTIME_OWNER_REF;
   // AUDIT-2R2 CHANGE 2：不得在 park-for-judge 之前完成 scan。
   // 组合层状态机：① 认领时记住 scan task；② 裁决收口（JUDGE_VERDICT_RECEIVED 且已不再 park）后才驱动 domain step。
   // AUDIT-2R4（MSG-20261008-08）：pending scan 必须绑定「当前正在等待裁决的那一个任务」，
