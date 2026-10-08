@@ -164,7 +164,7 @@ MODEL_FALLBACK="qwen"
 | H5 | 一次非生产小额调用的授权 | §3.4 第 6 项 | 待授权 |
 
 > **凭据卫生提示**：两个 key 已在聊天中以明文出现过。按 `AGENTS.md` §九，建议**轮换后**再走 H1/H2。
-> 其中 `QWEN_API_KEY` 形如 `sk-ws-H.PEHMPHI.…`，不符合 DashScope 常见的 `sk-…` 形态，
+> 其中 `QWEN_API_KEY` 的前缀形态不符合 DashScope 常见的 `sk-` 形态（具体取值不在此复述），
 > 接入前必须先确认它到底是哪一种凭据（DashScope / 百炼 / 自建网关），否则会产生"看似接通、实则 401"的假象。
 
 ---

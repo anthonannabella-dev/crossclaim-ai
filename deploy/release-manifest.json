@@ -169,6 +169,30 @@
   },
   "secretPolicy": {
     "secretsInRepo": false,
-    "rule": "本清单只记录环境变量**名称**；任何真实 API Key / 数据库密码 / 令牌一律不写入 Git，取值只经密钥管理注入"
+    "rule": "本清单只记录环境变量**名称**；任何真实 API Key / 数据库密码 / 令牌一律不写入 Git，取值只经密钥管理注入",
+    "knownFindings": [
+      {
+        "id": "DEV_ONLY_PASSWORD_IN_README",
+        "path": "README.md",
+        "lines": "91-92",
+        "detail": "本地开发容器（crossclaim-postgres）的 onboarding 示例包含明文 POSTGRES_PASSWORD 取值；属 dev-only、非生产凭据，且仓库历史已存在。",
+        "status": "PRE_EXISTING_NOT_CHANGED",
+        "whyNotChanged": "该取值被本机运行中的开发容器使用；本轮为治理整理单元，不擅自改动开发环境行为，避免破坏既有本地 setup。",
+        "recommendedAction": "由 HOST/开发负责人决定：轮换该开发口令，或把示例改为占位符（<choose-a-local-password>）并同步更新本地容器。"
+      }
+    ],
+    "scanScope": [
+      "apps/**",
+      "deploy/**",
+      "docs/**",
+      "tools/**",
+      "*.md",
+      "*.json"
+    ],
+    "scannedPatternClasses": [
+      "provider api key prefixes",
+      "postgres connection string with inline credentials",
+      "password assignment"
+    ]
   }
 }
