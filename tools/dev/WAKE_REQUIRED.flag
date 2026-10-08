@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-08T13:51:02.167Z",
+  "head": "9eebd51ea26be8010eaa9c12e4f23bbd718a4dae",
+  "branch": "feat/si-rsi-customer-autonomous-recovery-v1",
+  "nextUnit": {
+    "id": "C3",
+    "phase": 1,
+    "title": "完整生命周期：重试/退避/上限/死信/审计",
+    "priority": "P0",
+    "status": "OPEN"
+  },
+  "dirty": true
+}

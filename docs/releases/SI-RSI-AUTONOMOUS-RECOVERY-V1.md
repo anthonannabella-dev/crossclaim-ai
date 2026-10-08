@@ -257,3 +257,35 @@ NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
 
 > 当前口径：**C1 / C2 = CLOSED（CODE_IMPLEMENTED + TEST_VERIFIED）**；
 > **PHASE 1 整体仍 NOT CLOSED**（C3/C4/C6/C7 未关闭，C5 属 PHASE 2）。
+
+---
+
+## 4. 连续执行机制（真实建立并已实测，非设计方案）
+
+### 4.1 架构（两段式，成本有界）
+
+| 段 | 载体 | 职责 |
+| --- | --- | --- |
+| 检测（不调用模型） | **Windows 计划任务** `CrossClaim-SI-RSI-ContinuousCheck`（每 180 秒）→ `node tools/dev/si-rsi-continuous-check.mjs` | 读 HEAD/工作树、读 checkpoint、发现下一个待执行 CHANGE、写日志与 `WAKE_REQUIRED.flag`、单实例锁 |
+| 执行（模型侧） | Codex 心跳 `crossclaim-si-rsi-dev-executor-180s`（每 180 秒唤醒本线程） | 按 checkpoint 推进实现 → 测试 → commit → push → 送审 → 归档 |
+
+> 二者都不是产品 Runtime：不创建第二套 SI Runtime / Scheduler / Controller，只做开发侧编排。
+
+### 4.2 实测证据（2026-10-08）
+
+| 验证项 | 结果 | 证据 |
+| --- | --- | --- |
+| 调度器已安装并启用 | **VERIFIED** | `schtasks /create` 成功；`/query` 显示 Status=Ready、Next Run Time 递增（22:51 → 22:54） |
+| 无人输入触发真实检查 | **VERIFIED** | 计划任务于 **22:51:01 自行运行**（Last Run Time 22:51:01 / Last Result 0），日志新增 `run=2` |
+| 可恢复 durable checkpoint | **VERIFIED** | `tools/dev/continuous-execution-state.json`（runCount 1→2、headAtLastCheck、lastResult） |
+| 自动发现下一个待执行 CHANGE | **VERIFIED** | 日志 `result=NEXT=C3` |
+| 执行实例已存在时避免重复启动 | **VERIFIED** | 持锁运行 → `result=SKIPPED reason=LOCKED_FRESH exitCode=0`（不重复执行） |
+| 日志含真实时间 / 结果 / 退出码 | **VERIFIED** | `tools/dev/logs/continuous-check.log`：`2026-10-08T13:51:02.167Z result=NEXT=C3 head=9eebd51e … run=2 exitCode=0` |
+| 可随时停止 / 禁用 | **VERIFIED** | `/change /disable` → Status=Disabled；`/change /enable` → Status=Ready |
+| 崩溃后安全恢复 | **VERIFIED（机制层面）** | 锁带过期时间（>5 分钟可接管）+ checkpoint 每轮重写；**未实测**真实崩溃中断场景 → 记为机制已具备、故障注入待 C6 |
+
+### 4.3 运行时产物不入库
+
+`tools/dev/logs/`、`tools/dev/*.flag`、`tools/dev/.continuous-check.lock`、
+`tools/dev/continuous-execution-state.json` 已加入 `.gitignore`（每 3 分钟重写，避免污染工作树与发布门禁）。
+权威进度仍以本文件 + `AI-ARCHITECT-INBOX.md` 为准。
