@@ -1943,3 +1943,42 @@ git -c safe.directory=D:/crossclaim-ai -C D:/crossclaim-ai branch release/rc-202
 
 **③ 仍待 HOST 授权**（沿用 §3.41 的四项）：① 新建并推送 `release/*` 候选分支（当前指令限定 push 仅限功能分支）；② 新 `releaseId` 命名；
 ③ 残留 schema 清理；④ 后台 `rsi-run` 进程处置；另需 ⑤ **Linux 实机/staging**（`FAILURE_RECOVERY_LINUX` 的 L1–L6）。
+
+### 3.43 CHANGE 3 完成 —— **正式生产启动入口**在隔离库上实测通过（启动标记全部命中）
+
+```
+# 环境：隔离 fresh 库 crossclaim_p3r2_iso（本任务自建、已 migrate；未触碰共享开发库）
+# 入口：apps/api/dist/src/runtime/rsi-run.js（即 crossclaim-rsi.service 的 ExecStart 目标）
+node dist/src/runtime/rsi-run.js        # 观测 18 秒后人工停止
+```
+**实测输出（逐字）**
+```
+RSI_RECONCILE_SOURCE=PRISMA reason=DATABASE_URL_PRESENT
+RSI_RECOVERY_PACK=PRODUCT_RECOVERY_SI
+RSI_VERDICT_SETTLEMENT=RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT
+RSI_RUNNER=UNCONFIGURED（未配置执行器：任务只会 BLOCK，不会 PASS）
+RSI_RECONCILE=expiredLeases=0 recoveredTasks=0 heldActiveLeases=0 idempotentNoop=true
+RSI_TASK_GENERATION=NOT_CONFIGURED
+RSI_RUN_STARTED eventDriven=true watchdogIntervalMs=60000
+```
+（stderr 为空）
+
+**CHANGE 3 检查表（审计原文要求逐项对照）**
+| 要求 | 结果 | 证据 |
+| --- | --- | --- |
+| 用正式生产启动入口构建 | ✅ | 实跑 `dist/src/runtime/rsi-run.js` |
+| 生产构建包含 Recovery pack | ✅ | `RSI_RECOVERY_PACK=PRODUCT_RECOVERY_SI` |
+| 生产构建包含 verdict-aware fenced settlement | ✅ | `RSI_VERDICT_SETTLEMENT=RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT` |
+| durable reconcile 实际执行且幂等 | ✅ | `RSI_RECONCILE=... idempotentNoop=true` |
+| 事件驱动运行时启动 | ✅ | `RSI_RUN_STARTED eventDriven=true watchdogIntervalMs=60000` |
+| 无第二 runtime / scheduler / controller / 状态机 | ✅ | 启动日志仅单实例装配；测试侧另有 `runtimeMembers().secondRuntime = 0` 断言 |
+| **不得以源码存在/单测通过替代构建验收** | ✅ | 本项是**实际启动生产入口后的运行观测**，非静态检查 |
+
+**如实登记（观测到的既有基线）**：`RSI_RUNNER=UNCONFIGURED` —— 未配置 caller runner；recovery 任务经 domain pack 进入业务链，不依赖 caller runner；
+非 recovery 任务在无 runner 时会 BLOCK（fail-closed，符合设计）。
+
+**证据冻存**：`tools/verification/release-integration/change3-runtime-verification.json`（含逐字输出、检查表、未覆盖项）。
+
+**未覆盖**：Linux systemd **实际托管**启动（需 Linux 实机；本项是在 Windows 上以同一 dist 产物直接启动）、TLS/反代/公网入口、真实 Provider/支付/报关（HOLD）。
+
+**至此发布集成审计的 CHANGE 2/3 本地可执行部分已全部完成**；剩余全部为 HOST 授权/环境事项（见 §3.41 五项）。

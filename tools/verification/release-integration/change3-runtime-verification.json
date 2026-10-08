@@ -1,0 +1,68 @@
+{
+  "id": "RELEASE_INTEGRATION_CHANGE3_RUNTIME_VERIFICATION",
+  "auditRef": "MSG-20261009-06（CHANGE 3：用正式生产启动入口构建并在隔离环境执行真实 runtime 路径验收）",
+  "head": "b37b4279",
+  "auditedImplementationHead": "73538175",
+  "entrypoint": "apps/api/dist/src/runtime/rsi-run.js（即 crossclaim-rsi.service 的 ExecStart 目标；正式生产启动入口）",
+  "environment": {
+    "database": "隔离 fresh 库 crossclaim_p3r2_iso（本任务自建并已 prisma migrate deploy；**未触碰共享开发库**）",
+    "durationSeconds": 18,
+    "stopped": "YES（人工 Stop-Process；仅用于观测启动标记）"
+  },
+  "observedStartupLines": [
+    "RSI_RECONCILE_SOURCE=PRISMA reason=DATABASE_URL_PRESENT",
+    "RSI_RECOVERY_PACK=PRODUCT_RECOVERY_SI",
+    "RSI_VERDICT_SETTLEMENT=RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT",
+    "RSI_RUNNER=UNCONFIGURED（未配置执行器：任务只会 BLOCK，不会 PASS）",
+    "RSI_RECONCILE=expiredLeases=0 recoveredTasks=0 heldActiveLeases=0 idempotentNoop=true",
+    "RSI_TASK_GENERATION=NOT_CONFIGURED",
+    "RSI_RUN_STARTED eventDriven=true watchdogIntervalMs=60000"
+  ],
+  "stderr": "",
+  "change3Checklist": [
+    {
+      "item": "使用正式生产启动入口构建（dist）",
+      "ok": true,
+      "evidence": "node dist/src/runtime/rsi-run.js"
+    },
+    {
+      "item": "生产构建包含 Recovery pack 装配",
+      "ok": true,
+      "evidence": "RSI_RECOVERY_PACK=PRODUCT_RECOVERY_SI"
+    },
+    {
+      "item": "生产构建包含 verdict-aware fenced settlement 接线",
+      "ok": true,
+      "evidence": "RSI_VERDICT_SETTLEMENT=RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT"
+    },
+    {
+      "item": "durable reconcile 实际执行且幂等",
+      "ok": true,
+      "evidence": "RSI_RECONCILE=expiredLeases=0 recoveredTasks=0 heldActiveLeases=0 idempotentNoop=true"
+    },
+    {
+      "item": "事件驱动运行时启动",
+      "ok": true,
+      "evidence": "RSI_RUN_STARTED eventDriven=true watchdogIntervalMs=60000"
+    },
+    {
+      "item": "无第二 runtime / scheduler / controller / 状态机",
+      "ok": true,
+      "evidence": "启动仅出现单个运行时的装配日志；并由测试断言 runtimeMembers().secondRuntime = 0（R9/soak 已覆盖）"
+    },
+    {
+      "item": "未以\"源码存在 / 单测通过 / commit 已合并\"替代构建验收",
+      "ok": true,
+      "evidence": "本项为**实际启动生产入口**后的观测，而非静态检查"
+    }
+  ],
+  "observedNoteworthy": [
+    "RSI_RUNNER=UNCONFIGURED（未配置 caller runner）：这是既有基线——recovery 任务经 domain pack 进入业务链，不依赖 caller runner；无 runner 时非 recovery 任务会 BLOCK（fail-closed）。",
+    "stderr 为空；启动过程无异常与告警。"
+  ],
+  "notCovered": [
+    "Linux systemd 实际托管启动（需 Linux 实机；本项为 Windows 上以同一 dist 产物直接启动）",
+    "TLS/反向代理/公网入口（属部署门禁）",
+    "真实 Provider / 支付 / 报关（HOLD）"
+  ]
+}
