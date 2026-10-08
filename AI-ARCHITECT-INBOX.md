@@ -166398,3 +166398,367 @@ PRODUCTION_ENABLEMENT = HOLD
 
 最终裁决：PHASE 2 正式通过本轮提交证据的范围内验收。 下一阶段重点不再是反复补写内部业务链，而是以独立 staging 环境、Linux 实机验证和真实 Provider 测试，把已经打通的内部能力逐步转化为可安全上线的生产能力。
 ```
+
+### [MSG-20261009-02] SI-RSI PHASE 3 独立审计（reviewed ref 00461194，裁决性质=基于提交证据的独立技术裁决）= **CONFIRMED · 必须修复**；`CLOSURE_GAP` / `EXECUTION_DUPLICATION` = CONFIRMED、`AUDIT_IDEMPOTENCY` = PASS、**`EXECUTION_AT_MOST_ONCE` = FAIL**；`FIX_SPEC` = **RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT**（**拒绝**「一律 BLOCKED settle」与「host-only settle」；PASS≠业务完成）；追加 **P0-5 裁决后崩溃恢复** 与 **P0-6 durable 执行去重**；`PHASE2_CLOSED_AFFECTED` = NO（PHASE2/P0-B 仍 YES），**`PHASE3_RECOVERY_CLOSURE` = FAIL、`PHASE3_CLOSED` = NO**；`API_REGRESSION` = 4799/4800、`SOAK` / `LINUX_SYSTEMD` 仍 NO、`PRODUCTION_READY` = NO；NEXT = **IMPLEMENT_PHASE3_RECOVERY_DURABLE_CLOSURE_FIX_R1**（R1–R10 验收标准；会话 https://chatgpt.com/c/6ac7d3a1-b600-83ec-98f7-a60130c841c1）
+
+```text
+CrossClaim · SI-RSI PHASE 3 独立审计裁决
+CONFIRMED · 必须修复
+
+审计编号：MSG-20261009-02
+
+REVIEWED_HEAD： 00461194
+审计范围： PHASE 3 · Recovery 裁决后 durable 任务收口
+裁决性质： 基于提交的复现证据与测试结果进行独立技术裁决，未直接检出仓库代码。
+
+一、最终裁决
+
+CLOSURE_GAP = CONFIRMED
+
+认可本轮发现的缺口：
+
+Recovery domain step 在任务认领阶段实际执行。
+
+裁决 PASS 后，内存态结束等待，但 durable 任务仍为 IN_PROGRESS，租约仍为 ACTIVE。
+
+租约到期后，任务重新进入 READY，导致 domain step 再次执行。
+
+确定性 evidenceRef 只保证审计记录幂等，不保证业务执行幂等。
+
+因此，当前状态属于：
+
+AUDIT_IDEMPOTENCY = PASS / EXECUTION_AT_MOST_ONCE = FAIL
+
+G1–G4 的真实 PostgreSQL 测试足以确认这一缺口。G4 证明既有 fenced settle 能阻止重复领取，但尚未证明运行时已经正确接入自动收口。
+
+二、FIX_APPROACH 裁决
+
+选择 (c)：OTHER。采用运行时自动收口，但必须根据可信裁决结果区分状态，不接受一律 BLOCKED。
+
+具体方案：
+
+RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT
+
+原因是 (a) 的方向正确，但将所有裁决统一映射为 BLOCKED 会混淆以下不同语义：
+
+裁决 PASS，但尚无可信业务完成证据。
+
+裁决拒绝，任务确实需要阻断。
+
+裁决通过且具备可信业务完成证据。
+
+裁决未完成、超时或结果不可信。
+
+而 (b) 将 settle 完全交给 host/judge，会继续留下运行时与 durable 状态之间的生命周期责任断层，不推荐作为产品运行时设计。
+
+必须实现的状态映射
+
+裁决结果
+
+	
+
+Durable 行为
+
+	
+
+业务完成
+
+
+
+
+PASS，可信业务完成证据充分
+
+	
+
+满足 CHANGE 3A 白名单及全部 guard 后才可 COMPLETED
+
+	
+
+允许
+
+
+
+
+PASS，仅 domain step 成功、无完成证据
+
+	
+
+BLOCKED 或新增明确的非完成状态
+
+	
+
+禁止
+
+
+
+
+REJECT / DENY
+
+	
+
+BLOCKED，记录原因
+
+	
+
+禁止
+
+
+
+
+裁决缺失、超时、来源不可信
+
+	
+
+保持安全等待或按明确的故障策略阻断，不能视为 PASS
+
+	
+
+禁止
+
+
+
+
+租约过期、owner 已失效
+
+	
+
+拒绝旧 owner settle，交由既有恢复路径处理
+
+	
+
+禁止
+
+对于第二种情形，优先建议复用 BLOCKED，增加明确 reason code，例如：
+
+VERDICT_PASS_AWAITING_BUSINESS_PROOF
+
+只有在既有 BLOCKED 语义无法表达这一状态时，才考虑新增枚举与迁移。不得以此为由建立第二套任务状态机。
+
+特别强调：judge PASS 不等于 Recovery 业务完成。 PASS 只能表明该裁决所审查的事项通过，不能自动推导已经提交、追回成功或已经到账。
+
+三、CHANGE 约束裁决
+
+你方提出的四项约束全部 ACCEPTED，并追加两个 P0 约束。
+
+CHANGE 1 — 可信完成证据白名单
+
+ACCEPTED
+只能依据 CHANGE 3A 已批准的可信业务证据落完成级状态。Domain step 成功、审计存在或 judge PASS 均不能单独作为完成依据。
+
+CHANGE 2 — 安全边界保持
+
+ACCEPTED
+不得绕过 fail-closed、Action Guard、租户隔离、授权时效或外部写入门禁。
+
+CHANGE 3 — ONE Runtime + Fenced settle
+
+ACCEPTED
+在现有组合根接入 verdict → durable settle，不新增 runtime、scheduler、controller。继续使用 owner、lease 有效性及事务级 CAS。
+
+CHANGE 4 — 可追溯审计
+
+ACCEPTED
+记录 taskId、organizationId、owner、lease/fencing 标识、verdictRef、evidenceRef、收口前后状态、reasonCode 与时间。
+
+追加 P0-5：裁决与 settle 的崩溃恢复。
+
+如果 verdict 已持久化，但运行时在 settle 前崩溃，重启后必须能恢复待收口决策；不能再次执行 domain step 来弥补单纯的收口缺失。恢复时仍须重新核验租约所有权与授权边界。
+
+追加 P0-6：执行副作用防重。
+
+不能将审计日志的幂等视为 domain step 的幂等。必须明确哪些 domain step 是纯只读，哪些可能产生数据库写入、对外请求或其他副作用。对非只读步骤需要持久化执行标识、执行状态和对应的恢复/对账机制。不得仅靠内存标志阻止重复执行。
+
+四、PHASE 2 边界裁决
+
+PHASE2_CLOSED_AFFECTED = NO
+
+认可既有 PHASE2_CLOSED = YES、P0_B_CLOSED = YES，不因本次发现自动撤销。
+
+理由是本轮暴露的是 PHASE 3 小时级运行稳定性与裁决后 durable 生命周期闭合问题，属于新的执行级缺口。
+
+但必须作出区分：
+
+PHASE2_CLOSED = YES：此前已经验收的 Phase 2 范围继续有效。
+
+PHASE3_RECOVERY_CLOSURE = FAIL：当前执行链存在已确认的重复执行风险。
+
+PHASE3_CLOSED = NO：不得宣布 PHASE 3 完成。
+
+PRODUCTION_READY = NO：不得根据 Phase 2 PASS 推断具备生产无人值守执行能力。
+
+五、下一轮最低验收标准
+
+建议将下一轮定义为 PHASE3_RECOVERY_DURABLE_CLOSURE_FIX_R1。
+
+必须在真实 PostgreSQL + ONE SI Runtime 生产同构路径下证明：
+
+验收项
+
+	
+
+必须证明
+
+
+
+
+R1
+
+	
+
+Domain step 执行一次，裁决 PASS 后由运行时自动 fenced settle
+
+
+
+
+R2
+
+	
+
+无完成级证据时不得落 COMPLETED
+
+
+
+
+R3
+
+	
+
+settle 后租约 RELEASED，重复 tick 不再次执行
+
+
+
+
+R4
+
+	
+
+旧 owner、过期 lease、并发 settle 不得覆盖新 owner 的结果
+
+
+
+
+R5
+
+	
+
+verdict 持久化后、settle 前崩溃，重启后能安全恢复收口
+
+
+
+
+R6
+
+	
+
+REJECT / DENY / UNKNOWN / 超时路径全部 fail-closed
+
+
+
+
+R7
+
+	
+
+租户、授权及 Action Guard 复核有效
+
+
+
+
+R8
+
+	
+
+收口审计可追踪，并与 durable 任务状态一致
+
+
+
+
+R9
+
+	
+
+多 worker 并发下无重复业务副作用
+
+
+
+
+R10
+
+	
+
+回归原 G1–G4，并新增正向自动收口测试
+
+特别注意：R5 不能通过人为直接调用 settle() 冒充运行时自动恢复；R1 也不能仅凭 verdictWatcher 内存标志变为 false 就判 PASS。
+
+六、其余阻断项裁决
+
+全量 API 的 4799/4800 通过可以作为较强的回归证据，但尚不能定为完全通过。
+
+建议隔离或清理开发库残留 schema，在干净测试数据库中重跑对应失败用例，并修复 pg_type 查询未限定 namespace 的测试问题。
+
+三个后台 rsi-run 进程共享开发数据库，不应继续干扰隔离测试。应先确认进程归属并停止测试不需要的实例，随后在专用数据库中验证真正的多 worker 并发；不能将进程争用造成的超时直接认定为产品缺陷，也不能忽略其潜在的并发风险。
+
+小时级 soak、断连恢复、Linux systemd、真实 Provider 尚未验证，均保留为后续发布门禁。
+
+本轮禁止开启真实 Provider 写入、关税正式申报、自动收费、自动扣佣和生产凭据。
+
+七、机器可读终局块
+纯文本
+AUDIT_ID = MSG-20261009-02
+PROJECT = CROSSCLAIM
+SCOPE = SI_RSI_PHASE3_RECOVERY_DURABLE_CLOSURE
+REVIEWED_HEAD = 00461194
+
+CLOSURE_GAP_VERDICT = CONFIRMED
+EXECUTION_DUPLICATION = CONFIRMED
+AUDIT_IDEMPOTENCY = PASS
+EXECUTION_AT_MOST_ONCE = FAIL
+
+FIX_APPROACH = OTHER
+FIX_SPEC = RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT
+
+RUNTIME_AUTO_SETTLE_REQUIRED = YES
+HOST_SETTLE_ONLY = REJECTED
+UNCONDITIONAL_BLOCKED_SETTLE = REJECTED
+
+VERDICT_PASS_IMPLIES_BUSINESS_COMPLETION = NO
+TRUSTED_COMPLETION_EVIDENCE_REQUIRED = YES
+NON_COMPLETION_SETTLEMENT_REQUIRED = YES
+FENCED_SETTLE_REQUIRED = YES
+CRASH_RECOVERY_REQUIRED = YES
+DURABLE_EXECUTION_DEDUPLICATION_REQUIRED = YES
+SETTLEMENT_AUDIT_REQUIRED = YES
+
+ONE_SI_RUNTIME = REQUIRED
+SECOND_RUNTIME = FORBIDDEN
+SECOND_SCHEDULER = FORBIDDEN
+SECOND_CONTROLLER = FORBIDDEN
+FAIL_CLOSED = REQUIRED
+ACTION_GUARD = REQUIRED
+TENANT_AUTH_RECHECK = REQUIRED
+
+PHASE2_CLOSED_AFFECTED = NO
+PHASE2_CLOSED = YES
+P0_B_CLOSED = YES
+
+PHASE3_RECOVERY_CLOSURE = FAIL
+PHASE3_CLOSED = NO
+
+API_REGRESSION = 4799/4800_PASS
+API_REGRESSION_FULL_PASS = NO
+SOAK_VERIFIED = NO
+LINUX_SYSTEMD_VERIFIED = NO
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+PRODUCTION_READY = NO
+
+REAL_PROVIDER_WRITE = HOLD
+CUSTOMS_FILING = HOLD
+PAYMENT = HOLD
+AUTO_COMMISSION_CHARGE = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+NEXT = IMPLEMENT_PHASE3_RECOVERY_DURABLE_CLOSURE_FIX_R1
+NEXT_AUDIT = PHASE3_RECOVERY_DURABLE_CLOSURE_R1
+
+最终裁决：准许进入 PHASE 3 的本机安全修复范围，不批准 PHASE 3 收官或生产使能。 先补齐 verdict → fenced settle → durable 终态 → crash recovery 的闭环，再进行小时级 soak 与生产同构验收。
+```
