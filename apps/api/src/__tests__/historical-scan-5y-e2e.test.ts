@@ -209,12 +209,12 @@ describe('PHASE 10 · 合成 5 年 E2E（Goal → scan → shard → customs →
     expect(loadedRefs).toEqual([taskKey]);
     expect(composition.domainDispatchLog().length).toBeGreaterThan(0);
     // ③ 同一次 tick 内，server-owned composition 继续驱动该 scan 的 durable backfill（单条连续链）
-    expect(domainStepOutcomes).toHaveLength(1);
-    expect(domainStepOutcomes[0]!.scanId).toBe(created.row.id);
-    expect(domainStepOutcomes[0]!.status).toBe('COMPLETED');
-    expect(domainStepOutcomes[0]!.ok).toBe(true);
+    //    AUDIT-2R2 CHANGE 2：存在 domain pack 时 runtime 强制 park-for-judge ——
+    //    claim 之后任务停在等待裁决，**不得**在裁决收口前完成 scan。
+    expect(composition.controller.state().waitingForVerdict).toBe(true);
+    expect(domainStepOutcomes).toHaveLength(0);
 
-    // ④ execution port 的负向：非扫描任务 key / 跨租户 → BLOCK
+    // ④ AI：执行端口本身仍可用（负向：非扫描任务 key / 跨租户 → BLOCK）
     const notScanTask = await executionPort.run({
       organizationId: ORG,
       taskKey: 'task:recovery:CUSTOMS:opp-1',

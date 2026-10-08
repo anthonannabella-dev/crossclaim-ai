@@ -288,6 +288,11 @@ export async function composeRsiRuntime(input: {
     const claimed = (outcomeLike as { claimed?: { dedupeKey?: unknown } } | null | undefined)?.claimed;
     const dedupeKey = claimed?.dedupeKey;
     if (typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:')) {
+      // AUDIT-2R2 CHANGE 2（MSG-20261008-06）：**不得绕过 park-for-judge**。
+      // 当 runtime 因存在 domain pack 而把任务停在等待裁决时，扫描的 backfill 不能在裁决收口前完成；
+      // 只有裁决已收口（waitingForVerdict 不再为 true）的续跑路径才允许驱动 domain step。
+      const parked = (controller.state() as { waitingForVerdict?: unknown }).waitingForVerdict === true;
+      if (parked) return;
       await domainStep!({ dedupeKey });
     }
   };
