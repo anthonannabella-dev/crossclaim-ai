@@ -165205,3 +165205,296 @@ NEXT_ACTION=COMPLETE_RC_RELEASE_BLOCKERS_AND_REAL_LINUX_ACCEPTANCE
 
 本回复仅作为独立复审意见，未写入或修改任何仓库文件。
 ```
+
+### [MSG-20261008-16] SI-RSI PHASE 0+1 独立审计（reviewed ref 51c1f18e）= PASS WITH REVISE；P0-A/P0-B 复现与 PHASE1 durable 队列/动态消费 = PASS；PHASE1_MULTI_WORKER_ISOLATION 与 PHASE1_CRASH_RECOVERY = REVISE；PHASE1_CLOSED = NO、PHASE2_REQUIRED = YES；7 项 CHANGE（5 项 P0：claim+lease 事务化 / 运行中租约接管 / 全生命周期重试与死信 / 租户账户授权绑定与撤销拦截 / PHASE 2 Recovery pack 生产装配）；PRODUCTION_READY = NO
+
+```text
+CROSSCLAIM · SI-RSI PHASE 0+1 独立审计裁决
+
+审计编号： CHATGPT-SI-RSI-P1-AUDIT-1
+审计日期： 2026-10-08
+分支： feat/si-rsi-customer-autonomous-recovery-v1
+REVIEWED_HEAD： 51c1f18e
+基线： ceb65ab73d39eb027df02e4661de82e84c6f4615
+
+最终裁决：PASS WITH REVISE
+
+本次依据 Codex 提交的复现路径、测试结果和实现说明进行独立逻辑审查，未直接检出并运行对应 Git commit。因此，下列 PASS 表示提交证据在所述范围内成立，不代表代码级复核或生产验收已经完成。
+
+一、逐项裁决
+
+审计项目
+
+	
+
+裁决
+
+	
+
+依据
+
+
+
+
+P0_A_REPRODUCTION
+
+	
+
+PASS
+
+	
+
+启动后任务不可见及 JSON 并发写入丢任务，均有正反对照
+
+
+
+
+P0_B_REPRODUCTION
+
+	
+
+PASS
+
+	
+
+生产 RSI 缺少 Recovery pack，阻断路径明确
+
+
+
+
+PHASE1_DURABLE_QUEUE
+
+	
+
+PASS
+
+	
+
+PostgreSQL 持久化、幂等入队、CAS 领取已有对应测试
+
+
+
+
+PHASE1_DYNAMIC_CONSUMPTION
+
+	
+
+PASS
+
+	
+
+已证明运行期间新任务能由既有 tick 发现并执行
+
+
+
+
+PHASE1_MULTI_WORKER_ISOLATION
+
+	
+
+REVISE
+
+	
+
+证明了单任务并发互斥，尚未完整证明跨租户、租约超时及多 worker 接管安全
+
+
+
+
+PHASE1_CRASH_RECOVERY
+
+	
+
+REVISE
+
+	
+
+重启或接管 reconcile 有效，但运行中超时租约主动恢复未闭环
+
+
+
+
+LIMITATIONS_HONESTY
+
+	
+
+PASS
+
+	
+
+未将本地执行、部分恢复和真实外部执行混为一谈
+
+VERDICT = PASS WITH REVISE · PHASE 1 = NOT CLOSED · PHASE 2 = REQUIRED
+
+二、关键技术裁决
+
+1. P0-A 根因已经明确，主要修复方向正确。
+
+从 JSON 文件队列升级为 PostgreSQL durable queue，并让运行中的 ONE SI Runtime 在既有 tick 中发现新增任务，解决了原先启动后任务不可见的问题。
+
+但是，当前实现还需要检查任务从 READY → IN_PROGRESS → COMPLETED/BLOCKED 的完整状态转移，尤其是执行成功后是否可靠持久化、失败后能否恢复，以及数据库任务与内存任务是否可能发生双重领取。
+
+2. P0-B 仍未修复，不能宣布客户 Recovery 自动执行闭环完成。
+
+PHASE 1 证明了任务能够被发现、领取和送入执行器，并不等于 Recovery 业务能力已经在生产启动入口装配成功。
+
+在 PHASE 2 完成前，task:recovery:* 保持 BLOCK 是正确的安全行为，不允许为追求自动化而回退到未受约束的通用 runner。
+
+3. PHASE 1 仍有需要解决的持久化和安全问题。
+
+尤其需要注意 CAS 领取与 AutonomyLease 写入之间是否处于同一事务。如果任务已变成 IN_PROGRESS，但 lease upsert 失败，可能产生无有效租约的悬挂任务。
+
+另外，不能仅凭 incident.sourceRefs.organizationId 就认定执行时租户、账户和授权范围全部可信。执行前必须从可信持久化事实重新解析这些边界。
+
+三、必须完成的 CHANGE
+
+优先级
+
+	
+
+修改要求
+
+	
+
+验收标准
+
+
+
+
+P0 · CHANGE 1
+
+	
+
+原子化任务 claim 与 lease 创建
+
+	
+
+事务失败完全回滚；并发仅一个赢家
+
+
+
+
+P0 · CHANGE 2
+
+	
+
+运行中租约到期恢复
+
+	
+
+worker 崩溃且进程未重启，其他 worker 也能安全接管
+
+
+
+
+P0 · CHANGE 3
+
+	
+
+完整生命周期与重试控制
+
+	
+
+成功持久化、失败重试、退避、最大次数、死信处理、审计记录
+
+
+
+
+P0 · CHANGE 4
+
+	
+
+租户、账户、授权绑定及撤销拦截
+
+	
+
+任务执行前重新核验可信授权；撤销后不得继续新动作
+
+
+
+
+P0 · CHANGE 5
+
+	
+
+PHASE 2 Recovery pack 生产装配
+
+	
+
+systemd 实际入口加载既有 Recovery pack，真实业务模块执行，不再因未装配而 BLOCK
+
+
+
+
+P1 · CHANGE 6
+
+	
+
+多 worker 竞争与故障注入矩阵
+
+	
+
+覆盖超时、重启、旧 worker 迟到提交、CAS 竞争、重复 tick
+
+
+
+
+P1 · CHANGE 7
+
+	
+
+发布配置和 CI 核验
+
+	
+
+API/RSI 使用同一 durable 数据源；CI 和启动入口验收可复现
+
+注意：旧 worker 的租约过期后即使重新恢复运行，也不得覆盖新 owner 的执行结果。必须验证 owner/fencing 机制，而不只是测试重新领取成功。
+
+四、下一阶段执行指令
+
+NEXT = PHASE 1 FINALIZATION → PHASE 2 → PHASE 3–6
+
+建议 Codex 按以下顺序继续：
+
+首先关闭 CHANGE 1–4，补齐持久化领取、恢复、授权及状态机。
+
+随后实施 PHASE 2，在唯一生产 RSI composition root 中装配现有 Recovery pack，不新增第二套 runtime。
+
+使用真实 PostgreSQL、真实 API admission 和真实 RSI 启动入口完成端到端验证，不以 mock runner 探针代替 Recovery 业务执行。
+
+继续 PHASE 3–6 的既定范围，每阶段提交 exact HEAD、测试证据、风险和独立审计请求。
+
+保持封板分支不变，所有真实 Provider 写入、报关提交、扣佣和生产部署继续 HOLD。
+
+五、最终状态
+纯文本
+REVIEWED_HEAD                = 51c1f18e
+P0_A_REPRODUCTION            = PASS
+P0_B_REPRODUCTION            = PASS
+PHASE1_DURABLE_QUEUE         = PASS
+PHASE1_DYNAMIC_CONSUMPTION   = PASS
+PHASE1_MULTI_WORKER_ISOLATION = REVISE
+PHASE1_CRASH_RECOVERY        = REVISE
+LIMITATIONS_HONESTY          = PASS
+
+OVERALL_VERDICT              = PASS WITH REVISE
+PHASE1_CLOSED                = NO
+PHASE2_REQUIRED              = YES
+P0_A_RUNTIME_FIX             = PARTIALLY_VALIDATED
+P0_B_RUNTIME_FIX             = NOT_IMPLEMENTED
+REAL_EXTERNAL_EXECUTION      = NOT_EXECUTED
+PRODUCTION_READY             = NO
+
+SECOND_RUNTIME_ALLOWED       = NO
+FAIL_CLOSED_BYPASS_ALLOWED   = NO
+RELEASE_BRANCH_MUTATION      = FORBIDDEN
+PRODUCTION_DEPLOYMENT        = HOLD
+NEXT                         = PHASE1_FINALIZATION
+
+最终意见：允许继续开发，不允许宣布整个客户自动执行闭环 CLOSED。
+
+当前最重要的成果，是客户提交任务后能够在不重启 RSI 的情况下被自动发现和领取。下一步重点不应是继续增加调度器，而是让这条已有执行链同时满足可执行、可恢复、不可越权、不会重复产生外部副作用四项要求。
+
+本裁决仅在当前会话给出，未写入仓库。
+```

@@ -175,3 +175,55 @@ PRODUCTION_ENABLEMENT / EXTERNAL_WRITE / TRANSPORT = HOLD`；不执行生产部�
 
 > 结论口径：PHASE 1 = **CODE_IMPLEMENTED + TEST_VERIFIED（本地真实 PG）**；
 > **不是** PRODUCTION_WIRED / REAL_PROVIDER_VERIFIED / PRODUCTION_ENABLED。要求 6/7 的缺口已列在上方，不得声称为已完成。
+
+### 2.2 PHASE 0+1 独立审计（`MSG-20261008-16`）= **PASS WITH REVISE · PHASE 1 NOT CLOSED**
+
+审查锚点 `51c1f18e`；会话 `https://chatgpt.com/c/6ac79a99-c758-83ec-b01b-cc5ef3d96a65`；
+逐字归档 `AI-ARCHITECT-INBOX.md`（**FULL_COPY_OK** 103/103，缺失 0 / 多出 0）。
+
+| 审计项 | 裁决 |
+| --- | --- |
+| P0_A_REPRODUCTION | PASS |
+| P0_B_REPRODUCTION | PASS |
+| PHASE1_DURABLE_QUEUE | PASS |
+| PHASE1_DYNAMIC_CONSUMPTION | PASS |
+| PHASE1_MULTI_WORKER_ISOLATION | **REVISE** |
+| PHASE1_CRASH_RECOVERY | **REVISE** |
+| LIMITATIONS_HONESTY | PASS |
+
+**复审给出的强制 CHANGE（PHASE 1 收口前必须关闭）**
+
+| 优先级 | 要求 | 验收标准 |
+| --- | --- | --- |
+| P0 · CHANGE 1 | **原子化** claim 与 lease 创建（同一事务） | 事务失败完全回滚；并发仅一个赢家；不得出现「IN_PROGRESS 但无有效租约」的悬挂任务 |
+| P0 · CHANGE 2 | 运行中租约到期恢复（进程未重启也能安全接管） | worker 崩溃且不重启时，其他 worker 可安全接管 |
+| P0 · CHANGE 3 | 完整生命周期与重试控制 | 成功持久化、失败重试、退避、最大次数、**死信**、审计记录 |
+| P0 · CHANGE 4 | 租户 / 账户 / 授权绑定与**撤销拦截** | 执行前重新核验可信授权；撤销后不得继续新动作 |
+| P0 · CHANGE 5 | **PHASE 2**：Recovery pack 生产装配 | systemd 实际入口加载既有 Recovery pack，真实业务模块执行，不再因未装配而 BLOCK |
+| P1 · CHANGE 6 | 多 worker 竞争与故障注入矩阵 | 覆盖超时、重启、**旧 worker 迟到提交**、CAS 竞争、重复 tick；须验证 owner/fencing，而非只验证「重新领取成功」 |
+| P1 · CHANGE 7 | 发布配置与 CI 核验 | API/RSI 使用同一 durable 数据源；CI 与启动入口验收可复现 |
+
+**复审额外技术意见（本轮未解决）**
+
+1. 需检查 `READY → IN_PROGRESS → COMPLETED/BLOCKED` **完整状态转移**：执行成功后是否可靠持久化、失败后能否恢复、DB 任务与内存任务是否可能双重领取；
+2. CAS 领取与 `AutonomyLease` upsert **是否同一事务**（否则可能悬挂任务）；
+3. **不能仅凭 `incident.sourceRefs.organizationId`** 就认定执行时租户/账户/授权范围可信 —— 执行前必须从可信持久化事实重新解析边界。
+
+**机器可读结论**
+
+```
+OVERALL_VERDICT              = PASS WITH REVISE
+PHASE1_CLOSED                = NO
+PHASE2_REQUIRED              = YES
+P0_A_RUNTIME_FIX             = PARTIALLY_VALIDATED
+P0_B_RUNTIME_FIX             = NOT_IMPLEMENTED
+REAL_EXTERNAL_EXECUTION      = NOT_EXECUTED
+PRODUCTION_READY             = NO
+SECOND_RUNTIME_ALLOWED       = NO
+FAIL_CLOSED_BYPASS_ALLOWED   = NO
+RELEASE_BRANCH_MUTATION      = FORBIDDEN
+NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
+```
+
+> 下一轮起点：**PHASE 1 FINALIZATION**（关闭 CHANGE 1–4）→ **PHASE 2**（CHANGE 5）。
+> 不得在 PHASE 2 完成前宣布客户 Recovery 自动执行闭环 CLOSED。
