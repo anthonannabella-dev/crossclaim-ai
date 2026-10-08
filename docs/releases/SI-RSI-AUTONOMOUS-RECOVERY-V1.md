@@ -1158,3 +1158,32 @@ node tools/dev/run-si-rsi-suite.mjs --rounds 1 --all --label full-api-3x     # h
 **口径**：`FULL_API_REGRESSION = COMPLETED（480/480 文件已执行；479 通过；4799/4800 用例通过）`；
 **唯一**剩余失败为**环境漂移**（非代码缺陷），等待 HOST 处置决定；`PRODUCTION_READY = NO` 不变，
 外写 / 申报 / 支付 / 扣佣继续 HOLD。
+
+### 3.23 小时级 soak 取证器 —— 本轮实现后**未提交**（发现必须先用既有裁决通道收口）
+
+**目标**：实现审计列出的「小时级 soak」（本地可执行的那一项）。
+
+**做了什么**：实现了一版 `tools/dev/si-rsi-soak.ts`（一次性脚本：无定时器 / 无守护进程 / 非第二运行时，
+只驱动既有 `composeRsiRuntime()` + durable 任务源 + 生产 Recovery pack + 审计记录器；只操作独立 `soak-org-*` 租户），
+并以 `--minutes 1 --round-seconds 2 --batch 2` 冒烟运行（29 轮）。
+
+**冒烟暴露的关键事实（本轮真正的产出）**
+1. **ONE SI Runtime 对 recovery-domain 任务强制 park-for-judge**（`awaitVerdict` 恒为 `true`，FINAL-2/3/5 的既有设计）：
+   引擎每处理**一个** recovery 任务后进入「等待裁决」，此后 `tick()` 不再推进；
+2. 实测表现：29 轮里只产生 **3 条** domain 审计行，而数据库里累积了 **55 条**「已被 claim、持 ACTIVE 租约、但未被处理」的任务；
+3. 结论：**「durable 队列持续压力」型 soak 必须先接上裁决收口**，否则 soak 只是在堆积 parked 任务 —— 既不构成有效 soak 证据，
+   还会掩盖真实行为（看起来"跑了 29 轮"，实际只执行了 3 次 domain step）。
+
+**处置（诚实）**
+- 该脚本**未提交**（已删除）：在缺少裁决收口的形态下，它无法完成它声称的 soak；
+- **未留下任何残留数据**：本次冒烟创建的 `soak-org-e0306a07` 数据已按前缀清理
+  （55 tasks / 55 leases / 1 incident / 63 opportunities / 1 standingAuthorization / 1 organization；**其它租户一律未动**）；
+- 该脚本的 `afterAll` 式清理曾因「先删 incident、后删其 task」触发 FK 约束（`AutonomyTask_incidentId_fkey`），
+  正确顺序应为 **lease → task → incident**；这条经验已记录，供下一版实现直接采用。
+
+**下一单元设计（可执行，先只读既有实现再动手）**：soak 必须走**既有裁决通道**闭环 ——
+每轮为已 park 的任务写入一个**文件型 PASS 裁决工件**，由既有 `createRsiVerdictWatcher` 收口
+（历史扫描 PHASE 10 测试已有该模式先例），从而在 ONE SI Runtime 内形成「认领 → 执行 → 裁决 → 继续」的持续压力。
+实现前先确认该工件的格式与判据（只读既有测试与实现），不猜格式。
+
+**状态**：小时级 soak = **NOT VERIFIED（未完成）**；真实断电 / 断连与 Linux 实机 systemd 验收仍为 **HOST_ACTION_REQUIRED**。
