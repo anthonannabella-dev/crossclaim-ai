@@ -263,3 +263,11 @@ claimRecoveryScanRun + loadScanScopeForClaimedTask（caller 自报范围被忽�
 证据：该用例 1/1；历史扫描 + 架构定向批次 **7 文件 / 217 tests PASS**；api tsc **0**。
 分片数据源为 **synthetic 端口**（test/acceptance only），不是 production adapter；所有判定仍走 server-owned 链。
 
+### 13.1 AUDIT-2 送审记录（PHASE 10 合成 5 年 E2E）
+
+* AUDIT_ID：AUDIT-2；REVIEWED_HEAD：e3b0995816b13a3285bcc9d9a4d87a5d009d08d（分支已 push、工作树 clean）
+* 送审范围：PHASE 10 合成链路（Goal 60 个月 → 窗口解析 → durable scan → claim/scope 装载 → 分片回填+检查点续跑 → customs 四态 → 覆盖诚实 summary）
+* 证据：historical-scan-5y-e2e 1/1；历史扫描 + 架构定向批次 7 文件 / 217 tests；api tsc 0
+* 待判：⑤SYNTHETIC_5Y_E2E 是否成立 ⑥分片/检查点与 crash-resume 语义 ⑦覆盖诚实（源仅 1 年不得 FULL）⑧零外部动作（filing/payment/externalWrite=false）
+* 裁决（等待中）：VERDICT = PENDING
+
