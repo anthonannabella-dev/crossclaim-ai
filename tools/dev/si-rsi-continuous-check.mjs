@@ -47,7 +47,8 @@ const DEFAULT_STATE = {
   lastResult: null,
   lastExitCode: null,
   openChanges: [
-    { id: 'C5', phase: 2, title: 'PHASE 2：Recovery pack 生产装配', priority: 'P0', status: 'OPEN' },
+    { id: 'AUDIT-P2', phase: 2, title: 'PHASE 2 独立审计（C5 生产装配 + E2E）→ 关闭 P0-B', priority: 'P0', status: 'OPEN' },
+    { id: 'C5', phase: 2, title: 'PHASE 2：Recovery pack 生产装配', priority: 'P0', status: 'CODE_DONE_PENDING_AUDIT' },
   ],
   closedChanges: ['C1', 'C2', 'C3', 'C4', 'C6', 'C7', 'AUDIT-P1'],
   phases: { '1': 'CLOSED', '2': 'IN_PROGRESS', '3': 'NOT_STARTED', '4': 'NOT_STARTED', '5': 'NOT_STARTED', '6': 'NOT_STARTED' },
