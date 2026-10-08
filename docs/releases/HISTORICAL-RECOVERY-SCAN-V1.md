@@ -644,3 +644,23 @@ durable 行 `RUNNING / nextShardIndex=2`；第二次同一域步骤调用（新�
 **证据**：`historical-scan-matrix` 6/6；历史扫描全量批次 **57/57**（8 文件）；api tsc 0。GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
 
 **审计**：`AUDIT-4`（PHASE 13/14）待审计通道恢复后送审。
+
+### 17. PHASE 14 验收（进行中 —— 已完成子项已列明）
+
+| 子项 | 结果 | 证据 |
+| --- | --- | --- |
+| prisma validate | **PASS** | `The schema at prisma\schema.prisma is valid` |
+| fresh DB（全量迁移） | **PASS** | 新建 scratch DB → `prisma migrate deploy` → `All migrations have been successfully applied.`（94 migrations，含 `20261008120000_recovery_scan_run`、`20261008121000_recovery_scan_identity_effective_range`）；验证后已删除 scratch DB |
+| migrate status（dev） | **PASS** | `94 migrations found` / `Database schema is up to date!` |
+| api tsc | **PASS** | exit 0 |
+| web tsc | **PASS** | exit 0 |
+| web build | **PASS** | `next build` exit 0；构建产物含 `/recoveries/scans/[id]`（ƒ Dynamic） |
+| UI render | **PASS** | `UI_RENDER_CHECK=OK checks=219`（含 `scan.view.*` 6 项 + i18n parity） |
+| i18n | **PASS** | `I18N_CHECK=OK locales=5 keys=904 statusCodes=13 customerHardcodes=0`（`HARDCODED_CUSTOMER_STRINGS=0`、`RAW_ENUM_FALLBACK_HITS=0`） |
+| api-contract | **PASS** | `implemented=100 documented=87` → `API_CONTRACT_OK` |
+| recover-projection gate | **PASS（fail-closed 保持）** | `/recover` 不产出静态页、sitemap 为空、全部 404（未生成投影时不套模板） |
+| 全量回归 | 运行中 | `apps/api` 全量 vitest（下一 tick 收取结果） |
+| 浏览器 desktop+mobile 旅程 | 待做 | 结果页 `/recoveries/scans/[id]`（未重构已封板 UI V2） |
+
+> 边界不变：`REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`、`REAL_VALIDATION_COMPLETE = NO`、`PRODUCTION_READY = NO`；
+> `SECOND_* = 0`；全部外部写 / 凭据 / 运输 = HOLD。GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
