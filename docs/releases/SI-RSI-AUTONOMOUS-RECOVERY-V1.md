@@ -1870,3 +1870,48 @@ FAILURE_RECOVERY_LINUX = NOT_VERIFIED
 
 **本线程下一步**：进入**发布集成审计**准备（CHANGE 1/2/3），在**新集成候选分支**上完成合入与锚点重验，再送审。
 **注意**：`73538175` 是功能分支 HEAD，**不等于**部署 RC；封板分支保持不动。
+
+### 3.41 发布集成审计准备（CHANGE 1/2/3）—— 拓扑分析已完成，等待 HOST 授权新建候选分支
+
+**① 合并拓扑（只读实测）**
+| 事实 | 结果 |
+| --- | --- |
+| 功能分支 HEAD | `1c4c2917` |
+| 封板 RC `release/rc-20261008-linux-deploy-v1` | `ceb65ab7`（**未修改**） |
+| 封板 RC 是否为功能分支祖先 | **YES**（`merge-base --is-ancestor` 退出码 0）⇒ 功能分支就建在 RC 线上，**无历史分叉** |
+| `main` 是否为祖先 | NO（预期） |
+| 相对封板 RC 的差异 | **56 个提交 / 66 个文件** |
+| 已审计 HEAD `73538175` 之后的提交 | **仅 1 个**：`1c4c2917`，且**只改 2 个文档文件**（`AI-ARCHITECT-INBOX.md`、本文档）⇒ **无功能代码搭车**（符合 CHANGE 1「不允许未经审计的功能变更搭车进入」） |
+
+**② 现有发布门禁工具（CHANGE 2 需要）**
+- `deploy/verify-release.mjs`（存在，9.4 KB）—— 严格门禁：manifest 可读且 `releaseCommit` 已锁定 → **git HEAD 必须等于 manifest.releaseCommit**（或满足 `sealingCommitPolicy.allowedPaths` 的"仅封装提交"后代）→ 工作树 clean →
+  当前分支不得在 `forbiddenDeploymentBranches` 中 → 产物入口存在 + API 构建/类型检查通过 → 部署合同/恢复类定向测试通过（`--skip-tests` / `--full` 可选）。
+- `deploy/release-manifest.json`（存在）当前锁的是**已封板 RC**：`releaseId = rc-20261008-linux-deploy-v1`、`releaseCommit = 04a936666ed8b3badd9ed498eca93b495285bd6e`。
+  ⇒ 因此候选分支**不能复用**该锚点（否则 verify-release 会失败，且审计明确"旧锚点 04a93666 的历史通过结果不得自动继承"）；
+  **必须为新候选生成新的 releaseId + 新的 releaseCommit**（**不改动封板分支上的那份 manifest**）。
+
+**③ CHANGE 1/2/3 执行计划（待授权后执行）**
+```
+# CHANGE 1：唯一合入目标（从已审计线创建候选分支；不触碰封板 RC / main）
+git -c safe.directory=D:/crossclaim-ai -C D:/crossclaim-ai branch release/rc-20261009-si-rsi-integration <audited-line-HEAD>
+# CHANGE 2：新锚点 + 重验（在候选分支上）
+#   ① 更新 deploy/release-manifest.json：releaseId / releaseCommit = 候选分支的最终提交（新锚点）
+#   ② node deploy/verify-release.mjs            # 期望 0（先在候选分支跑 --skip-tests，再跑全量）
+#   ③ fresh DB 迁移 / api tsc / web tsc / web build / 全量回归 / 部署清单 逐项复核
+# CHANGE 3：生产构建含已审计实现（隔离环境）
+#   ① 用**正式生产启动入口**构建（apps/api dist + web build）
+#   ② 隔离环境启动并核对：RSI_RECOVERY_PACK=PRODUCT_RECOVERY_SI、RSI_VERDICT_SETTLEMENT=RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT
+#   ③ 断言无第二 runtime / scheduler / controller / 状态机（runtimeMembers().secondRuntime = 0）
+#   ④ 不得以"源码存在 / 单测通过 / commit 已合并"替代生产构建验收
+```
+
+**④ 需要 HOST 授权/决定的事项（本 tick 未执行对外写操作）**
+1. **新建并推送候选分支**：本项目当前 HOST 指令限定「Git push 仅限当前功能分支」，而审计 CHANGE 1 要求"在**新的集成候选分支**实施合入" ⇒
+   请确认是否授权创建并推送候选分支（建议名 `release/rc-20261009-si-rsi-integration`，基线取已审计线；封板 RC 与 `main` 保持不动）。
+2. **新 releaseId**：候选需新的 `releaseId`（建议 `rc-20261009-si-rsi-integration-v1`）与新的 `releaseCommit`；请确认命名。
+3. 残留 schema `rc_c3_fresh_check` 是否删除（或改为让用例按 schema 过滤——**已完成**，故此项现在仅为清理卫生）。
+4. 3 个后台 `rsi-run` 进程是否停止/迁移（审计两次要求不得擅自终止）。
+5. **Linux 实机/ staging 环境**：`FAILURE_RECOVERY_LINUX` 的 L1–L6 必须在该环境完成（`PENDING_LINUX_VERIFICATION`）。
+
+**当前口径**：PHASE 3 = CLOSED（`MSG-20261009-05`）；`FAILURE_RECOVERY_LOCAL = PASS`、`FAILURE_RECOVERY_LINUX = NOT_VERIFIED`；
+发布集成审计 = **AUTHORIZED 但尚未执行**（等待上述第 1/2 项授权）；`PRODUCTION_READY = NO`；封板 RC 与 `main` 未修改。
