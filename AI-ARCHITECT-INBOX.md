@@ -161705,3 +161705,339 @@ SECOND_*                 = 0
 
 最终结论：CUSTOMS_CLAIM_READY_FAIL_CLOSED = PASS，AUDIT-1 这一条可以封板。
 ```
+
+### [MSG-20261008-04] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-2 独立审计（REVIEWED_HEAD fe3b0995）= PASS WITH REVISE（唯一 CHANGE：SYNTHETIC_5Y_E2E 尚未真正走 ONE SI Runtime composition；CHECKPOINT_RESUME / SOURCE_COVERAGE_HONESTY / NO_EXTERNAL_ACTION / NO_SECOND_RUNTIME = PASS）
+
+```text
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: fe3b0995816b13a3285bcc9d9a4d87a5d009d08d
+
+逐项裁决：
+
+纯文本
+SYNTHETIC_5Y_E2E        = REVISE
+CHECKPOINT_RESUME       = PASS
+SOURCE_COVERAGE_HONESTY = PASS
+NO_EXTERNAL_ACTION      = PASS
+NO_SECOND_RUNTIME       = PASS
+
+HISTORICAL_RECOVERY_SCAN_V1 · AUDIT-2
+= PASS WITH REVISE
+
+核心结论：这条测试已经是有效的“跨模块 5 年 synthetic integration E2E”，但还不能称为你原定义中的 PHASE 10「ONE SI Runtime E2E」。问题不是测试数据是 synthetic，而是实际 runtime composition 那一段仍没有走进去。
+
+CHECKPOINT_RESUME = PASS
+
+这部分是真实链路。
+
+测试实际调用：
+
+纯文本
+claimRecoveryScanRun()
+→ runHistoricalBackfill(maxPages=3)
+→ PARTIAL
+→ durable nextShardIndex / shardCursor
+→ 再次 runHistoricalBackfill()
+→ COMPLETED
+
+而 runHistoricalBackfill() 确实：
+
+从数据库重新加载 RecoveryScanRun；
+跳过 < nextShardIndex 的分片；
+从持久化 shardCursor 恢复；
+每个 page 完成 ingest 后才推进 checkpoint；
+测试还用 Set(fetchCalls).size === fetchCalls.length 验证没有分片重复处理。
+
+所以：
+
+CHECKPOINT_RESUME = PASS
+
+有个口径细节：第一次函数返回 PARTIAL，但数据库 scan status 此刻仍是 RUNNING，持久化的是 checkpoint，而不是 PARTIAL 状态本身。这不影响本项“断点续跑”结论。
+
+SOURCE_COVERAGE_HONESTY = PASS
+
+synthetic page port 明确上报：
+
+纯文本
+coverageFrom   = 2025-10-08
+coverageTo     = 2026-10-08
+coverageStatus = SOURCE_LIMITED
+
+runHistoricalBackfill() 再通过真实：
+
+纯文本
+setRecoveryScanCoverage()
+
+落库。
+
+最后 summary 从 durable row 读取，得到：
+
+纯文本
+requestedMonths = 60
+requestedFrom   = 2021-10-08
+coverage        = SOURCE_LIMITED
+scanCoverageIsFull = false
+COVERAGE_NOT_FULL = present
+
+没有拿请求的“五年”反推 FULL。
+
+所以：
+
+SOURCE_COVERAGE_HONESTY = PASS
+
+NO_EXTERNAL_ACTION = PASS
+
+这条 E2E 中：
+
+synthetic port 只返回记录；
+Customs 判断仍走 evaluateCustomsHistoricalBatch() → 既有 drawback chain；
+requestFiling=false；
+没有 provider transport；
+没有 filing adapter；
+没有 payment；
+summary 最终固定：
+纯文本
+claimsFiled           = 0
+filingPerformed       = false
+externalWritePerformed = false
+paymentPerformed      = false
+
+因此：
+
+NO_EXTERNAL_ACTION = PASS
+
+NO_SECOND_RUNTIME = PASS
+
+本轮 diff 实际只有：
+
+纯文本
+historical-scan-5y-e2e.test.ts
+historical-scan/index.ts export
+docs / audit archive
+
+没有新增 scheduler、controller、event loop 或 runtime。
+
+runHistoricalBackfill() 仍是一个领域执行器，不是新的 runtime：它没有自己的调度循环，也没有建立第二个 RSI/SI controller。
+
+所以：
+
+NO_SECOND_RUNTIME = PASS
+
+唯一 CHANGE：PHASE 10 还没有真正穿过 ONE SI Runtime
+
+这是当前唯一 blocker。
+
+测试自己的注释已经写明：
+
+纯文本
+queue admission 腿
+（plan → 既有队列 → ONE SI Runtime claim）
+由其他测试覆盖
+
+也就是说，这条所谓 E2E 实际是：
+
+纯文本
+Goal compiler
+→ validator
+→ 手工创建 AgentGoal
+→ resolveRecoveryWindow
+→ create RecoveryScanRun
+→ 直接 claimRecoveryScanRun
+→ 直接 loadScanScopeForClaimedTask
+→ 直接 runHistoricalBackfill
+→ Customs
+→ summary
+
+缺的正是：
+
+纯文本
+Goal/task
+→ existing queue
+→ composeRsiRuntime
+→ controller claim
+→ Recovery reserved mux
+→ product Recovery SI pack
+→ scanScope load
+→ historical backfill
+
+把几个独立测试都 PASS，不能等价成这一整条 E2E 已经跑过。
+
+更关键：product composition 目前实际上还没接 scanScope
+
+我核了：
+
+纯文本
+apps/api/src/runtime/recovery-si-product-composition.ts
+
+createProductRecoverySiPack() 当前只传：
+
+纯文本
+readPorts
+bind
+guard
+flags
+
+没有传：
+
+纯文本
+scanScope
+
+但 createRecoverySiPack() 对 historical scan task 明确要求：
+
+纯文本
+if (isRecoveryScanTask(task.dedupeKey)) {
+    if (!deps.scanScope)
+        return BLOCK(['RECOVERY_SCAN_SCOPE_LOADER_NOT_WIRED'])
+}
+
+所以当前真正 product runtime 路径是：
+
+纯文本
+historical recovery task
+→ ONE SI Runtime
+→ productRecoveryPack
+→ recovery-si-pack
+→ scanScope 未注入
+→ BLOCK: RECOVERY_SCAN_SCOPE_LOADER_NOT_WIRED
+
+而当前 5 年测试因为直接调用：
+
+纯文本
+loadScanScopeForClaimedTask()
+
+所以绕开了这个实际产品 wiring 缺口。
+
+这就是为什么：
+
+SYNTHETIC_5Y_E2E = REVISE
+
+不是数据 synthetic 的问题，而是没有穿过真正产品 composition root。
+
+CHANGE
+
+下一轮不需要重写当前 E2E，大部分都可以复用。
+
+只需要完成一个窄的 PHASE 10 FINAL：
+
+纯文本
+1. createProductRecoverySiPack()
+   增加 server-owned scanScope dependency
+
+2. product composition 内部把它接到
+   createRecoverySiPack({ scanScope })
+
+3. scanScope 实现调用既有
+   loadScanScopeForClaimedTask()
+   不新建第二 loader
+
+4. 新增一条真正 runtime synthetic E2E：
+   5 年 Goal / historical task
+   → existing queue
+   → composeRsiRuntime
+   → controller actual claim
+   → productRecoveryPack
+   → durable scanScope reload
+   → backfill
+   → customs
+   → summary
+
+并明确断言：
+
+纯文本
+actual ONE SI Runtime claimed task
+scanScope was invoked
+caller range ignored
+same durable scanId used
+checkpoint resume works
+SOURCE_LIMITED preserved
+external write = false
+
+另外至少补一个负向：
+
+纯文本
+product composition 未提供 scanScope
+→ historical task BLOCK
+→ 不启动 backfill
+
+已有 recovery-si-pack 单测已经证明 pack 本身会 BLOCK；这里需要证明生产 composition 已正确注入。
+
+一个次要 E2E 真实性问题
+
+当前 synthetic Customs record 是这样造的：
+
+纯文本
+historicalWindow: {
+  blocksClaimReady: false,
+  reasonCodes: ['FULL_COVERAGE']
+}
+
+但前面真实 resolveRecoveryWindow() 明明得到的是：
+
+纯文本
+coverage = SOURCE_LIMITED
+
+这不会导致当前 summary 撒谎，也不影响 CLAIM_READY 的 fail-closed，因为 blocksClaimReady=false 可以合理存在于 SOURCE_LIMITED 情况。
+
+但作为“完整模块链 E2E”，更干净的方式应该是直接把真实 window 结果传下去：
+
+纯文本
+historicalWindow: {
+  blocksClaimReady: window.blocksClaimReady,
+  reasonCodes: window.reasonCodes
+}
+
+而不是重新手写一个 gate fixture。
+
+建议 PHASE 10 FINAL 一并改掉，这样才能真正证明：
+
+纯文本
+resolveRecoveryWindow
+→ PHASE 8 consumes same server-owned gate
+
+而不是只证明两端各自工作。
+
+RISKS
+
+当前不是安全 BLOCK，因为真实 product runtime 在 scanScope 缺失时是 fail-closed BLOCK，不是错误放行。这也是为什么裁决是：
+
+PASS WITH REVISE，而不是 BLOCK。
+
+另外仍有三个既有口径：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+
+以及：
+
+纯文本
+SECOND_RUNTIME       = 0
+SECOND_SCHEDULER     = 0
+SECOND_GUARD         = 0
+SECOND_POLICY_ENGINE = 0
+
+全部 HOLD 不变。
+
+GitHub Actions 对 exact HEAD 仍：
+
+NOT_OBSERVED
+
+因此：
+
+纯文本
+historical-scan-5y-e2e = 1/1
+targeted               = 217/217
+api tsc                = 0
+
+仍是 local/Codex evidence。
+
+最终裁决
+
+当前可以准确描述为：
+
+5 年 historical scan 的核心模块链已经 E2E 跑通，durability / resume / coverage / Customs / summary 均成立；但 ONE SI Runtime 的真实产品 composition 尚未接入 scanScope，因此 PHASE 10 尚不能正式 CLOSED。
+
+把 productRecoveryPack.scanScope wiring + actual runtime claim E2E 接上后，再送一个 AUDIT-2R 窄复审即可。
+```

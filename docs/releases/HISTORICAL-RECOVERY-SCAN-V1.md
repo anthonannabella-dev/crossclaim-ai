@@ -271,3 +271,12 @@ claimRecoveryScanRun + loadScanScopeForClaimedTask（caller 自报范围被忽�
 * 待判：⑤SYNTHETIC_5Y_E2E 是否成立 ⑥分片/检查点与 crash-resume 语义 ⑦覆盖诚实（源仅 1 年不得 FULL）⑧零外部动作（filing/payment/externalWrite=false）
 * 裁决（等待中）：VERDICT = PENDING
 
+### 13.2 AUDIT-2 裁决（已归档）与待办 CHANGE
+
+* MSG-20261008-04：VERDICT = PASS WITH REVISE（REVIEWED_HEAD fe3b0995），FNV-1a 4368c0d / FULL_COPY_OK 227/227。
+* 逐项：CHECKPOINT_RESUME / SOURCE_COVERAGE_HONESTY / NO_EXTERNAL_ACTION / NO_SECOND_RUNTIME = PASS；
+  唯一 SYNTHETIC_5Y_E2E = REVISE —— 结论是「有效的跨模块 5 年 synthetic integration E2E，但**尚未真正进入 ONE SI Runtime composition**」，
+  即 PHASE 10 还需把 claim/runtime 那一段换成**真实 runtime 组合**（既有 composeRsiRuntime / domain pack 认领路径），而不是只串模块。
+* CHANGE（下一步实现）：PHASE 10 E2E 改为经**既有 ONE SI Runtime composition** 认领并投影（保持 SECOND_RUNTIME = 0、不新增执行路径），
+  再送 AUDIT-2 窄复审。
+
