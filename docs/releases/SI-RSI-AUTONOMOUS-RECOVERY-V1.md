@@ -124,7 +124,7 @@ PHASE0_API_TSC                 = 0
 
 | PHASE | 目标 | 状态 |
 | --- | --- | --- |
-| 1 | 客户任务自动执行闭环（动态消费 + durable 队列 + 租约/幂等/恢复） | **代码已实现 + 真实 PG 测试通过（见 §2.1）** |
+| 1 | 客户任务自动执行闭环（动态消费 + durable 队列 + 租约/幂等/恢复） | **CLOSED**（`MSG-20261008-17`：C1–C4/C6 PASS，C7 PASS_WITH_REVISE，PHASE1_CLOSED = PASS） |
 | 2 | API 故障自动诊断与恢复（11 类错误 + 有界重试/退避/升级） | NOT STARTED |
 | 3 | 业务错误自动重新规划（真实替代计划 + 独立验证 + 上限与留痕） | NOT STARTED |
 | 4 | 持续学习与策略优化（复用 Experience/Meta/Outcome/Canary） | NOT STARTED |
@@ -376,6 +376,41 @@ RELEASE_GATE=FAIL（2 项阻断）→ 必须停止部署
 > 备注：`gates.requiredTestFiles` 的变更作用于**开发分支**的 manifest；正式封板时会在新 RC 上重新锁定
 > `releaseCommit`（AUDIT-RC-3 发布审计时执行）。GitHub Actions 仍未观测（`NOT_OBSERVED`），
 > 因此「CI 命中」只在本机发布门禁范围内验证，不声称云端 CI 已绿。
+
+### 2.8 PHASE 1 独立审计结论（`MSG-20261008-17`）= **PHASE 1 CLOSED**
+
+审查锚点 `cd555f26`；会话 `https://chatgpt.com/c/6ac7a49a-012c-83ec-945b-3aa538c3d2e0`；
+逐字归档 `AI-ARCHITECT-INBOX.md`（**FULL_COPY_OK** 20/20，缺失 0 / 多出 0；sha256 `7263e0d4…`）。
+
+```
+REVIEWED_HEAD=cd555f26
+C1_ATOMIC_CLAIM_LEASE=PASS
+C2_LEASE_RECOVERY_FENCING=PASS
+C3_RETRY_DEADLETTER=PASS
+C4_AUTHORIZATION_REVOCATION=PASS
+C6_FAULT_MATRIX=PASS
+C7_RELEASE_WIRING_CI=PASS_WITH_REVISE
+PHASE1_CLOSED=PASS
+VERDICT=PASS_WITH_REVISE
+PHASE2_AUTHORIZED=YES_SAFE_SCOPE_ONLY
+PHASE2_C5_REQUIRED=YES
+P0_B_CLOSED=NO
+REAL_EXTERNAL_EXECUTION=NOT_EXECUTED
+PRODUCTION_READY=NO
+NEXT=Implement C5 Recovery Pack production wiring; close P0-B; test actual ONE SI Runtime E2E with real PostgreSQL …
+AUDIT_BASIS=CODEX_REPORTED_EVIDENCE_NOT_INDEPENDENTLY_EXECUTED
+```
+
+**要点**
+
+1. **PHASE 1 = CLOSED**（C1–C4/C6 全 PASS；C7 为 PASS_WITH_REVISE —— 见下方待收敛项）；
+2. `PHASE2_AUTHORIZED = YES_SAFE_SCOPE_ONLY`、`PHASE2_C5_REQUIRED = YES` ⇒ 授权进入 PHASE 2（仅安全范围）；
+3. `P0_B_CLOSED = NO` —— Recovery 生产装配尚未修复，符合预期（C5 未做）；
+4. `AUDIT_BASIS = CODEX_REPORTED_EVIDENCE_NOT_INDEPENDENTLY_EXECUTED` ⇒ 审计方明确声明**未独立执行**，
+   所有结论基于本方送审证据；因此**不得**表述为「已通过独立实测认证」；
+5. C7 的 REVISE 项（云端 CI 未观测、manifest 仅在开发分支增补）需在 PHASE 2 收口时一并处理。
+
+> PHASE 1 收口后 checkpoint：`phases['1'] = CLOSED`、`phases['2'] = IN_PROGRESS`、下一单元 `NEXT=C5`。
 
 ---
 

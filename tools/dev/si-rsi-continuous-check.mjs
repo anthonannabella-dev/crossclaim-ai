@@ -47,12 +47,11 @@ const DEFAULT_STATE = {
   lastResult: null,
   lastExitCode: null,
   openChanges: [
-    { id: 'AUDIT-P1', phase: 1, title: 'PHASE 1 独立审计（C1–C4/C6/C7）→ 争取 CLOSED', priority: 'P0', status: 'OPEN' },
     { id: 'C5', phase: 2, title: 'PHASE 2：Recovery pack 生产装配', priority: 'P0', status: 'OPEN' },
   ],
-  closedChanges: ['C1', 'C2', 'C3', 'C4', 'C6', 'C7'],
-  phases: { '1': 'IN_PROGRESS', '2': 'NOT_STARTED', '3': 'NOT_STARTED', '4': 'NOT_STARTED', '5': 'NOT_STARTED', '6': 'NOT_STARTED' },
-  lastAudit: { id: 'MSG-20261008-16', verdict: 'PASS WITH REVISE', reviewedHead: '51c1f18e' },
+  closedChanges: ['C1', 'C2', 'C3', 'C4', 'C6', 'C7', 'AUDIT-P1'],
+  phases: { '1': 'CLOSED', '2': 'IN_PROGRESS', '3': 'NOT_STARTED', '4': 'NOT_STARTED', '5': 'NOT_STARTED', '6': 'NOT_STARTED' },
+  lastAudit: { id: 'MSG-20261008-17', verdict: 'PASS_WITH_REVISE (PHASE1_CLOSED=PASS)', reviewedHead: 'cd555f26' },
 };
 
 const log = (line) => {
