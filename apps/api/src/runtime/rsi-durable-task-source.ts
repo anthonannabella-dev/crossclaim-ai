@@ -37,6 +37,15 @@ export interface RsiDurableTaskSource {
     ownerRef: string;
     outcome: 'COMPLETED' | 'BLOCKED';
   }): Promise<{ applied: boolean; reason: string }>;
+  /**
+   * C3（CHANGE 3）—— 失败与重试：fenced 记录失败码、attempts+1、按指数退避设置 nextAttemptAt；
+   * 达到 maxAttempts ⇒ 死信（DEAD_LETTER + deadLetteredAt）。仍受 owner+未过期租约保护。
+   */
+  fail(input: {
+    taskId: string;
+    ownerRef: string;
+    errorCode: string;
+  }): Promise<{ applied: boolean; reason: string; attempts?: number; deadLettered?: boolean; nextAttemptAt?: string | null }>;
   /** 该任务源使用的命名空间（可观测 / 断言用） */
   taskPrefix(): string;
 }
@@ -51,11 +60,21 @@ export function createAutonomyTaskSource(input: {
   taskPrefix?: string;
   /** 缺省 P2：`AutonomyTask` 目前没有 priority 列（已知限制，登记在 checkpoint） */
   priority?: RsiSafeTask['priority'];
+  /** C3：退避函数（毫秒）。缺省 = 指数退避（30s * 2^(n-1)，上限 30 分钟）+ 由 taskId 决定的有界抖动 */
+  backoffMs?: (attempt: number, taskId: string) => number;
 }): RsiDurableTaskSource {
   const now = (): Date => (input.now ?? (() => new Date()))();
   const leaseMs = input.leaseMs ?? DEFAULT_LEASE_MS;
   const taskPrefix = input.taskPrefix ?? RECOVERY_QUEUE_TASK_PREFIX;
   const priority = input.priority ?? 'P2';
+  const defaultBackoff = (attempt: number, taskId: string): number => {
+    const base = Math.min(30_000 * 2 ** Math.max(0, attempt - 1), 30 * 60 * 1000);
+    // 确定性抖动（0–10%）：跨 worker 不产生同一时刻的重试尖峰，同时保持可测
+    let h = 0;
+    for (let i = 0; i < taskId.length; i += 1) h = (h * 31 + taskId.charCodeAt(i)) % 1000;
+    return base + Math.floor((base * (h % 100)) / 1000);
+  };
+  const backoffMs = input.backoffMs ?? defaultBackoff;
 
   return {
     taskPrefix: () => taskPrefix,
@@ -63,7 +82,12 @@ export function createAutonomyTaskSource(input: {
       if (!Number.isInteger(limit) || limit <= 0) return [];
       const at = now();
       const candidates = await input.prisma.autonomyTask.findMany({
-        where: { status: 'READY', dedupeKey: { startsWith: taskPrefix } },
+        where: {
+          status: 'READY',
+          dedupeKey: { startsWith: taskPrefix },
+          // C3：退避门禁 —— 未到 nextAttemptAt 的任务不可被领取（避免无限立即重试）
+          OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: at } }],
+        },
         orderBy: [{ createdAt: 'asc' }],
         take: limit,
         select: { id: true, dedupeKey: true },
@@ -174,6 +198,49 @@ export function createAutonomyTaskSource(input: {
         return { applied: true, reason: 'SETTLED_' + request.outcome };
       });
     },
+
+    async fail(request) {
+      const at = now();
+      return input.prisma.$transaction(async (tx) => {
+        const lease = await tx.autonomyLease.findUnique({ where: { taskId: request.taskId } });
+        if (lease === null) return { applied: false, reason: 'LEASE_MISSING' };
+        if (lease.status !== 'ACTIVE') return { applied: false, reason: 'LEASE_NOT_ACTIVE' };
+        if (lease.ownerRef !== request.ownerRef) return { applied: false, reason: 'FENCED_OWNER_MISMATCH' };
+        if (lease.expiresAt.getTime() <= at.getTime()) return { applied: false, reason: 'FENCED_LEASE_EXPIRED' };
+
+        const task = await tx.autonomyTask.findUnique({ where: { id: request.taskId } });
+        if (task === null) return { applied: false, reason: 'TASK_MISSING' };
+        if (task.status !== 'IN_PROGRESS') return { applied: false, reason: 'TASK_STATE_CONFLICT' };
+
+        const released = await tx.autonomyLease.updateMany({
+          where: { id: lease.id, status: 'ACTIVE', ownerRef: request.ownerRef, expiresAt: { gt: at } },
+          data: { status: 'RELEASED', renewedAt: at },
+        });
+        if (released.count !== 1) return { applied: false, reason: 'FENCED_LEASE_RACE' };
+
+        const attempts = task.attempts + 1;
+        const deadLettered = attempts >= task.maxAttempts;
+        const nextAttemptAt = deadLettered ? null : new Date(at.getTime() + backoffMs(attempts, task.id));
+        const updatedTask = await tx.autonomyTask.updateMany({
+          where: { id: request.taskId, status: 'IN_PROGRESS' },
+          data: {
+            attempts,
+            lastErrorCode: request.errorCode,
+            status: deadLettered ? 'DEAD_LETTER' : 'READY',
+            nextAttemptAt,
+            deadLetteredAt: deadLettered ? at : null,
+          },
+        });
+        if (updatedTask.count !== 1) return { applied: false, reason: 'TASK_STATE_CONFLICT' };
+        return {
+          applied: true,
+          reason: deadLettered ? 'DEAD_LETTERED' : 'RETRY_SCHEDULED',
+          attempts,
+          deadLettered,
+          nextAttemptAt: nextAttemptAt === null ? null : nextAttemptAt.toISOString(),
+        };
+      });
+    },
   };
 }
 
@@ -187,6 +254,11 @@ export const RSI_DURABLE_TASK_SOURCE_BOUNDARY = {
   atomicClaimAndLeaseInOneTransaction: true,
   runningLeaseReclaimWithoutRestart: true,
   resultSubmissionFencedByOwnerAndUnexpiredLease: true,
+  retryWithExponentialBackoff: true,
+  backoffGateOnClaim: true,
+  maxAttemptsEnforcedByDbConstraint: 'AutonomyTask_attempts_chk',
+  deadLetterState: 'DEAD_LETTER (+ deadLetteredAt, DB-enforced by AutonomyTask_dead_letter_chk)',
+  defaultMaxAttempts: 3,
   leasePerClaim: true,
   crashRecoveryDelegatedTo: 'rsi-restart-reconcile（IN_PROGRESS → READY）',
   readsCredentials: false,

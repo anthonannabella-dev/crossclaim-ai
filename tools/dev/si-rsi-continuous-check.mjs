@@ -47,13 +47,12 @@ const DEFAULT_STATE = {
   lastResult: null,
   lastExitCode: null,
   openChanges: [
-    { id: 'C3', phase: 1, title: '完整生命周期：重试/退避/上限/死信/审计', priority: 'P0', status: 'OPEN' },
     { id: 'C4', phase: 1, title: '租户/账户/授权重解析与撤销拦截', priority: 'P0', status: 'OPEN' },
     { id: 'C6', phase: 1, title: '多 worker 故障注入矩阵', priority: 'P1', status: 'OPEN' },
     { id: 'C7', phase: 1, title: '发布配置与 CI 核验', priority: 'P1', status: 'OPEN' },
     { id: 'C5', phase: 2, title: 'PHASE 2：Recovery pack 生产装配', priority: 'P0', status: 'OPEN' },
   ],
-  closedChanges: ['C1', 'C2'],
+  closedChanges: ['C1', 'C2', 'C3'],
   phases: { '1': 'IN_PROGRESS', '2': 'NOT_STARTED', '3': 'NOT_STARTED', '4': 'NOT_STARTED', '5': 'NOT_STARTED', '6': 'NOT_STARTED' },
   lastAudit: { id: 'MSG-20261008-16', verdict: 'PASS WITH REVISE', reviewedHead: '51c1f18e' },
 };

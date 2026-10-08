@@ -234,7 +234,7 @@ NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
 | --- | --- | --- |
 | **C1** claim 与 lease **原子化**（P0） | **CLOSED** | `rsi-durable-task-source.claim()` 改为 `prisma.$transaction`：CAS(`READY→IN_PROGRESS`) 与 lease upsert 同事务，任一失败整体回滚 ⇒ 不会出现「IN_PROGRESS 但无有效租约」 |
 | **C2** 运行中租约恢复 + fencing（P0） | **CLOSED** | 新增 `reclaimExpired()`：对**已到期** ACTIVE 租约做 CAS(`ACTIVE+expiresAt<=now ⇒ EXPIRED`) 并把任务 CAS(`IN_PROGRESS ⇒ READY`)，**无需进程重启**；接入既有 tick（`adoptFromTaskSource` 先 reclaim 再 claim）。新增 `settle()`：只有「本 owner 且未过期 ACTIVE 租约」才允许落终态 ⇒ 旧 worker 迟到提交被 fence 拒绝 |
-| C3 完整生命周期/重试/死信（P0） | NOT CLOSED | 终态落库已实现（成功→`PROMOTED`、阻断→`BLOCKED`）；**重试、指数退避、最大次数、死信、审计记录尚未实现** |
+| C3 完整生命周期/重试/死信（P0） | **CLOSED** | 见 §2.4（Schema Delta + 退避门禁 + fence 保护的 `fail()` + 死信终态 + DB 层不变量） |
 | C4 租户/账户/授权与撤销拦截（P0） | NOT CLOSED | 尚未实现（执行前从可信事实重解析 + 撤销拦截） |
 | C6 多 worker 故障注入矩阵（P1） | PARTIAL | 已覆盖：并发领取、租约过期接管、旧 worker 迟到提交（fencing）、重复提交、事务失败（约束违反即整体失败）；未覆盖：跨租户/账户边界矩阵 |
 | C7 发布配置与 CI（P1） | PARTIAL | API 与 RSI 已共用同一 durable 源；JSON 仅显式 legacy 回退；CI 命中未验证（GitHub Actions = NOT_OBSERVED） |
@@ -257,6 +257,40 @@ NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
 
 > 当前口径：**C1 / C2 = CLOSED（CODE_IMPLEMENTED + TEST_VERIFIED）**；
 > **PHASE 1 整体仍 NOT CLOSED**（C3/C4/C6/C7 未关闭，C5 属 PHASE 2）。
+
+### 2.4 C3 —— 完整生命周期（重试 / 退避 / 上限 / 死信）已关闭
+
+**Schema Delta（独立迁移，fresh schema 从零验证通过）**
+
+迁移 `apps/api/prisma/migrations/20261008140000_autonomy_task_retry_lifecycle/migration.sql`：
+
+| 变更 | 内容 |
+| --- | --- |
+| 新增列 | `attempts`(默认 0) / `maxAttempts`(默认 3) / `nextAttemptAt` / `lastErrorCode` / `deadLetteredAt` |
+| 新增索引 | `AutonomyTask(status, nextAttemptAt)` —— 退避门禁的领取过滤 |
+| 新增约束 | `AutonomyTask_attempts_chk`（`attempts>=0 && maxAttempts>=1 && attempts<=maxAttempts`） |
+| 新增约束 | `AutonomyTask_dead_letter_chk`（`(status='DEAD_LETTER') = (deadLetteredAt IS NOT NULL)`） |
+| 扩展词表 | `AutonomyTask_status_chk` 增加 `DEAD_LETTER`（原有取值全部保留） |
+
+**实现**
+
+- `claim()` 增加**退避门禁**：`OR [{nextAttemptAt: null}, {nextAttemptAt <= now}]` ⇒ 未到重试时间的任务不可被领取（杜绝无限立即重试）；
+- 新增 `fail({taskId, ownerRef, errorCode})`：**fenced**（要求本 owner + 未过期 ACTIVE 租约）⇒ 释放租约、`attempts+1`、写 `lastErrorCode`；未达上限 ⇒ `READY` + `nextAttemptAt = now + backoff(attempts)`；达上限 ⇒ `DEAD_LETTER` + `deadLetteredAt`；
+- 默认退避 = 指数（30s × 2^(n-1)，上限 30 分钟）+ 由 `taskId` 决定的**确定性抖动**（0–10%，跨 worker 不产生重试尖峰且可测）；
+- 成功仍走 `settle()` ⇒ `PROMOTED` + 租约 `RELEASED`（未改动）。
+
+**验收（`si-rsi-phase1-retry-lifecycle.test.ts`，真实 PostgreSQL 5/5 PASS）**
+
+| 用例 | 断言 |
+| --- | --- |
+| C3-1 | 失败一次：`attempts=1`、`lastErrorCode` 落库、状态回 `READY`、`nextAttemptAt` 正确；退避期内不可领取、到期后可领取 |
+| C3-2 | 连续 3 次失败（每轮须越过退避窗口）⇒ 第 3 次 `DEAD_LETTER` + `deadLetteredAt`，此后任何时刻都不可再领取 |
+| C3-3 | 旧 worker 迟到 `fail()` 被 fence 拒绝（`FENCED_OWNER_MISMATCH`），`attempts`/状态均未被改动 |
+| C3-4 | 成功终态不受影响：`settle(COMPLETED)` ⇒ `PROMOTED` + 租约 `RELEASED` |
+| C3-5 | DB 层不变量生效：`attempts>maxAttempts` 与「死信无时间戳」均被约束拒绝 |
+
+回归：C3 + PHASE1 全部 + 既有持久化契约 = **25/25**；Schema/架构/治理契约 = **256/256**；api tsc **0**；
+`prisma validate` valid；迁移已在开发库与**全新 schema（从零应用全部迁移）**成功。
 
 ---
 

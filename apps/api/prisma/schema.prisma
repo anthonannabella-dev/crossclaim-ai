@@ -3286,6 +3286,12 @@ model AutonomyTask {
   riskClass         String
   ownerGateRequired Boolean  @default(false)
   dedupeKey         String
+  /// PHASE 1 / C3：完整生命周期（重试 / 退避 / 上限 / 死信）
+  attempts          Int      @default(0)
+  maxAttempts       Int      @default(3)
+  nextAttemptAt     DateTime?
+  lastErrorCode     String?
+  deadLetteredAt    DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -3296,6 +3302,7 @@ model AutonomyTask {
   @@unique([dedupeKey])
   @@index([incidentId, status])
   @@index([status, createdAt])
+  @@index([status, nextAttemptAt])
 }
 
 model AutonomyCandidate {
