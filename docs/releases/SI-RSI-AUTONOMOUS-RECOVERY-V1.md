@@ -1061,3 +1061,36 @@ ENUMS_BY_SCHEMA = public: 73 个枚举；rc_c3_fresh_check: 73 个枚举
 **仍未验证（不得默认为已解决）**：本轮**未**重跑全量 480 文件回归 ⇒ `FULL_API_REGRESSION` 口径仍为
 `COMPLETED_WITH_4_FAILURES`；P2E-DB5 与 `claim-items-db` 双债的「全量下关闭」需由下一次全量跑确认。
 `reconciliation-schema-s1-db` 的 schema 漂移（残留 `rc_c3_fresh_check`）与三个后台 `rsi-run` 进程仍待 HOST 决定。
+
+### 3.20 第二次全量 API 回归 —— 双债关闭已确认（`FULL_API_REGRESSION` 收敛到 2 项）
+
+```
+node tools/dev/run-si-rsi-suite.mjs --rounds 1 --all --label full-api-2x     # head 8fc058db，工作树 clean
+```
+
+| 指标 | 第一次（`69af211f` 之前） | 第二次（`8fc058db`） |
+| --- | --- | --- |
+| 测试文件 | 480：477 passed / **3 failed** | 480：478 passed / **2 failed** |
+| 测试用例 | 4800：4796 passed / **4 failed** | 4800：4798 passed / **2 failed** |
+| 耗时 | 1462.67 s | 1514.34 s |
+| 失败清单 | P2E-DB5、reconciliation-schema-s1、claim-items-db（×2） | reconciliation-schema-s1、email-verification-db |
+
+**双债关闭已在全量下确认（本轮的主要目的）**
+- `src/__tests__/recovery-si-phase2-e-db.test.ts` → **✓ 20 tests（含 P2E-DB5）**
+- `src/__tests__/claim-items-db.test.ts` → **✓ 7 tests**
+
+**剩余 2 项失败（均已定位分类，均未在本轮擅自处置）**
+1. `src/__tests__/reconciliation-schema-s1-db.test.ts` → `R45 S1 · 结构 > 七个枚举全部存在`
+   —— **确定性环境漂移**：开发库残留 schema `rc_c3_fresh_check` 与 `public` 各持同一套 73 个枚举，而该用例按 `typname` 查 `pg_type` 未按 schema 过滤。
+   **两次全量均失败、单跑亦失败**。处置需 HOST 决定（删除残留 schema，或让用例按 `current_schema()` 过滤）。
+2. `src/__tests__/email-verification-db.test.ts` → `PC-01B F：forgot-password 不暴露存在性…`
+   —— **间歇性**：第一次全量**通过**、第二次全量失败（用例耗时 10.0s，疑似时序/限流敏感）；**单文件隔离复跑 8/8 通过**。
+   登记为**新增间歇性测试债**；本轮**未**修改该用例（不靠盲改掩盖 flaky）。
+
+**证据冻存**
+- `tools/verification/si-rsi-suite-runs/full-api-2x.json`（含失败分类、与第一次的对比、重放命令）
+- 原始日志：`tools/dev/logs/si-rsi-suite/full-api-2x-round1.log`（运行时产物，已 gitignore）
+
+**口径**：`FULL_API_REGRESSION = COMPLETED（480/480 文件已执行；478 通过）`；
+阻塞项收敛为 **1 个环境漂移（待 HOST）+ 1 个间歇性用例债**；`PRODUCTION_READY = NO` 不变，
+外写 / 申报 / 支付 / 扣佣继续 HOLD。
