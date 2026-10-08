@@ -21,6 +21,7 @@
  *   --label <name>   本次取证的标签（默认 si-rsi）
  *   --per-file       每个测试文件单独进程运行（强隔离模式，用于定位偶发失败）
  *   --files a,b,c    显式指定测试文件（相对 apps/api），默认自动发现 src/__tests__/si-rsi-*.test.ts
+ *   --all            递归发现**全部**测试文件（src/**\/*.test.ts）—— 用于「全量 API 回归」取证
  *
  * 产物（`tools/dev/logs/` 已在 .gitignore 中，属运行时产物）：
  *   tools/dev/logs/si-rsi-suite/<label>-round<N>.log        每轮完整原始日志
@@ -28,7 +29,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -36,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const parseArgs = (argv) => {
-  const args = { rounds: 5, label: 'si-rsi', perFile: false, files: null, root: path.resolve(SCRIPT_DIR, '../..') };
+  const args = { rounds: 5, label: 'si-rsi', perFile: false, all: false, files: null, root: path.resolve(SCRIPT_DIR, '../..') };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--rounds') args.rounds = Number(argv[++i]);
@@ -44,6 +45,7 @@ const parseArgs = (argv) => {
     else if (token === '--root') args.root = path.resolve(String(argv[++i]));
     else if (token === '--files') args.files = String(argv[++i]).split(',').map((s) => s.trim()).filter((s) => s !== '');
     else if (token === '--per-file') args.perFile = true;
+    else if (token === '--all') args.all = true;
     else if (token === '--help' || token === '-h') {
       process.stdout.write(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(0, 30).join('\n'));
       process.exit(0);
@@ -100,6 +102,21 @@ const discoverFiles = (apiDir) => {
     .map((name) => `src/__tests__/${name}`);
 };
 
+/** `--all`：递归发现全部测试文件（用于「全量 API 回归」取证） */
+const discoverAllFiles = (apiDir) => {
+  const rootDir = path.join(apiDir, 'src');
+  const found = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.test.ts')) found.push(path.relative(apiDir, full).replace(/\\/g, '/'));
+    }
+  };
+  walk(rootDir);
+  return found.sort();
+};
+
 /** 从原始日志中提取「失败用例名 + 堆栈片段」（完整日志另有落盘） */
 const extractFailures = (log) => {
   const failedTestNames = [];
@@ -132,14 +149,23 @@ const runVitest = (apiDir, files, logPath) => {
   const vitestBin = path.join(apiDir, 'node_modules/vitest/vitest.mjs');
   if (!existsSync(vitestBin)) throw new Error(`vitest 未安装: ${vitestBin}`);
   const startedAt = new Date();
-  const result = spawnSync(process.execPath, [vitestBin, 'run', ...files], {
-    cwd: apiDir,
-    encoding: 'utf8',
-    maxBuffer: 128 * 1024 * 1024,
-    env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },
-  });
+  /**
+   * 日志**直接写文件描述符**（而不是等进程结束后再落盘）：
+   * 长跑（如全量 480 文件回归）期间可以 tail 日志观察进度，避免「跑了几十分钟不知卡在哪」。
+   */
+  const fd = openSync(logPath, 'w');
+  let result;
+  try {
+    result = spawnSync(process.execPath, [vitestBin, 'run', ...files], {
+      cwd: apiDir,
+      stdio: ['ignore', fd, fd],
+      env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' },
+    });
+  } finally {
+    closeSync(fd);
+  }
   const durationMs = Date.now() - startedAt.getTime();
-  const raw = stripAnsi(`${result.stdout ?? ''}${result.stderr ?? ''}`);
+  const raw = stripAnsi(readFileSync(logPath, 'utf8'));
   writeFileSync(logPath, raw, 'utf8');
   return { exitCode: result.status ?? 1, durationMs, log: raw, startedAt };
 };
@@ -150,7 +176,7 @@ const main = () => {
   const apiDir = path.join(root, 'apps/api');
   if (!existsSync(apiDir)) throw new Error(`apps/api 不存在: ${apiDir}`);
 
-  const files = args.files ?? discoverFiles(apiDir);
+  const files = args.files ?? (args.all ? discoverAllFiles(apiDir) : discoverFiles(apiDir));
   const logsDir = path.join(root, 'tools/dev/logs/si-rsi-suite');
   mkdirSync(logsDir, { recursive: true });
 
@@ -189,6 +215,9 @@ const main = () => {
               testsLine: summaryLines(one.log).testsLine,
               failedTestNames: extractFailures(one.log).failedTestNames,
             });
+            process.stdout.write(
+              `[si-rsi-suite]   file=${file} exit=${one.exitCode} ${summaryLines(one.log).testsLine ?? ''}\n`,
+            );
             exitCode = exitCode === 0 && one.exitCode !== 0 ? one.exitCode : exitCode;
             durationMs += one.durationMs;
             parts.push(`#### FILE ${file} exit=${one.exitCode}\n${one.log}`);

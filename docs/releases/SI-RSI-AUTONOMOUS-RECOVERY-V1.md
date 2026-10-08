@@ -960,3 +960,67 @@ PRODUCTION_ENABLEMENT = HOLD
 
 **本 tick 结论**：PHASE 2 = **CLOSED**（范围内验收通过）；`PRODUCTION_READY = NO` 不变；
 下一步 = PHASE 3 的**本机可执行子集**（先取得全量 API 回归结果），Linux 实机 / staging / 真实 Provider 属 HOST_ACTION_REQUIRED。
+
+### 3.18 PHASE 3 子集 ③ —— 全量 API 回归**已取得结果**（FULL_API_REGRESSION：完成，4 项失败已定位分类）
+
+审计方在 `MSG-20261009-01` 把 `FULL_API_REGRESSION` 标为 **NOT_VERIFIED**。本轮把它跑完并做了失败定位。
+
+**取证器增强（本 tick 提交）**：`tools/dev/run-si-rsi-suite.mjs`
+- 新增 `--all`：递归发现 `src/**/*.test.ts`（本次 480 个文件）；
+- 日志改为**直接写文件描述符**（而不是进程结束后一次性落盘）⇒ 长跑期间可 `tail` 观察进度，
+  不再出现「跑了几十分钟不知卡在哪」；`--per-file` 模式逐文件打印结果行。
+- 性质不变：**一次性**工具，无定时器 / 无守护进程 / 无服务端；失败不自动重试（不掩盖 flaky）。
+
+**命令与结果**
+```
+node tools/dev/run-si-rsi-suite.mjs --rounds 1 --all --label full-api-1x
+```
+| 指标 | 结果 |
+| --- | --- |
+| 测试文件 | **480**：**477 passed / 3 failed** |
+| 测试用例 | **4800**：**4796 passed / 4 failed** |
+| 耗时 | **1462.67 s（≈24.4 分钟）**（transform 6.38s / collect 70.89s / tests 1272.11s） |
+| 被测产品代码 | `056e5327`（工作树 dirty=true —— **唯一**未提交改动是取证器本身，非产品代码） |
+| 数据库标记 | `127.0.0.1:55432/crossclaim` |
+| 原始日志 | `tools/dev/logs/si-rsi-suite/full-api-1x-round1.log`（运行时产物，已 gitignore） |
+| 冻存证据 | `tools/verification/si-rsi-suite-runs/full-api-1x.json` |
+
+**4 项失败用例（逐字）**
+1. `recovery-si-phase2-e-db.test.ts` → `P2E-DB5 真实 gate=ALLOW → 六单元在同一事务落库（JSON+PDF）…`
+2. `reconciliation-schema-s1-db.test.ts` → `R45 S1 · 结构（七表 / 七枚举 / 触发器覆盖）> 七个枚举全部存在`
+3. `claim-items-db.test.ts` → `C-0011 … platformRef 为空：允许创建两条…告警`
+4. `claim-items-db.test.ts` → `C-0011 … 状态机 + caseId 不变量 + 关闭原因，并且审计带 from/to/…`
+
+**失败定位（单文件隔离复跑，CHANGE 4A 的纪律）**
+```
+node apps/api/node_modules/vitest/vitest.mjs run \
+  src/__tests__/recovery-si-phase2-e-db.test.ts \
+  src/__tests__/reconciliation-schema-s1-db.test.ts \
+  src/__tests__/claim-items-db.test.ts        # cwd = apps/api
+→ Test Files 1 failed | 2 passed (3)；Tests 1 failed | 53 passed (54)
+```
+| 文件 | 隔离复跑 | 结论 |
+| --- | --- | --- |
+| `recovery-si-phase2-e-db.test.ts`（P2E-DB5） | **PASS** | **已知测试隔离债**（`MSG-20261008-14` 早已登记），全量并发/共享库下暴露 |
+| `claim-items-db.test.ts` | **PASS** | 同类隔离/时序债（10.0s + 3.3s 长耗时用例） |
+| `reconciliation-schema-s1-db.test.ts` | **FAIL（确定性）** | **真实环境漂移**，见下 |
+
+**确定性失败的根因（可复现证据，只读查询）**
+```
+SELECT n.nspname AS schema, t.typname AS name
+FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+WHERE t.typtype = 'e' AND t.typname IN
+  ('ReconciliationProjectionStatus','ReimbursementFactKind','ReimbursementSourceKind');
+→ public ×3 + rc_c3_fresh_check ×3（同一名字各出现两次）
+ENUMS_BY_SCHEMA = public: 73 个枚举；rc_c3_fresh_check: 73 个枚举
+```
+开发库中残留了历史 schema **`rc_c3_fresh_check`**（与 `public` 各持同一整套枚举）；该用例按 `typname` 查询 `pg_type`
+**未按 schema 过滤** ⇒ 每个枚举命中两行 ⇒ 集合相等断言失败。
+**与本轮 PHASE 2 改动无关**：本工作流**未改 Prisma schema、未加迁移**，且该用例不在受影响路径上。
+
+**处置（不擅自做破坏性操作）**：`DROP SCHEMA rc_c3_fresh_check CASCADE` 属破坏性且可能是他人验证资产 ⇒ **未执行**；
+建议二选一（待 HOST 决定）：① 在 dev 库删除该残留 schema；② 让该用例按 `current_schema()` / `pg_namespace` 过滤后再比较。
+两项均**未**在本 tick 执行，登记为 PHASE 3「环境隔离」步骤的输入。
+
+**口径更新**：`FULL_API_REGRESSION = COMPLETED_WITH_4_FAILURES（3 文件；2 文件隔离复跑通过 = 隔离债，1 文件确定性失败 = 开发库 schema 漂移）`；
+**仍不得**据此宣称「全量绿」；`PRODUCTION_READY = NO` 不变。
