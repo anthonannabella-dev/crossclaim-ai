@@ -49,6 +49,9 @@ import RecoveryHeadlineCards from '../app/components/ui/recovery-headline-cards'
 import ActiveRecovery from '../app/components/ui/active-recovery';
 import zhCN from '../i18n/dictionaries/zh-CN';
 import { buildAgentRunView } from '../app/lib/agent-run-view';
+import HistoricalScanView, {
+  type HistoricalScanSummaryView,
+} from '../app/recoveries/scans/[id]/historical-scan-view';
 import {
   connectedGoalSignals,
   isBroadGoalIntent,
@@ -891,6 +894,67 @@ const connWordingHtml = render(
 check('final2.conn.rendered.reauth.once', connWordingHtml.split(zhCN.connectionsPage.summaryNeedsReauth).length - 1 === 1);
 check('final2.conn.rendered.error.copy', connWordingHtml.includes(zhCN.connectionsPage.summaryError));
 check('final2.conn.rendered.unknown.copy', connWordingHtml.includes(zhCN.connectionsPage.summaryUnknown));
+// HISTORICAL_RECOVERY_SCAN_V1 / UI_RESULT_VIEW：客户可见结果页（只读、覆盖诚实、无跨币种/无"已提交"）
+const scanSummaryFixture: HistoricalScanSummaryView = {
+  scanId: 'scan-1',
+  status: 'COMPLETED',
+  requestedFrom: '2021-10-08',
+  requestedTo: '2026-10-08',
+  requestedMonths: 60,
+  effectiveFrom: '2025-10-08',
+  effectiveTo: '2026-10-08',
+  coverageFrom: '2025-10-08',
+  coverageTo: '2026-10-08',
+  coverage: 'SOURCE_LIMITED',
+  effectiveRangeClamped: true,
+  shardsTotal: 60,
+  shardsCompleted: 12,
+  recordsScanned: 18392,
+  opportunitiesFound: 217,
+  eligibleFound: 84,
+  needsEvidenceFound: 61,
+  expiredFound: 72,
+  completedAt: '2026-10-08T00:00:00.000Z',
+  disclaimerCodes: ['COVERAGE_NOT_FULL', 'SCAN_IS_DISCOVERY_NOT_FILING'],
+};
+const scanHtml = render(<HistoricalScanView summary={scanSummaryFixture} labels={zhCN.historicalScan} />);
+check('scan.view.title', scanHtml.includes(zhCN.historicalScan.title));
+check('scan.view.requested.range', scanHtml.includes('2021-10-08') && scanHtml.includes('2026-10-08'));
+check('scan.view.actual.coverage', scanHtml.includes('2025-10-08') && scanHtml.includes(zhCN.historicalScan.coverageSourceLimited));
+check('scan.view.counters', scanHtml.includes('18392') && scanHtml.includes('217') && scanHtml.includes('84') && scanHtml.includes('61') && scanHtml.includes('72'));
+check('scan.view.progress', scanHtml.includes('12 / 60'));
+check('scan.view.not.full.notice', scanHtml.includes(zhCN.historicalScan.notFullNotice));
+check('scan.view.boundary.note', scanHtml.includes(zhCN.historicalScan.boundaryNote));
+check('scan.view.no.filed.claim', !/已申报|已提交|filed|已到账|recovered/i.test(scanHtml));
+check('scan.view.no.raw.enum', !/PLATFORM|LOGISTICS|INDEPENDENT_SITE/.test(scanHtml));
+check(
+  'scan.view.empty.state',
+  render(<HistoricalScanView summary={null} labels={zhCN.historicalScan} />).includes(zhCN.historicalScan.empty),
+);
+check(
+  'scan.view.full.coverage.no.notice',
+  !render(
+    <HistoricalScanView
+      summary={{
+        ...scanSummaryFixture,
+        coverage: 'FULL',
+        coverageFrom: '2021-01-01',
+        coverageTo: '2026-12-31',
+      }}
+      labels={zhCN.historicalScan}
+    />,
+  ).includes(zhCN.historicalScan.notFullNotice),
+);
+check(
+  'scan.view.i18n.parity',
+  [zhCN, enUS, ja, es, de].every(
+    (dictionary) =>
+      dictionary.historicalScan.title.length > 0 &&
+      dictionary.historicalScan.notFullNotice.length > 0 &&
+      dictionary.historicalScan.boundaryNote.length > 0,
+  ),
+);
+
 check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
 
 // AGENT EXPERIENCE LAYER / P9：按需授权（目标等待授权 → Needs Your Attention → 去授权后继续原目标）
