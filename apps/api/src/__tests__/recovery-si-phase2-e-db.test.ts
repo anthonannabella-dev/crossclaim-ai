@@ -478,15 +478,25 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
     ]);
     expect(await prisma.auditLog.count({ where: { id: payload.auditLog.id! } })).toBe(1);
 
-    // P2E-06：零外写 —— 八类业务事实一律为 0
-    expect(await prisma.claim.count()).toBe(0);
-    expect(await prisma.platformWriteAttempt.count()).toBe(0);
-    expect(await prisma.customsSubmissionAttempt.count()).toBe(0);
-    expect(await prisma.recoveryManualSubmission.count()).toBe(0);
-    expect(await prisma.payment.count()).toBe(0);
-    expect(await prisma.settlement.count()).toBe(0);
-    expect(await prisma.recoveryLedgerEntry.count()).toBe(0);
-    expect(await prisma.billingInvoice.count()).toBe(0);
+    /**
+     * P2E-06：零外写 —— **本用例租户内**八类业务事实一律为 0。
+     *
+     * P2E-DB5 隔离债修复（审计 MSG-20261008-14 / MSG-20261009-01 均登记）：
+     * 原断言使用**全表计数**，任何其他测试文件（或本机后台 rsi-run 进程）在同一开发库留下的行
+     * 都会让本用例偶发失败 —— 全量回归（480 文件）实测失败，单文件隔离运行通过，即为该债。
+     * 改为按本用例租户过滤后，语义仍是「本次持久化不得产生外部业务事实」，
+     * 但不再依赖「别的文件是否清理干净」。**这是收窄作用域、不是放宽判据**：
+     * 本租户内一旦出现任一外部业务事实，本断言仍然失败。
+     */
+    const zeroScope = { organizationId: orgA.organizationId } as const;
+    expect(await prisma.claim.count({ where: zeroScope })).toBe(0);
+    expect(await prisma.platformWriteAttempt.count({ where: zeroScope })).toBe(0);
+    expect(await prisma.customsSubmissionAttempt.count({ where: zeroScope })).toBe(0);
+    expect(await prisma.recoveryManualSubmission.count({ where: zeroScope })).toBe(0);
+    expect(await prisma.payment.count({ where: zeroScope })).toBe(0);
+    expect(await prisma.settlement.count({ where: zeroScope })).toBe(0);
+    expect(await prisma.recoveryLedgerEntry.count({ where: zeroScope })).toBe(0);
+    expect(await prisma.billingInvoice.count({ where: zeroScope })).toBe(0);
   });
 
   it('P2E-DB6 任一单元失败 → 整笔回滚（无孤儿 package / fileAsset / artifact / audit）', async () => {

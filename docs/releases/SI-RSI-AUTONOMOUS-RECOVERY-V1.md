@@ -1024,3 +1024,40 @@ ENUMS_BY_SCHEMA = public: 73 个枚举；rc_c3_fresh_check: 73 个枚举
 
 **口径更新**：`FULL_API_REGRESSION = COMPLETED_WITH_4_FAILURES（3 文件；2 文件隔离复跑通过 = 隔离债，1 文件确定性失败 = 开发库 schema 漂移）`；
 **仍不得**据此宣称「全量绿」；`PRODUCTION_READY = NO` 不变。
+
+### 3.19 P2E-DB5 隔离债 —— 根因定位并已修复（登记自 `MSG-20261008-14`）
+
+**症状**：全量回归（480 文件）中 `recovery-si-phase2-e-db.test.ts` 的 **P2E-DB5** 失败，断言输出 `expected 1 to be +0`；
+**单文件隔离运行却通过** ⇒ 判定为跨文件/环境隔离债（非确定性回归）。
+
+**根因（只读探针证明，非推测）**
+1. P2E-DB5 的「零外写」八条断言当时使用**全表计数**（`prisma.settlement.count()` 等，无 where）；
+2. 同库其它测试文件跑完**会残留业务行**：
+
+| 污染源文件 | 残留 | 原因 |
+| --- | --- | --- |
+| `src/__tests__/claim-items-db.test.ts` | `Settlement` **1 行** | 只在 `beforeEach` TRUNCATE，文件结束时最后一个用例的行保留 |
+| `src/__tests__/action-guard-payment-capture-http-db.test.ts` | `BillingInvoice` **1 行** | 同上 |
+
+   探针实测（`node work/probe-business-rows.mjs`，8 张业务表全表计数）：
+   单独跑 `claim-items-db` 后 `Settlement=1`；单独跑 `payment-capture` 后 `BillingInvoice=1`；
+   跑 `billing-draft` / `claim-prepare` 后全 0（这两个文件会顺带清库）。
+   ⇒ 这条链正好解释了全量回归里那条 `expected 1 to be +0`。
+
+**修复（两层，均不改变安全判据）**
+- **P2E-DB5 断言收窄作用域**：`recovery-si-phase2-e-db.test.ts` 的八条零外写断言改为按**本用例租户**过滤
+  （`organizationId: orgA.organizationId`）。语义仍是「本次持久化不得产生外部业务事实」——**本租户内**出现任一外部业务事实仍然失败；
+  只是不再因**别的租户/别的文件**留下的行而误判。
+- **上游清理**：两个污染源文件的 `afterAll` 各补一次与 `beforeEach` **完全相同**的 TRUNCATE，使文件结束时不再把行留给同库其它测试。
+
+**验证**
+| 项 | 结果 |
+| --- | --- |
+| `api tsc --noEmit` | **0** |
+| 定向组合（claim-items + payment-capture + billing-draft + phase2-e） | **Test Files 4 passed / Tests 64 passed** |
+| 修复后探针 | `GLOBAL_BUSINESS_ROWS` **全 0**（不再残留） |
+| 冻存证据 | `tools/verification/si-rsi-suite-runs/p2e-db5-isolation.json` |
+
+**仍未验证（不得默认为已解决）**：本轮**未**重跑全量 480 文件回归 ⇒ `FULL_API_REGRESSION` 口径仍为
+`COMPLETED_WITH_4_FAILURES`；P2E-DB5 与 `claim-items-db` 双债的「全量下关闭」需由下一次全量跑确认。
+`reconciliation-schema-s1-db` 的 schema 漂移（残留 `rc_c3_fresh_check`）与三个后台 `rsi-run` 进程仍待 HOST 决定。

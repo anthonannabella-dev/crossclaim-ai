@@ -1,0 +1,49 @@
+{
+  "id": "P2E-DB5-ISOLATION-FIX",
+  "fixedAtHead": "69af211f（改动前）",
+  "registeredDebts": [
+    "MSG-20261008-14 登记：P2E-DB5 与 broker hook 超时继续算未关闭的测试债",
+    "MSG-20261009-01 审计限制项：全量 API 测试未完成"
+  ],
+  "symptom": {
+    "fullRun": "FULL_API_REGRESSION 480 文件：recovery-si-phase2-e-db.test.ts 的 P2E-DB5 失败，断言输出「expected 1 to be +0」",
+    "isolatedRun": "单文件隔离运行通过 ⇒ 判定为跨文件/环境隔离债"
+  },
+  "rootCause": {
+    "statement": "P2E-DB5 的「零外写」断言使用**全表计数**；同库其它测试文件跑完残留业务行 ⇒ 断言被无关数据污染",
+    "polluters": [
+      {
+        "file": "src/__tests__/claim-items-db.test.ts",
+        "leaves": "Settlement 1 行",
+        "why": "只在 beforeEach TRUNCATE，文件结束时最后一个用例的行保留"
+      },
+      {
+        "file": "src/__tests__/action-guard-payment-capture-http-db.test.ts",
+        "leaves": "BillingInvoice 1 行",
+        "why": "同上"
+      }
+    ],
+    "probe": {
+      "tool": "只读探针（8 张业务表全表计数）",
+      "command": "node work/probe-business-rows.mjs（cwd=apps/api）",
+      "observed": "单独跑 claim-items-db 后 Settlement=1；单独跑 payment-capture 后 BillingInvoice=1；跑 billing-draft / claim-prepare 后全 0（它们会顺带清库）"
+    }
+  },
+  "fix": {
+    "p2eDb5": "src/__tests__/recovery-si-phase2-e-db.test.ts：8 条零外写断言改为**按本用例租户过滤**（organizationId=orgA），语义不变——本租户内出现任一外部业务事实仍失败；这是收窄作用域，不是放宽判据",
+    "upstream": [
+      "src/__tests__/claim-items-db.test.ts：afterAll 补一次与 beforeEach 相同的 TRUNCATE",
+      "src/__tests__/action-guard-payment-capture-http-db.test.ts：afterAll 补一次与 beforeEach 相同的 TRUNCATE"
+    ]
+  },
+  "verification": {
+    "typecheck": "api tsc --noEmit = 0",
+    "targetedCombination": {
+      "command": "vitest run claim-items-db + action-guard-payment-capture-http-db + action-guard-billing-draft-http-db + recovery-si-phase2-e-db",
+      "result": "Test Files 4 passed / Tests 64 passed"
+    },
+    "postRunProbe": "GLOBAL_BUSINESS_ROWS 全 0（修复后不再残留）",
+    "earlierCombination": "修复前空跑对照：5 文件/85 tests 通过（含 P2E-DB5）；污染机制用探针独立证明"
+  },
+  "notYetVerified": "未重跑全量 480 文件回归；FULL_API_REGRESSION 仍为 COMPLETED_WITH_4_FAILURES 口径，待下一次全量跑确认 P2E-DB5 与 claim-items 双债关闭"
+}

@@ -63,6 +63,14 @@ beforeAll(async () => {
   await prisma.$connect();
 });
 afterAll(async () => {
+  /**
+   * 隔离债修复（P2E-DB5 根因）：本文件此前**只在 beforeEach 清理**，文件跑完会把最后一个用例的
+   * 业务行留在共享开发库里（实测残留 1 条 `BillingInvoice`）。补一次与 beforeEach **完全相同**的 TRUNCATE。
+   * 只补清理，不改任何判据。
+   */
+  await prisma.$executeRawUnsafe(
+    'TRUNCATE TABLE "BillingInvoice", "FeeCalculation", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RecoveryOpportunity", "AuditLog", "Session", "UserInvitation", "Membership", "User", "Organization", "KillSwitchRequest" CASCADE;',
+  );
   await prisma.$disconnect();
   fs.rmSync(storageRoot, { recursive: true, force: true });
 });

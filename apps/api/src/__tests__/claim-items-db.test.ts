@@ -32,6 +32,16 @@ beforeAll(async () => {
   await prisma.$connect();
 });
 afterAll(async () => {
+  /**
+   * 隔离债修复（P2E-DB5 根因，审计 MSG-20261008-14 / MSG-20261009-01 登记的测试隔离债）：
+   * 本文件此前**只在 beforeEach 清理**，文件跑完会把最后一个用例的业务行留在共享开发库里
+   * （实测残留 1 条 `Settlement`，见 tools/verification/si-rsi-suite-runs/p2e-db5-isolation.json）。
+   * 同库的其它测试若做「全表为 0」断言就会被污染 ⇒ 这里补一次与 beforeEach **完全相同**的 TRUNCATE。
+   * 只补清理，不改任何判据。
+   */
+  await prisma.$executeRawUnsafe(
+    'TRUNCATE TABLE "ClaimItemEvidence", "ClaimItem", "PaymentProcessingAttempt", "Payment", "PaymentEvent", "AuditLog", "BillingInvoice", "FeeCalculation", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RecoveryOpportunity", "PlatformAccount", "Membership", "User", "Organization" CASCADE;',
+  );
   await prisma.$disconnect();
 });
 
