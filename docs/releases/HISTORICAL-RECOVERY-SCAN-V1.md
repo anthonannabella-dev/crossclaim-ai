@@ -878,3 +878,10 @@ stale worker 不能再绕过 lease fencing 修改执行状态）；② durable f
    或升级为时间型/后台 renewal；若 `ingest` 将来产生不可幂等副作用，此项需重新审）。
 
 **下一步**：`AUDIT-4`（PHASE 13/14 收官审计）。
+
+**AUDIT-4 送审锚点更正（接受审计指正）**：本轮 AUDIT-4 正文把 `REVIEWED_HEAD` 写为 `5832ed1d`
+（PHASE 14 最后一次**代码**变更点 = 405 修复），但审计正确指出它**落后当前树 7 个提交** ——
+其后还有 AUDIT-3R / AUDIT-3R2 的 fencing 修复（`5b343429`、`ce541b7c`）与文档提交。
+因此：**PHASE 14 的缺陷修复按 `5832ed1d` 审**，而**整个 HISTORICAL_RECOVERY_SCAN_V1 的收官树锚点
+应为包含全部已通过修复的当时 tip `c5d70d72`**（其后若再有变更则取最后 runtime head）。
+本更正已记录，后续送审/收口一律使用「最后一次 runtime head + 当时的树 tip」双写口径，避免把已通过的 fencing 修复误当作回退。
