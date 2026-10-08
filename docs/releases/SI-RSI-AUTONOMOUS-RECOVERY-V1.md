@@ -1345,3 +1345,25 @@ NEXT_AUDIT = PHASE3_RECOVERY_DURABLE_CLOSURE_R1
 - **R9**：多 worker 并发下无重复业务副作用（需要专用库 + 多 runtime 实例的真实并发）；
 - **R10（全量）**：全量套件回归 sweep；
 - 小时级 soak（现在已具备正确循环单元）、断连恢复、Linux systemd、真实 Provider 仍为 **NOT VERIFIED / HOLD**。
+
+### 3.27 `FIX_R1` 第二增量 —— R2 正向路径 + 「声称证据被拒」的 fail-closed 回落
+
+**实现（`recovery-verdict-settlement.ts`）**
+- 新增 host 注入点 `trustedEvidenceProvider`：只有**已校验**的终局证据才会被送去尝试 `COMPLETED`；
+  端口"声称有证据"**不算数** —— 是否放行仍由既有 `settle()` 在**事务内**按 CHANGE 3A 白名单重新判定。
+- 新增回落语义：若 `settle(COMPLETED)` 被事务内门禁拒绝（例如白名单来源未启用），**必须回落为非完成收口**
+  （`SETTLE_BLOCKED`，reason `VERDICT_TRUSTED_EVIDENCE_REFUSED_FALLBACK_BLOCKED`），
+  **绝不留 `IN_PROGRESS` 悬挂**、绝不伪造完成。
+- APPLIED 审计同时记录 `decidedAction`（决策动作）与 `decisionAction`（最终生效动作）、
+  `reasonCode`、`trustedCompletionEvidenceRef` / `Source` / `Kind`，可完整回溯"为什么变成非完成"。
+
+**验收（`si-rsi-phase3-closure-fix-r1.test.ts` 扩到 8/8 PASS，真实 PostgreSQL）**
+| 用例 | 结果 |
+| --- | --- |
+| **R2 正向** | PASS + host 已校验证据 + **显式启用**可信来源 ⇒ 任务收口到完成级状态 **`PROMOTED`**、租约 `RELEASED`；APPLIED 记录 `decidedAction=SETTLE_COMPLETED`、`afterStatus=PROMOTED`、证据引用可回溯 |
+| **R2 fail-closed** | 端口声称有终局证据、但**生产注册表全部 disabled** ⇒ `settle(COMPLETED)` 被拒后**自动回落** `BLOCKED`（`decisionAction=SETTLE_BLOCKED`、`reasonCode=…REFUSED_FALLBACK_BLOCKED`、`settleApplied=true`）；任务**不悬挂、不 PROMOTED** |
+
+**回归**：SI-RSI 全套件 **16 文件 / 95 tests 全绿**；`api tsc --noEmit` = **0**。
+
+**仍未覆盖（下一增量）**：**R9** 多 worker 并发（需专用库 + 多 runtime 实例）、**R10** 全量回归 sweep；
+之后方可送 `PHASE3_RECOVERY_DURABLE_CLOSURE_R1` 复审。小时级 soak / 断连恢复 / Linux systemd / 真实 Provider 仍为 NOT VERIFIED / HOLD。

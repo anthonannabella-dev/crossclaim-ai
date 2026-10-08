@@ -26,6 +26,8 @@ import {
   decideRecoverySettlement,
 } from '../runtime/recovery-verdict-settlement';
 import { createRecoveryDomainOutcomeRecorder } from '../runtime/recovery-domain-outcome-recorder';
+import { createTestTerminalEvidenceSource } from '../runtime/recovery-terminal-evidence';
+import type { RecoveryTerminalEvidence } from '../runtime/recovery-terminal-evidence';
 import { createProductionRecoveryPackDeps } from '../runtime/recovery-si-production-composition';
 import { DEFAULT_RUNTIME_OWNER_REF, composeRsiRuntime } from '../runtime/rsi-run';
 import { createAutonomyTaskSource } from '../runtime/rsi-durable-task-source';
@@ -105,6 +107,10 @@ async function composeWired(input: {
   ownerRef: string;
   onReadPort?: () => void;
   trustedCompletionEvidenceRef?: string;
+  /** R2 正向路径：host 提供的**已校验**终局证据（是否被接受仍由 settle 的事务内白名单决定） */
+  trustedEvidence?: (request: { taskId: string; dedupeKey: string }) => Promise<RecoveryTerminalEvidence | undefined>;
+  /** R2 负向：显式注入终端证据来源（缺省 = 生产注册表，全部 disabled） */
+  terminalEvidenceSources?: readonly ReturnType<typeof createTestTerminalEvidenceSource>[];
 }) {
   const packDeps = createProductionRecoveryPackDeps({ prisma });
   const readPorts = {
@@ -114,8 +120,26 @@ async function composeWired(input: {
       return packDeps.readPorts.opportunityRead(portInput);
     },
   };
-  const taskSource = createAutonomyTaskSource({ prisma, ownerRef: input.ownerRef, now: () => T0 });
-  const settlement = createRecoveryVerdictSettlement({ prisma, taskSource, ownerRef: input.ownerRef, now: () => T0 });
+  const taskSource = createAutonomyTaskSource({
+    prisma,
+    ownerRef: input.ownerRef,
+    now: () => T0,
+    ...(input.terminalEvidenceSources === undefined
+      ? {}
+      : { terminalEvidenceSources: input.terminalEvidenceSources }),
+  });
+  const settlement = createRecoveryVerdictSettlement({
+    prisma,
+    taskSource,
+    ownerRef: input.ownerRef,
+    ...(input.trustedEvidence === undefined
+      ? {}
+      : {
+          trustedEvidenceProvider: async (request: { taskId: string; dedupeKey: string }) =>
+            input.trustedEvidence!(request),
+        }),
+    now: () => T0,
+  });
   const composition = await composeRsiRuntime({
     readFile: async (path: string) => (path === 'mem://verdict' ? input.verdictArtifact : '[]'),
     verdictPath: 'mem://verdict',
@@ -167,6 +191,82 @@ afterAll(async () => {
 });
 
 describe('PHASE 3 / R1 运行时裁决感知收口（RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT）', () => {
+  it('R2（正向）：PASS + host 已校验终局证据 + 显式启用可信来源 ⇒ 运行时收口到完成级状态（PROMOTED）', async () => {
+    const { key } = await admitted();
+    const testSources = [createTestTerminalEvidenceSource()];
+    const { composition } = await composeWired({
+      verdictArtifact: JSON.stringify({ messageId: 'closure-msg-complete', verdict: 'PASS' }),
+      ownerRef: 'closure-worker-complete',
+      terminalEvidenceSources: testSources,
+      trustedEvidence: async (request) => ({
+        kind: 'SETTLEMENT_LEDGER_ENTRY',
+        source: 'SETTLEMENT_LEDGER',
+        verified: true,
+        verifiedBy: 'SETTLEMENT_EVIDENCE_VERIFIER',
+        verificationRef: 'test://settlement/' + request.dedupeKey,
+        providerEventId: 'evt-' + request.dedupeKey,
+        observedAt: T0.toISOString(),
+        organizationId: ORG,
+        taskDedupeKey: request.dedupeKey,
+      }),
+    });
+    let taskId = '';
+    try {
+      const outcome = await composition.controller.tick();
+      taskId = outcome.claimed!.id;
+      await composition.verdictWatcher!.pollOnce();
+    } finally {
+      composition.stop();
+    }
+
+    const task = await prisma.autonomyTask.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.status).toBe('PROMOTED'); // 唯一允许完成级状态的路径（可信证据 + 白名单来源启用）
+    expect((await prisma.autonomyLease.findUniqueOrThrow({ where: { taskId } })).status).toBe('RELEASED');
+    const applied = await settleRows(taskId, RECOVERY_SETTLEMENT_APPLIED_ACTION);
+    const changes = applied[0]!.changes as Record<string, unknown>;
+    expect(changes.decidedAction).toBe('SETTLE_COMPLETED');
+    expect(changes.reasonCode).toBe(RECOVERY_SETTLEMENT_REASON.PASS_WITH_TRUSTED_COMPLETION);
+    expect(changes.afterStatus).toBe('PROMOTED');
+    expect(String(changes.trustedCompletionEvidenceRef)).toBe('test://settlement/' + key);
+  });
+
+  it('R2（fail-closed）：端口声称有终局证据但**白名单来源未启用** ⇒ 回落非完成收口（不留 IN_PROGRESS 悬挂）', async () => {
+    await admitted();
+    const { composition } = await composeWired({
+      verdictArtifact: JSON.stringify({ messageId: 'closure-msg-untrusted', verdict: 'PASS' }),
+      ownerRef: 'closure-worker-untrusted',
+      // 不注入 terminalEvidenceSources ⇒ 使用**生产注册表（全部 disabled）**
+      trustedEvidence: async (request) => ({
+        kind: 'SETTLEMENT_LEDGER_ENTRY',
+        source: 'SETTLEMENT_LEDGER',
+        verified: true,
+        verifiedBy: 'SETTLEMENT_EVIDENCE_VERIFIER',
+        verificationRef: 'test://settlement/' + request.dedupeKey,
+        providerEventId: 'evt-' + request.dedupeKey,
+        observedAt: T0.toISOString(),
+        organizationId: ORG,
+        taskDedupeKey: request.dedupeKey,
+      }),
+    });
+    let taskId = '';
+    try {
+      const outcome = await composition.controller.tick();
+      taskId = outcome.claimed!.id;
+      await composition.verdictWatcher!.pollOnce();
+    } finally {
+      composition.stop();
+    }
+
+    const task = await prisma.autonomyTask.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.status).toBe('BLOCKED'); // 声称证据 ≠ 被接受；绝不 PROMOTED，也绝不悬挂
+    const applied = await settleRows(taskId, RECOVERY_SETTLEMENT_APPLIED_ACTION);
+    const changes = applied[0]!.changes as Record<string, unknown>;
+    expect(changes.decidedAction).toBe('SETTLE_COMPLETED');
+    expect(changes.decisionAction).toBe('SETTLE_BLOCKED');
+    expect(changes.reasonCode).toBe(RECOVERY_SETTLEMENT_REASON.COMPLETION_REFUSED_FALLBACK_BLOCKED);
+    expect(changes.settleApplied).toBe(true);
+  });
+
   it('决策表（纯函数）：PASS 仅在有可信完成证据时才 COMPLETED；缺失/不可信裁决 ⇒ SAFE_WAIT', () => {
     expect(decideRecoverySettlement({ verdict: 'PASS' }).action).toBe('SETTLE_BLOCKED');
     expect(decideRecoverySettlement({ verdict: 'PASS' }).reason).toBe(

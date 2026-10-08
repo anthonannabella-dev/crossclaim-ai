@@ -22,6 +22,7 @@
 import type { PrismaClient } from '@prisma/client';
 
 import type { RsiDurableTaskSource } from './rsi-durable-task-source';
+import type { RecoveryTerminalEvidence } from './recovery-terminal-evidence';
 
 /** 运行时收到的裁决（与既有 verdictWatcher 的取值域一致） */
 export type RecoveryVerdictOutcome = 'PASS' | 'REVISE' | 'BLOCK' | null | undefined;
@@ -31,6 +32,11 @@ export const RECOVERY_SETTLEMENT_REASON = {
   PASS_AWAITING_BUSINESS_PROOF: 'VERDICT_PASS_AWAITING_BUSINESS_PROOF',
   /** PASS 且具备可信完成证据（CHANGE 3A 白名单）⇒ 才允许完成级状态 */
   PASS_WITH_TRUSTED_COMPLETION: 'VERDICT_PASS_WITH_TRUSTED_COMPLETION_EVIDENCE',
+  /**
+   * 端口**声称**有可信完成证据，但既有 `settle()`（CHANGE 3A 白名单）在事务内拒绝 ⇒
+   * 回落为**非完成**收口（fail-closed，不留 IN_PROGRESS 悬挂）。
+   */
+  COMPLETION_REFUSED_FALLBACK_BLOCKED: 'VERDICT_TRUSTED_EVIDENCE_REFUSED_FALLBACK_BLOCKED',
   /** REJECT / DENY ⇒ 阻断 */
   REJECTED: 'VERDICT_REJECTED',
   /** REVISE：裁决未通过 ⇒ 同样按非完成收口（不得当成 PASS） */
@@ -135,6 +141,12 @@ export function createRecoveryVerdictSettlement(input: {
    * 缺省时恢复沿用 intent 记录的 ownerRef（旧 owner 通常已被 fence 拒绝，属 fail-closed）。
    */
   ownerRef?: string;
+  /**
+   * 可信完成证据提供者（host 注入）：仅当返回**已校验**的终局证据时才尝试 `COMPLETED`；
+   * 该证据仍会被既有 `settle()`（CHANGE 3A 白名单）**在事务内重新判定** —— 端口说"有"不算数。
+   * 缺省不提供 ⇒ 一律走非完成收口。
+   */
+  trustedEvidenceProvider?: (request: RecoverySettlementRequest) => Promise<RecoveryTerminalEvidence | undefined>;
   now?: () => Date;
 }): RecoveryVerdictSettlement {
   const now = (): Date => (input.now ?? (() => new Date()))();
@@ -170,9 +182,16 @@ export function createRecoveryVerdictSettlement(input: {
     if (authoritativeOrganizationId !== request.organizationId) {
       return { applied: false, action: 'SAFE_WAIT', reason: RECOVERY_SETTLEMENT_REFUSAL.TENANT_MISMATCH };
     }
+    /**
+     * 可信完成证据：由 host 提供者给出；且只有**权威租户 + 本任务 lineage** 的已校验证据才可能通过
+     * `settle()` 的 CHANGE 3A 门禁（此处仅做传递，不做放行判断 —— 放行判断在事务内）。
+     */
+    const terminalEvidence =
+      input.trustedEvidenceProvider === undefined ? undefined : await input.trustedEvidenceProvider(request);
     const decision = decideRecoverySettlement({
       verdict: request.verdict,
-      trustedCompletionEvidence: request.trustedCompletionEvidenceRef !== undefined,
+      trustedCompletionEvidence:
+        request.trustedCompletionEvidenceRef !== undefined || terminalEvidence !== undefined,
     });
     if (decision.action === 'SAFE_WAIT') {
       // 安全等待：不落终态（也不写 applied），交由后续裁决/故障策略处理
@@ -185,14 +204,33 @@ export function createRecoveryVerdictSettlement(input: {
     });
 
     // 走**既有** fenced settle（owner + 未过期租约 + 事务内 CAS）；非完成路径一律 BLOCKED
-    const settled = await input.taskSource.settle({
+    let settled = await input.taskSource.settle({
       taskId: request.taskId,
       ownerRef: request.ownerRef,
       outcome: decision.action === 'SETTLE_COMPLETED' ? 'COMPLETED' : 'BLOCKED',
       ...(decision.action === 'SETTLE_COMPLETED'
-        ? { businessOutcome: 'SETTLEMENT_RECEIVED' as const }
+        ? {
+            businessOutcome: 'SETTLEMENT_RECEIVED' as const,
+            ...(terminalEvidence === undefined ? {} : { terminalEvidence }),
+          }
         : {}),
     });
+    let finalAction = decision.action;
+    let finalReason: RecoverySettlementReason | string = decision.reason;
+    /**
+     * CHANGE 3A 白名单说"不算完成"时**必须回落为非完成收口**（否则会留下 IN_PROGRESS 悬挂 —— 正是本缺口）。
+     * 这是 fail-closed：宁可把任务落到 BLOCKED，也不留下未收口任务，更不伪造完成。
+     */
+    if (!settled.applied && decision.action === 'SETTLE_COMPLETED') {
+      const fallback = await input.taskSource.settle({
+        taskId: request.taskId,
+        ownerRef: request.ownerRef,
+        outcome: 'BLOCKED',
+      });
+      settled = { ...fallback };
+      finalAction = 'SETTLE_BLOCKED';
+      finalReason = RECOVERY_SETTLEMENT_REASON.COMPLETION_REFUSED_FALLBACK_BLOCKED;
+    }
 
     const after = await input.prisma.autonomyTask.findUnique({
       where: { id: request.taskId },
@@ -212,13 +250,17 @@ export function createRecoveryVerdictSettlement(input: {
           ownerRef: request.ownerRef,
           verdict: request.verdict,
           verdictRef: request.verdictRef,
-          decisionAction: decision.action,
-          reasonCode: decision.reason,
+          decisionAction: finalAction,
+          decidedAction: decision.action,
+          reasonCode: finalReason,
           settleApplied: settled.applied,
           settleReason: settled.reason,
           beforeStatus: before?.status ?? null,
           afterStatus: after?.status ?? null,
-          trustedCompletionEvidenceRef: request.trustedCompletionEvidenceRef ?? null,
+          trustedCompletionEvidenceRef:
+            request.trustedCompletionEvidenceRef ?? terminalEvidence?.verificationRef ?? null,
+          trustedCompletionEvidenceSource: terminalEvidence?.source ?? null,
+          trustedCompletionEvidenceKind: terminalEvidence?.kind ?? null,
           recordedAt: now().toISOString(),
         },
       },
@@ -226,8 +268,8 @@ export function createRecoveryVerdictSettlement(input: {
 
     return {
       applied: settled.applied,
-      action: decision.action,
-      reason: settled.applied ? decision.reason : settled.reason,
+      action: finalAction,
+      reason: settled.applied ? finalReason : settled.reason,
       ...(after?.status === undefined || after?.status === null ? {} : { afterStatus: after.status }),
     };
   };
