@@ -1447,3 +1447,40 @@ NEXT_AUDIT = PHASE3_RECOVERY_DURABLE_CLOSURE_R1
 
 **下一步（已授权，仅本机可执行范围）**：`PRELEASE_FIX_B` → 真实 PG R9（含故障注入与 60 分钟连续运行）→ 请求 PHASE 3 最终审计。
 **不授权**真实外部写入、关税申报、扣佣、生产开闸或修改封板 release。
+
+### 3.30 `PRELEASE_FIX_B` —— 已实现并取证（P3-1 / P3-2 / P3-3 + 强制断言）
+
+**先做调用点审计（审计方要求）**：`claimNextSafeTask()` 的全部调用点如下（`rg` 实测）：
+| 位置 | 用途 | 本次处置 |
+| --- | --- | --- |
+| `handleEvent('JUDGE_VERDICT_RECEIVED')` | **裁决后立即预租下一条** | **移除**（P3-1；这是唯一的违规预租点） |
+| `handleEvent(其它事件)` | 事件驱动领取下一个 | **保留**（正常 claim 能力） |
+| `watchdogTick()` 两处 | 兜底领取 / 租约回收 | **保留**（P3-2 的正常调度链） |
+未被全局删除（符合审计方"不要直接全局删除"的要求）。
+
+**P3-1 实现**（`services/autonomy/rsi-continuation-engine.ts`）：裁决事件改为
+`completeCurrent(...)` → **返回 `claimed: null`**（不再 `claimNextSafeTask()`）；action 仍为
+`CONSUME_VERDICT` / `REVISION`，因此收口语义与既有调用方兼容。**只有在完成当前任务的收口之后**才释放引擎持有状态。
+
+**P3-2 实现**：下一条任务由**下一次正常 tick** 领取（既有 watchdog / claim / lease / fencing 链），
+**未**新增 scheduler / controller / loop；运行时侧无需改动（`adoptFromTaskSource` 仍在 tick 内领取）。
+
+**P3-3 实现（语义不变）**：本修复**不触碰**「正常 claim 后、执行前崩溃」的恢复路径 ——
+仍由既有 durable lease expiry + fencing + `reclaimExpired` 接管（新增用例 P3-3 直接验证该路径仍可用）。
+
+**验收 `si-rsi-phase3-prelease-fix-b.test.ts`（3/3 PASS，真实 PostgreSQL）**
+| 用例 | 断言 |
+| --- | --- |
+| P3-1（引擎级） | 认领 t1 → park → `handleEvent('JUDGE_VERDICT_RECEIVED')` 返回 **`claimed: null`**（旧行为会返回 t2）；随后 `watchdogTick()` 才领取 t2 |
+| **强制断言（真实 PG）** | 3 个 recovery 任务、**默认（长）租约**（不缩短 TTL）：**3 轮内全部收口为 `BLOCKED`**；每任务 domain step 恰好 1 次；租约全部释放（ACTIVE = 0）；每任务恰好 1 条 INTENT + 1 条 APPLIED |
+| P3-3 | 正常 claim 后崩溃（租约过期）仍由 `reclaimExpired` + fencing 被新 owner 接管 —— 恢复语义未被本修复改变 |
+
+**回归（含审计要求的回归门）**
+- SI-RSI 全套件 **17 文件 / 98 tests 全绿**；
+- 受调度改动影响的核心运行时/历史扫描/启动契约：**9 文件 / 55 tests 全绿**；更广集合 **17 文件 / 181 tests 中 180 通过**（见下）；
+- `api tsc --noEmit` = **0**。
+- **回归门命中一处（如实登记）**：`historical-scan-5y-e2e.test.ts` 的 `AUDIT-2R4`（多 scan 排队）**依赖旧的预租行为**
+  —— 它原本断言「PASS 收口后**同一次 emit 内**就认领并执行下一个 scan」。修复 B 后该步进被拆开：
+  emit 只收口当前任务，下一个 scan 由**下一次正常 tick** 领取。已按新口径调整该用例，并**保留其安全断言**
+  （任何时刻只执行当前 armed scan、绝不误执行下一个；第二个 scan 在 emit 后仍为 `CREATED`，直到被正常 tick 认领后才执行）。
+  该调整将随下一轮复审包一并提交审计确认（属"审计要求重跑并复核"的情形，不是静默放宽）。

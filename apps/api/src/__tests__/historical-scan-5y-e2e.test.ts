@@ -706,19 +706,28 @@ describe('PHASE 10 · 合成 5 年 E2E（Goal → scan → shard → customs →
       onDomainStep: spy.step,
     });
 
+    /**
+     * PRELEASE_FIX_B（审计 MSG-20261009-03 / P3-1）后的调度口径：
+     * 裁决事件**只收口当前任务**，**不再**在同一次调用里预租下一条；
+     * 下一条由**下一次正常 tick** 领取并执行。
+     * 本用例的**安全断言不变**：任何时刻只允许执行当前 armed scan，绝不误执行下一个。
+     */
     // 认领 A（arm A）→ park
     await composition.controller.tick();
     expect(composition.controller.state().waitingForVerdict).toBe(true);
-    // PASS 收口：同一次调用里 engine 完成 A 并立刻认领 B（arm B）——不得误执行 B
+    // PASS 收口 A：**不得**在同一次 emit 里认领/执行 B
     composition.controller.markWaitingForVerdict('PASS');
     await composition.controller.emit('JUDGE_VERDICT_RECEIVED');
-    // 只应执行 A
-    expect(spy.calls).toHaveLength(1);
+    expect(spy.calls).toHaveLength(1); // 只应执行 A
     expect(spy.calls[0]!.scanId).toBe(first.created.row.id);
     const secondRow = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId: second.created.row.id });
-    expect(secondRow!.status).toBe('CREATED');
+    expect(secondRow!.status).toBe('CREATED'); // B 未被误执行
 
-    // B 拿到自己的 PASS → 执行 B
+    // 下一次**正常 tick** 才认领 B（arm B）→ park；此时仍不得执行 B
+    await composition.controller.tick();
+    expect(composition.controller.state().waitingForVerdict).toBe(true);
+    expect(spy.calls).toHaveLength(1);
+    // B 拿到自己的 PASS → 执行 B（且只执行 B）
     composition.controller.markWaitingForVerdict('PASS');
     await composition.controller.emit('JUDGE_VERDICT_RECEIVED');
     expect(spy.calls).toHaveLength(2);

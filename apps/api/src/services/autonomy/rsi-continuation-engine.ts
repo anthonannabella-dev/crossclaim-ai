@@ -167,8 +167,20 @@ export function createRsiContinuationEngine(options: {
         const revise = verdict === 'REVISE';
         completeCurrent(revise ? 'REVISE' : 'PASS');
         waitingForVerdict = false;
-        const outcome = claimNextSafeTask();
-        return { ...outcome, action: revise ? 'REVISION' : 'CONSUME_VERDICT', reason: revise ? 'VERDICT_REVISE' : 'VERDICT_PASS' };
+        /**
+         * PRELEASE_FIX_B（审计 MSG-20261009-03 / P3-1）：裁决事件**只做当前任务的收口**，
+         * **不再**在此处 `claimNextSafeTask()` 预租下一条任务。
+         * 旧行为会让下一条任务立即取得 durable claim + ACTIVE 租约，却要等引擎内部租约（默认 5 分钟）到期才可能推进 ——
+         * 审计判定为**活性缺陷**（"任务已取得执行所有权，却没有保证执行或及时恢复的路径"）。
+         * 修复后：下一条任务由**下一次正常 tick**（既有调度链，P3-2）按 claim / lease / fencing 领取并执行。
+         * 说明：仅移除本裁决路径的预租；其它事件的 claim（第 174 行）与 watchdog 兜底领取保持不变。
+         */
+        return {
+          action: revise ? 'REVISION' : 'CONSUME_VERDICT',
+          claimed: null,
+          transitionLatencyMs: null,
+          reason: revise ? 'VERDICT_REVISE' : 'VERDICT_PASS',
+        };
       }
       // 事件只驱动「领取下一个」；它**不能**替在飞任务宣告完成。
       const outcome = claimNextSafeTask();
