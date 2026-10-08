@@ -1398,3 +1398,52 @@ NEXT_AUDIT = PHASE3_RECOVERY_DURABLE_CLOSURE_R1
 
 **下一步**：先就上述三点送独立审计确认口径，再据此实现 R9 与 soak；
 `PHASE3_RECOVERY_DURABLE_CLOSURE_R1` 复审**暂不提交**（R9 未达成、R10 未做）。
+
+### 3.29 PRELEASE 口径裁决（`MSG-20261009-03`）= **REVISE**，批准 **`PRELEASE_FIX_APPROACH = B`**
+
+- 会话：`https://chatgpt.com/c/6ac7d865-a594-83ec-ac56-c37e5a693d32`（本轮新开）；审查锚点 **`33b1bfd1`**
+- 投递校验：粘贴后 3436 字符（= 文本长度，无重复）；标记作为新用户轮出现；进入生成态；等待至 `回答已完成`
+- **逐字归档**：`AI-ARCHITECT-INBOX.md` → `MSG-20261009-03`（`FNV1A_MATCH 723bce1a`；`FULL_COPY_OK` 181/181）
+
+**裁决要点**
+| 项 | 裁决 |
+| --- | --- |
+| `PRELEASE_INTENTIONAL` | **NO**（未证明为设计意图；`PRELEASE_EXECUTOR = OTHER / NOT_DEMONSTRATED`） |
+| 问题定性 | **不是吞吐问题，而是活性（liveness）问题**：任务已取得执行所有权，却没有进入可保证执行或及时恢复的路径 |
+| `THROUGHPUT_EXPECTATION` | **不接受「每 5 分钟一条」为正常吞吐**；默认租约 TTL 不得当作执行调度周期 |
+| `THROUGHPUT_GATE` | **`NEXT_TASK_EXECUTES_WITHOUT_WAITING_FOR_PREVIOUS_LEASE_EXPIRY`** |
+| `R1_MUST_HANDLE_PRELEASED_TASK` | **YES**（必须消除"裁决后领取但不执行"的真空态） |
+| `PRELEASE_FIX_APPROACH` | **B**（`PRELEASE_FIX_RULE = SETTLE_CURRENT_ONLY_THEN_NORMAL_TICK_CLAIMS_NEXT`） |
+| `PHASE2_CLOSED` | 仍 **YES**、`P0_B_CLOSED` 仍 **YES**（附**回归门**：若改动 PHASE 2 已覆盖的调度行为必须重跑相关测试） |
+
+**必须实现的三个 CHANGE（修复方案 B 的具体口径）**
+- **P3-1 裁决路径禁止隐式预租**：`handleEvent('JUDGE_VERDICT_RECEIVED')` 的职责改为「完成当前任务的可信裁决与 **durable 收口**」；
+  **仅在 durable settle 已确认后**释放当前任务的引擎持有状态；**不再**调用 `claimNextSafeTask()` 领取下一条；
+  **不得**在 settle 失败/未知/超时后盲目释放所有权（必须先对账）。
+  另须**审计 `claimNextSafeTask()` 全部调用点**，确认其它事件是否也隐式预租 —— 但**不得全局删除**该函数。
+- **P3-2 保持统一调度链**：下一任务由既有 runtime 调度机制（**下一次正常 tick**）领取并执行；
+  **不得**新增第二套 scheduler / controller / worker loop；若由 loop 触发续跑，必须保证无重入且有任务数量上限。
+- **P3-3 恢复语义区分**：①「引擎预租但未执行」—— 修复后不再产生；②「正常 claim 后、执行前崩溃」—— 仍依赖既有
+  durable lease expiry + fencing + `reclaimExpired` 恢复。方案 B **只**消除预租真空期，**不能**替代正常执行路径的崩溃恢复。
+
+**吞吐参数（审计方给出的是测试配置/参考值，不得宣称为已达成性能指标）**
+| 参数 | Hook-level soak | 生产初始建议 |
+| --- | --- | --- |
+| 调度间隔 | 50–200 ms | 1–5 s |
+| 执行租约 TTL | 5–10 s（**专用测试场景**） | 300 s 起步，按任务耗时调整 |
+| 并发 worker | 3 | 从 2–3 开始 |
+| 裁决后领取 | 下一次正常调度 | 下一次正常调度 |
+
+审计方特别注明：**不允许通过缩短租约 TTL 来掩盖预租缺陷**。
+
+**R9 最低验收（R9-1…R9-12）+ 一条强制断言**
+`R9-1` 3 个独立 runtime/ownerRef 共享同一真实 PG 队列；`R9-2` 同租户 ≥6 任务 + 跨租户隔离场景；
+`R9-3` 无故障任务在期限内全部进入允许的 durable 终态（**推进活性**）；`R9-4` 同一轮次无双 owner 有效持有；
+`R9-5` 无故障正常路径每任务 domain step 恰好一次；`R9-6` 每个逻辑 settlement 恰好 1 条有效 INTENT + 1 条 APPLIED
+（须校验业务唯一键与实际已提交记录，**不是**只数内存调用）；`R9-7` 错任务/错 owner/旧租约/跨租户裁决全部拒绝；
+`R9-8` claim 后崩溃与 INTENT 后崩溃**均可恢复**；`R9-9` 全部完成后 ACTIVE 租约为 0；`R9-10` 外部安全项均为 0；
+`R9-11` 真实 PG **连续运行 60 分钟**无任务永久卡死；`R9-12` **不替换**被测 claim / settle / domain step / runtime 路径。
+**强制断言**：worker 完成 A 后，**不必等待 A 的原租约 TTL 到期**即可领取并执行 B —— 该断言不成立则 R9 = FAIL。
+
+**下一步（已授权，仅本机可执行范围）**：`PRELEASE_FIX_B` → 真实 PG R9（含故障注入与 60 分钟连续运行）→ 请求 PHASE 3 最终审计。
+**不授权**真实外部写入、关税申报、扣佣、生产开闸或修改封板 release。

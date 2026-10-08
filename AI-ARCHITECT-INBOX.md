@@ -166762,3 +166762,503 @@ NEXT_AUDIT = PHASE3_RECOVERY_DURABLE_CLOSURE_R1
 
 最终裁决：准许进入 PHASE 3 的本机安全修复范围，不批准 PHASE 3 收官或生产使能。 先补齐 verdict → fenced settle → durable 终态 → crash recovery 的闭环，再进行小时级 soak 与生产同构验收。
 ```
+
+### [MSG-20261009-03] SI-RSI PHASE 3 · PRELEASE 独立审计（reviewed ref 33b1bfd1）= **REVISE**；`PRELEASE_INTENTIONAL` = NO（未证明为设计意图）、不接受「5 分钟一条」为吞吐标准；批准 **`PRELEASE_FIX_APPROACH = B`**（`JUDGE_VERDICT_RECEIVED` 只做当前任务的 durable 收口，**不得预租下一条**；下一任务交回**正常 tick** 领取；须审计 `claimNextSafeTask()` 全部调用点，不得全局删除）；`THROUGHPUT_GATE = NEXT_TASK_EXECUTES_WITHOUT_WAITING_FOR_PREVIOUS_LEASE_EXPIRY`；新增 **R9-1…R9-12** 最低验收 + 一条强制断言；`PHASE2_CLOSED` 仍 YES（附回归门：若改动 PHASE 2 已覆盖的调度行为须重跑）；`PHASE3_RECOVERY_CLOSURE` = FAIL、`PHASE3_CLOSED` = NO、`PRODUCTION_READY` = NO；NEXT = **IMPLEMENT_PRELEASE_FIX_B_THEN_REAL_PG_R9_THEN_REQUEST_PHASE3_FINAL_AUDIT**（会话 https://chatgpt.com/c/6ac7d865-a594-83ec-ac56-c37e5a693d32）
+
+```text
+CrossClaim · SI-RSI PHASE 3 · PRELEASE 独立审计裁决
+VERDICT：REVISE — 先修复预租时序，再执行 R9
+
+审计编号：MSG-20261009-03
+REVIEWED_HEAD： 33b1bfd1
+审计范围： ONE SI Runtime / Recovery Verdict / Fenced Settlement / Prelease / Multi-worker R9
+
+本次依据提交的源码调用链描述、真实 PostgreSQL 诊断结果和 R1–R8 验收摘要进行裁决。未直接检出该 commit 的完整源码，因此关于历史设计意图不作未经证实的断言。
+
+一、核心裁决
+
+当前预租行为不应被认可为正常的 Recovery 生产执行语义。
+
+已提供的调用链表明：
+
+当前任务收到 PASS 裁决。
+
+引擎执行 completeCurrent(PASS)。
+
+waitingForVerdict 被清除。
+
+claimNextSafeTask() 立即领取下一条任务。
+
+下一条任务获得 durable claim 和 ACTIVE 租约。
+
+当前 emit 没有执行该任务。
+
+后续 tick 因内部 leased 尚未到期而返回 SILENT/ACTIVE_LEASE。
+
+这里的问题不是简单的吞吐量低，而是：
+
+任务已经取得执行所有权，却没有进入可保证执行或及时恢复的路径。
+
+这违反了 PHASE 3 所需的工作推进活性要求（liveness）。
+
+必须明确：安全性（safety）与活性（liveness）是两个不同的验收维度。没有发生重复副作用，并不等于任务能够持续推进。
+
+二、五项逐项裁决
+
+审计项目
+
+	
+
+裁决
+
+	
+
+依据
+
+
+
+
+PRELEASE_INTENTIONAL
+
+	
+
+NO（不予认可为已证明的设计意图）
+
+	
+
+源码存在预租行为，但未提供执行消费者契约
+
+
+
+
+PRELEASE_EXECUTOR
+
+	
+
+OTHER
+
+	
+
+现有路径中没有被证明有效的预租执行者
+
+
+
+
+THROUGHPUT_EXPECTATION
+
+	
+
+不接受五分钟一条作为正常吞吐目标
+
+	
+
+默认租约 TTL 不能作为执行调度周期
+
+
+
+
+R1_MUST_HANDLE_PRELEASED_TASK
+
+	
+
+YES
+
+	
+
+必须消除裁决后领取但不执行的真空状态
+
+
+
+
+PRELEASE_FIX_APPROACH
+
+	
+
+B
+
+	
+
+优先取消裁决路径的下一任务预领取
+
+
+
+
+R9_APPROACH
+
+	
+
+先修预租，再运行真实 PostgreSQL 多 worker 并发验收
+
+	
+
+当前测试会被 liveness 缺陷污染
+
+
+
+
+PHASE2_CLOSED_AFFECTED
+
+	
+
+NO（有条件）
+
+	
+
+当前证据不足以推翻此前 PHASE 2 的已验收范围
+
+三、推荐修复方案：B
+
+四个备选方案中，我批准 B：裁决事件只负责当前任务的 durable 收口，不领取下一条任务。
+
+修复后的预期执行链
+
+任务 A 执行完毕，等待裁决
+
+收到可信 PASS / BLOCK 裁决
+
+Fenced settle + INTENT → APPLIED
+
+完成当前任务的 durable 收口
+
+清除当前引擎状态，不预租 B
+
+下一次正常调度 claim B → 执行 B
+
+走既有 ONE SI Runtime 的 claim / lease / fencing 路径
+CHANGE P3-1：裁决路径禁止隐式预租
+
+调整 handleEvent('JUDGE_VERDICT_RECEIVED') 的责任边界：
+
+完成当前任务的可信裁决与 durable 收口。
+
+仅在 durable settle 已确认时释放当前任务的引擎持有状态。
+
+不再调用 claimNextSafeTask() 领取下一项。
+
+不得在 settle 失败、未知或超时后盲目释放所有权；必须先对账。
+
+保留正常 tick 的 claim 能力及原有 Action Guard、租约 fencing 和 tenant boundary。
+
+注意：如果引擎还存在其他事件依赖 completeCurrent() 自动继续领取任务，必须一并做调用点审计。不要直接全局删除 claimNextSafeTask()。
+
+CHANGE P3-2：保持统一调度链
+
+下一任务由既有 runtime 调度机制领取并执行，不允许增加第二套 scheduler、controller 或 worker loop。
+
+推荐由下一次正常 tick 承担此责任。如果现有 loop 已具备安全的继续调度机制，可以在收口后触发既有入口，但必须保证无重入并且有任务数量上限。
+
+CHANGE P3-3：恢复语义
+
+两类故障必须区分：
+
+引擎内部预租但尚未执行： 修复后不再产生新的这种状态。
+
+正常 claim 成功后，执行前进程崩溃： 仍须依赖 durable lease expiry、fencing 和 reclaimExpired 恢复。
+
+方案 B 只消除不必要的预租真空期，不能替代正常执行路径的崩溃恢复。
+
+四、吞吐量裁决
+
+当前五分钟是 lease TTL，不是合理的工作调度周期。
+
+即使诊断在短窗口内表现为“每 worker 五分钟才能继续推进”，也不能把这个值写成系统的设计吞吐指标。并且任务可能存在裁决耗时、租约续期、数据库争用和失败重试，因此不能从当前证据精确推出生产吞吐。
+
+建议采用以下参数作为测试配置与参考值，而非宣称已达成的性能指标：
+
+参数
+
+	
+
+Hook-level soak
+
+	
+
+生产初始建议
+
+
+
+
+调度间隔
+
+	
+
+50–200 ms
+
+	
+
+1–5 s
+
+
+
+
+执行租约 TTL
+
+	
+
+5–10 s（专用测试场景）
+
+	
+
+300 s 起步，按任务耗时调整
+
+
+
+
+并发 worker
+
+	
+
+3
+
+	
+
+从 2–3 开始
+
+
+
+
+单任务执行
+
+	
+
+每次 claim 后执行一次
+
+	
+
+同样约束
+
+
+
+
+裁决后领取
+
+	
+
+下一次正常调度
+
+	
+
+下一次正常调度
+
+
+
+
+租约失效恢复
+
+	
+
+强制故障注入
+
+	
+
+自动 reclaim + fencing
+
+生产 300 秒租约是否合适，还取决于真实任务最大耗时、续租设计和裁决等待机制，不能只依据本轮证据定案。
+
+验收关键：不允许通过将租约 TTL 缩短来掩盖预租缺陷。
+
+五、R9 最低验收标准
+
+先完成 P3-1～P3-3，再提交 R9。最低标准如下：
+
+验收项
+
+	
+
+最低通过条件
+
+
+
+
+R9-1 独立实例
+
+	
+
+3 个独立 runtime / ownerRef，共享同一真实 PostgreSQL 队列
+
+
+
+
+R9-2 任务数量
+
+	
+
+同一租户至少 6 个任务，另加跨租户隔离场景
+
+
+
+
+R9-3 推进活性
+
+	
+
+无故障任务在测试期限内全部进入允许的 durable 终态
+
+
+
+
+R9-4 Claim 互斥
+
+	
+
+同一执行轮次无双 owner 有效持有同一任务
+
+
+
+
+R9-5 Domain step
+
+	
+
+无故障正常路径每任务恰好一次
+
+
+
+
+R9-6 收口唯一性
+
+	
+
+每个逻辑 settlement 恰好一个有效 INTENT 与一个 APPLIED
+
+
+
+
+R9-7 裁决隔离
+
+	
+
+错任务、错 owner、旧租约、跨租户裁决全部拒绝
+
+
+
+
+R9-8 崩溃恢复
+
+	
+
+claim 后崩溃与 INTENT 后崩溃均可恢复
+
+
+
+
+R9-9 租约残留
+
+	
+
+全部完成后 ACTIVE 租约为 0
+
+
+
+
+R9-10 外部安全
+
+	
+
+REAL_PROVIDER_WRITE / FILING / PAYMENT 均为 0
+
+
+
+
+R9-11 连续运行
+
+	
+
+真实 PostgreSQL 连续运行 60 分钟，无任务永久卡死
+
+
+
+
+R9-12 独立证据
+
+	
+
+不替换被测 claim、settle、domain step 或 runtime 路径
+
+R9-5 必须限定为无故障正常路径；发生进程崩溃时，是否可以保证 domain step 物理调用仅一次，取决于该步骤是否与 durable 效果处于同一个原子边界。仅靠 lease 和 fencing，不能保证任意外部调用 exactly-once。因此崩溃测试应重点验证没有重复的已提交业务副作用，并通过幂等与可恢复状态收口。
+
+对于 R9-6，必须验证 INTENT/APPLIED 的业务唯一键和实际已提交记录，而不是只统计内存调用次数。
+
+特别增加一项强制断言：
+
+worker 完成任务 A 后，在不等待 A 的原租约 TTL 到期的情况下，可以正常领取并执行任务 B。
+
+如果这个断言不能成立，R9 仍然 FAIL。
+
+六、是否影响 PHASE 2？
+
+本轮维持：
+
+PHASE2_CLOSED = YES
+
+P0_B_CLOSED = YES
+
+PHASE3_CLOSED = NO
+
+理由是此前 PHASE 2 的裁决针对当时规定的范围和证据。本轮发现的是 PHASE 3 连续排空任务时的活性缺陷，不应未经回归就撤销此前已经取得的结论。
+
+但必须设置回归门：如果方案 B 修改了 PHASE 2 已覆盖的调度行为，相关测试需要重跑。一旦发现既有安全契约被破坏，应重新开启对应缺陷，而非依赖本次裁决豁免。
+
+七、下一步执行授权
+
+批准在当前功能分支上实施 PRELEASE_FIX_B，且仅限本机可执行范围。
+
+修复与验收顺序：
+
+审计 claimNextSafeTask() 全部调用点，确定 PRELEASE 影响范围。
+
+修复 JUDGE_VERDICT_RECEIVED 的预租行为。
+
+补充“裁决后下一任务不等待 TTL”真实 PostgreSQL 测试。
+
+重跑 R1–R8 和既有 PHASE 2 相关回归。
+
+实施 R9 多 worker 并发、故障注入与连续 soak。
+
+提交 REVIEWED_HEAD、真实 PostgreSQL 证据和新的独立审计请求。
+
+不授权真实外部写入、关税申报、扣佣、生产开闸或修改封板 release。
+
+机器可读终局块
+纯文本
+AUDIT_ID = MSG-20261009-03
+REVIEWED_HEAD = 33b1bfd1
+
+VERDICT = REVISE
+PHASE3_RECOVERY_CLOSURE = FAIL
+PHASE3_CLOSED = NO
+
+PRELEASE_INTENTIONAL = NO
+PRELEASE_INTENT_EVIDENCE = NOT_PROVEN
+PRELEASE_EXECUTOR = OTHER
+PRELEASE_EXECUTOR_STATUS = NOT_DEMONSTRATED
+
+THROUGHPUT_EXPECTATION = NO_TTL_THROTTLING
+THROUGHPUT_GATE = NEXT_TASK_EXECUTES_WITHOUT_WAITING_FOR_PREVIOUS_LEASE_EXPIRY
+
+R1_MUST_HANDLE_PRELEASED_TASK = YES
+PRELEASE_FIX_APPROACH = B
+PRELEASE_FIX_SCOPE = JUDGE_VERDICT_RECEIVED
+PRELEASE_FIX_RULE = SETTLE_CURRENT_ONLY_THEN_NORMAL_TICK_CLAIMS_NEXT
+SECOND_RUNTIME_ALLOWED = NO
+SECOND_SCHEDULER_ALLOWED = NO
+
+R9_MIN_ACCEPTANCE = REAL_PG_3_WORKERS_6_TASKS_ALL_TERMINAL_NO_DUPLICATE_COMMITTED_EFFECTS_NO_ACTIVE_LEASES_CROSS_TENANT_FAIL_CLOSED_CRASH_RECOVERY_60MIN_SOAK
+
+R9_CURRENT_STATUS = NOT_PROVEN
+R9_REQUIRED = YES
+PHASE2_CLOSED_AFFECTED = NO
+PHASE2_CLOSED = YES
+P0_B_CLOSED = YES
+
+REAL_PROVIDER_WRITE = HOLD
+CUSTOMS_FILING = HOLD
+PAYMENT = HOLD
+AUTO_COMMISSION_CHARGE = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+PRODUCTION_READY = NO
+
+NEXT = IMPLEMENT_PRELEASE_FIX_B_THEN_REAL_PG_R9_THEN_REQUEST_PHASE3_FINAL_AUDIT
+
+最终结论：批准修复 B，不批准将默认五分钟租约当作正常吞吐标准。 R1–R8 已报告通过，但 R9 尚未成立；PHASE 3 必须证明安全收口和持续推进两者同时成立，才能进入最终 CLOSED 裁决。
+```
