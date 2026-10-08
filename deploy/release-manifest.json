@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "releaseId": "rc-20261008-linux-deploy-v1",
-  "releaseCommit": "PENDING_SEAL",
+  "releaseCommit": "04a936666ed8b3badd9ed498eca93b495285bd6e",
   "releaseBranch": "release/rc-20261008-linux-deploy-v1",
   "sealedAt": "2026-10-08",
   "deploymentEntryDoc": "DEPLOYMENT.md",
