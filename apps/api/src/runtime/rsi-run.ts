@@ -39,6 +39,7 @@ import {
 } from './rsi-restart-reconcile';
 import { openPrismaReconcile, planReconcileBootstrap } from './rsi-run-bootstrap';
 import { createProductionRecoveryPackDeps } from './recovery-si-production-composition';
+import { createRecoveryVerdictSettlement } from './recovery-verdict-settlement';
 import {
   generateRsiWork,
   parseRsiSignals,
@@ -210,6 +211,22 @@ export async function composeRsiRuntime(input: {
       reasonCodes: readonly string[];
       organizationId?: string;
     }) => Promise<void> | void;
+    /**
+     * PHASE 3（审计 MSG-20261009-02 批准的 `RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT`）：
+     * 裁决收口后由**运行时**自动执行 fenced settle 的端口（host 注入；缺省 = 不接线，行为与既有版本一致）。
+     * 由 `createRecoveryVerdictSettlement()` 提供：先写 durable INTENT（崩溃恢复锚点）→ 既有 fenced settle → 写 APPLIED。
+     */
+    recoveryVerdictSettlement?: {
+      settleAfterVerdict(request: {
+        taskId: string;
+        dedupeKey: string;
+        organizationId: string;
+        ownerRef: string;
+        verdict: 'PASS' | 'REVISE' | 'BLOCK' | null;
+        verdictRef: string;
+        trustedCompletionEvidenceRef?: string;
+      }): Promise<unknown>;
+    };
   /**
    * PHASE 1（SI/RSI 客户自治执行）—— 权威 durable 任务源：
    * 每次 watchdog tick 前向它领取「已就绪且本 worker 已原子领取」的任务，并采纳进**同一**引擎队列。
@@ -377,6 +394,11 @@ export async function composeRsiRuntime(input: {
   //   REVISE 会插入 P0 revision task；若旧 pending 不清除，revision task 之后的 PASS 会错误地执行原 scan。
   // 读法：armedScanTaskKey = 「已认领、正在等待裁决」的 scan task（仅当该任务确为历史扫描任务，否则为 null）。
   let armedScanTaskKey: string | null = null;
+  /**
+   * PHASE 3（`RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT`）：最近一次被本 runtime 认领、**尚未收口**的 recovery 任务。
+   * 裁决收口后由运行时以它为目标做 fenced settle（未接线 settlement 端口时该变量不产生任何行为）。
+   */
+  let pendingRecoveryTask: { taskId: string; dedupeKey: string; organizationId: string } | null = null;
   const armClaimedScanTask = (outcomeLike: unknown): void => {
     const claimed = (outcomeLike as { claimed?: { dedupeKey?: unknown } } | null | undefined)?.claimed;
     if (claimed === null || claimed === undefined) return; // 本轮没有新认领 → 保持现状（仍在 wait）
@@ -420,7 +442,20 @@ export async function composeRsiRuntime(input: {
     // C2：先接管**已到期**租约（运行中恢复，无需重启），再领取可用任务。
     if (source.reclaimExpired !== undefined) await source.reclaimExpired(5);
     const claimed = await source.claim(5);
-    if (claimed.length > 0) controller.adoptTasks(claimed);
+    if (claimed.length > 0) {
+      controller.adoptTasks(claimed);
+      // 记录「本 runtime 认领且尚未收口」的 recovery 任务（供裁决后自动收口使用）
+      const recoveryClaimed = claimed.find(
+        (task) => task.dedupeKey.startsWith('task:recovery:') && typeof task.organizationId === 'string' && task.organizationId !== '',
+      );
+      if (recoveryClaimed !== undefined) {
+        pendingRecoveryTask = {
+          taskId: recoveryClaimed.id,
+          dedupeKey: recoveryClaimed.dedupeKey,
+          organizationId: String(recoveryClaimed.organizationId),
+        };
+      }
+    }
   };
   const controllerWithAdoption =
     input.taskSource === undefined
@@ -496,6 +531,33 @@ export async function composeRsiRuntime(input: {
             const parsed = normalizeRsiVerdict(raw);
             if (parsed !== null) controllerWithDomainSteps.markWaitingForVerdict(parsed);
             await controllerWithDomainSteps.emit('JUDGE_VERDICT_RECEIVED');
+            /**
+             * PHASE 3（审计 MSG-20261009-02）：裁决收口后由**运行时**执行 fenced settle。
+             * 缺省未接线 `recoveryVerdictSettlement` ⇒ 行为与既有版本完全一致（不擅自改语义）。
+             */
+            const settlement = input.recoveryVerdictSettlement;
+            const pending = pendingRecoveryTask;
+            if (settlement !== undefined && pending !== null) {
+              let verdictRef = '';
+              if (input.verdictPath !== undefined) {
+                try {
+                  const artifactRaw = await input.readFile(input.verdictPath);
+                  const artifact = JSON.parse(artifactRaw) as { messageId?: unknown };
+                  verdictRef = typeof artifact.messageId === 'string' ? artifact.messageId : '';
+                } catch {
+                  verdictRef = '';
+                }
+              }
+              await settlement.settleAfterVerdict({
+                taskId: pending.taskId,
+                dedupeKey: pending.dedupeKey,
+                organizationId: pending.organizationId,
+                ownerRef: runtimeOwnerRef,
+                verdict: parsed,
+                verdictRef,
+              });
+              pendingRecoveryTask = null;
+            }
           },
           intervalMs: input.verdictWatch.intervalMs ?? 15_000,
         });
@@ -620,6 +682,23 @@ if (isDirectRun) {
       'RSI_RECOVERY_PACK=' + (productionRecoveryPack === undefined ? 'NOT_CONFIGURED' : 'PRODUCT_RECOVERY_SI'),
     );
 
+    /**
+     * PHASE 3（审计 MSG-20261009-02 批准）：生产入口同样接线 **verdict-aware fenced settlement**
+     * —— 裁决收口后由运行时自动 fenced settle（PASS 无完成证据 ⇒ 非完成态；缺失/不可信 ⇒ 安全等待）。
+     * 未拿到 Prisma 时不接线（骨架运行行为不变）；不新增任何 runtime / scheduler / controller。
+     */
+    const recoveryVerdictSettlement =
+      openedReconcile === null
+        ? undefined
+        : createRecoveryVerdictSettlement({
+            prisma: openedReconcile.prisma,
+            taskSource: openedReconcile.taskSource,
+            ownerRef: reconcileDecision.ownerRef,
+          });
+    console.log(
+      'RSI_VERDICT_SETTLEMENT=' + (recoveryVerdictSettlement === undefined ? 'NOT_CONFIGURED' : 'RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT'),
+    );
+
     const composition = await composeRsiRuntime({
       readFile: async (path) => fsPromises.readFile(path, 'utf8'),
       tasksPath: process.env.RSI_TASKS_PATH,
@@ -633,6 +712,7 @@ if (isDirectRun) {
       // PHASE 1：与 API 使用同一 durable 任务源 ⇒ 运行中无需重启即可发现并领取新任务
       ...(openedReconcile === null ? {} : { taskSource: openedReconcile.taskSource }),
       ...(productionRecoveryPack === undefined ? {} : { productRecoveryPack: productionRecoveryPack }),
+      ...(recoveryVerdictSettlement === undefined ? {} : { recoveryVerdictSettlement }),
     });
     const reconcile = await composition.reconcileNow();
     console.log(

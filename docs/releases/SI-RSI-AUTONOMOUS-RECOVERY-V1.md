@@ -1301,3 +1301,47 @@ NEXT_AUDIT = PHASE3_RECOVERY_DURABLE_CLOSURE_R1
 **下一单元（已获准的本机安全修复范围）**：实现 `PHASE3_RECOVERY_DURABLE_CLOSURE_FIX_R1`
 （`RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT`：verdict → fenced settle → durable 终态 → crash recovery），
 按 R1–R10 逐条验收后再送 `NEXT_AUDIT`；**不**批准 PHASE 3 收官或生产使能。
+
+### 3.26 `PHASE3_RECOVERY_DURABLE_CLOSURE_FIX_R1` —— 第一增量已实现并取证（R1/R3/R4/R5/R6/R7/R8 + 决策表）
+
+**新增模块** `apps/api/src/runtime/recovery-verdict-settlement.ts`
+- `decideRecoverySettlement()`（**纯函数**，逐条实现审计方指定的状态映射）：
+  PASS + 可信完成证据 ⇒ `SETTLE_COMPLETED`；PASS 无完成证据 ⇒ `SETTLE_BLOCKED` + `VERDICT_PASS_AWAITING_BUSINESS_PROOF`；
+  REJECT/DENY ⇒ `SETTLE_BLOCKED` + `VERDICT_REJECTED`；REVISE ⇒ `SETTLE_BLOCKED` + `VERDICT_REVISED_NOT_APPROVED`；
+  裁决缺失/超时/不可信 ⇒ **`SAFE_WAIT`**（不落终态、不视为 PASS）。
+- `createRecoveryVerdictSettlement()`：**先写 durable INTENT 再 settle，最后写 APPLIED**（INTENT/APPLIED 复用既有 `AuditLog`，
+  租户归属、追加式；**不新增表、不新增状态机、不新增 runtime**）。APPLIED 记录含
+  `verdictRef / decisionAction / reasonCode / beforeStatus / afterStatus / ownerRef / settleApplied / trustedCompletionEvidenceRef / recordedAt`。
+- **R7 跨租户 fail-closed**：收口前先解析**权威租户**（task → incident.sourceRefs[0].organizationId），与请求租户不一致 ⇒
+  直接拒绝且**不写任何行**（`SETTLEMENT_TENANT_MISMATCH`）。
+- **P0-5 崩溃恢复**：`listPendingSettlements()` / `resumePendingSettlements()` —— 找出「有 INTENT 无 APPLIED」的待收口决策并补齐；
+  恢复时**不重跑 domain step**，并由**当前 owner** 收口（旧 owner 会被既有 fenced settle 拒绝，属 fail-closed）。
+
+**运行时接线（含生产入口）**
+- `composeRsiRuntime({ recoveryVerdictSettlement })`：认领 recovery 任务时记录「待收口任务」；裁决收口后（`verdictWatcher` 真实路径）
+  调用 `settleAfterVerdict(...)`；**缺省不接线 ⇒ 行为与既有版本完全一致**（不擅自改语义）。
+- 生产启动入口同样接线：`rsi-run` 打印 `RSI_VERDICT_SETTLEMENT=RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT`（未拿到 Prisma 时为 `NOT_CONFIGURED`）。
+- **没有**新增 runtime / scheduler / controller / 第二状态机。
+
+**验收（`apps/api/src/__tests__/si-rsi-phase3-closure-fix-r1.test.ts`，6/6 PASS，真实 PostgreSQL）**
+| 项 | 结果 |
+| --- | --- |
+| 决策表（纯函数） | PASS 无证据 ⇒ BLOCKED；PASS + 可信证据 ⇒ COMPLETED；BLOCK ⇒ REJECTED；REVISE ⇒ REVISED；`null/undefined` ⇒ SAFE_WAIT |
+| **R1** | PASS 裁决经真实 verdictWatcher 收口后，**运行时自动** fenced settle（**无任何人为 settle 调用**） |
+| **R2（负向）** | 无完成证据 ⇒ 落 `BLOCKED`（**绝不** `COMPLETED` / `PROMOTED`） |
+| **R3** | settle 后租约 `RELEASED`；再次 tick 不重新领取、只读端口调用数仍为 1（domain step 不再重复执行） |
+| **R4** | 旧 owner / 过期租约收口被既有 fencing 拒绝（`FENCED_*`），新 owner 可正常收口 |
+| **R5（P0-5）** | 构造「有 INTENT 无 APPLIED」⇒ 重启（新 owner + reclaim/claim 接管）后 `resumePendingSettlements()` 补齐收口；**只读端口调用数不变**（未重跑 domain step） |
+| **R6** | BLOCK 与 REVISE 各自 reason code 收口为 `BLOCKED`，均不产生完成级状态 |
+| **R7** | 请求租户 ≠ 权威租户 ⇒ 拒绝（`SETTLEMENT_TENANT_MISMATCH`），**双方租户名下都没有 settlement 记录**，任务状态不变；权威租户可正常收口 |
+| **R8** | INTENT → APPLIED 两条记录齐备，含 `verdictRef / reasonCode / beforeStatus / afterStatus / ownerRef` |
+| **R10（部分）** | 缺口特征化测试 G1–G4 **4/4 仍绿**（未接线路径行为不变 = 向后兼容） |
+
+**回归**：SI-RSI 全套件 **16 文件 / 93 tests 全绿**（新增 1 文件 / 6 tests）；`api tsc --noEmit` = **0**；
+启动入口相关契约（`rsi-run` / `rsi-runtime-e2e` / `startup-parity`）**20 tests 全绿**。
+
+**本增量**尚未**覆盖（下一增量继续，不得据此判定 R1 全部完成）**：
+- **R2 正向路径**：把可信完成证据（CHANGE 3A 白名单，生产默认关闭）经运行时送到 `COMPLETED` —— 需在测试中显式启用可信来源；
+- **R9**：多 worker 并发下无重复业务副作用（需要专用库 + 多 runtime 实例的真实并发）；
+- **R10（全量）**：全量套件回归 sweep；
+- 小时级 soak（现在已具备正确循环单元）、断连恢复、Linux systemd、真实 Provider 仍为 **NOT VERIFIED / HOLD**。
