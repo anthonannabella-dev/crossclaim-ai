@@ -157,15 +157,18 @@ Drawback 的 1825 天（exportDate 锚点）被明确定位为**合格窗口**�
 * 渲染断言 12 项（含「不得出现 已申报/已提交/filed/已到账」「不得出现内部枚举」「覆盖不足必须提示」
   「完整覆盖不提示」）；UI render check **219/219 OK**，web tsc **0**。
 
-仍未接客户路由：缺 `GET /recovery-scans`（只读、org-scoped、复用 `buildScanSummaryView`）与对应页面；
-该端点需同步 `API.md`（api-contract 闸门为双向比对）。
+客户路由已接线：`GET /recovery-scans/:id`（只读、org-scoped、`reviewOpportunities` 权限、404 = 不存在或跨租户、
+复用 `buildScanSummaryView`，不触发扫描 / 不写库 / 无外部动作），并同步 `API.md`
+（api-contract：implemented=100 / documented=87 → **API_CONTRACT_OK**）；页面
+`apps/web/app/recoveries/scans/[id]/page.tsx` 以 server component 渲染该只读投影。
+证据：api tsc 0、web tsc 0、UI render 219/219、i18n 5 语言 904 键 / 0 硬编码。
 
 | PHASE | 内容 | 状态 |
 | --- | --- | --- |
 | 3 | Runtime claim → durable scan scope 装载（fail-closed BLOCK） | **已接线（本提交）**：`scan-scope-loader.ts` + `recovery-si-pack` 扫描任务守卫 |
 | 7 | Connector 历史区间 + coverage 元数据 | **已实现（本提交）**：`ConnectorHistoricalRange` + server-owned 校验 + coverage 回传 |
 | 8 | Customs 历史管线接线（entry → duty → discrepancy → eligibility → matching → evidence → drawback） | **已实现（复用既有链）**：`customs-historical-pipeline.ts` + 8/8 测试 |
-| UI_RESULT_VIEW | 客户可见结果页（范围/覆盖/状态/计数/完整度） | **PARTIAL**：视图组件 + 5 语言 + 12 项渲染断言已就绪；**尚未**接客户路由（缺 `/recovery-scans` 只读端点 + 页面） |
+| UI_RESULT_VIEW | 客户可见结果页（范围/覆盖/状态/计数/完整度） | **DONE**：视图组件 + 5 语言 + 只读端点 `GET /recovery-scans/:id` + 页面 `/recoveries/scans/:id`（api-contract OK） |
 | 10 | ONE SI Runtime E2E（Goal → scan → shards → customs → summary） | 未实现 |
 | 11 | 生产边界验证（自动化断言 externalWrite/filing/payment = false 的端到端） | 部分（summary 层已固化，运行时尚无 E2E） |
 | 12 | durability / 并发 / crash recovery 的运行时验证 | 部分（store + executor 级已测；运行时级未测） |

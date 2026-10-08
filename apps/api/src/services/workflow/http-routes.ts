@@ -170,6 +170,7 @@ import { getAccountManagementView } from './account-management-view';
 import { getEntitlementProjection } from './entitlement-view';
 import { getRecoveryMoneyView } from './recovery-money-view';
 import { listRecoveryStates } from './recovery-states';
+import { buildScanSummaryView, loadRecoveryScanById } from '../historical-scan';
 import { listOpportunities } from './opportunity-list';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
 import { ForbiddenError, assertPermission } from './permissions';
@@ -184,6 +185,8 @@ const ACCOUNTS_PATH = /^\/accounts$/;
 const RECOVERY_MONEY_PATH = /^\/recovery-money$/;
 /** PC-04：客户可见的失败 / 恢复状态投影。 */
 const RECOVERY_STATES_PATH = /^\/recovery-states$/;
+/** HISTORICAL_RECOVERY_SCAN_V1：客户可见的历史扫描结果投影（只读；不触发扫描、不写库）。 */
+const RECOVERY_SCAN_PATH = /^\/recovery-scans\/([^/]+)$/;
 /** PC-03：客户可见的 Claim Package 只读视图。 */
 const CASE_CLAIM_PACKAGE_PATH = /^\/cases\/([^/]+)\/claim-package$/;
 /** PC-02：客户可见的机会列表（read-only projection）。 */
@@ -487,6 +490,7 @@ export async function handleWorkflowRequest(
   const opportunityList = OPPORTUNITY_LIST_PATH.test(path);
   const caseClaimPackage = CASE_CLAIM_PACKAGE_PATH.exec(path);
   const recoveryStates = RECOVERY_STATES_PATH.test(path);
+  const recoveryScan = RECOVERY_SCAN_PATH.exec(path);
   const recoveryMoney = RECOVERY_MONEY_PATH.test(path);
   const accountsPath = ACCOUNTS_PATH.test(path);
   const entitlementsPath = ENTITLEMENTS_PATH.test(path);
@@ -570,7 +574,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !carrierClaimResponses && !customsRecovery && !customsReturnEvidence && !customsChainRun && !customsEntryFactRead && !ps04StateRead && !platformQualificationRead && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
+  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryScan && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !carrierClaimResponses && !customsRecovery && !customsReturnEvidence && !customsChainRun && !customsEntryFactRead && !ps04StateRead && !platformQualificationRead && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
     !commercialPoliciesPath &&
     !commercialPolicyPath &&
     !commercialPolicyAcceptPath &&
@@ -1037,6 +1041,22 @@ export async function handleWorkflowRequest(
     if (recoveryStates && method === 'GET') {
       // PC-04：客户可见的失败 / 恢复状态（只读投影；不触发任何写操作或重试）。
       sendJson(res, 200, await listRecoveryStates(deps.prisma, actor));
+      return true;
+    }
+
+    if (recoveryScan !== null && method === 'GET') {
+      // HISTORICAL_RECOVERY_SCAN_V1：客户可见的历史扫描结果（只读投影；tenant-scoped；
+      //   不触发扫描、不写库、不产生任何外部动作；覆盖诚实由 buildScanSummaryView 保证）。
+      assertPermission(actor.role, 'reviewOpportunities');
+      const scanRow = await loadRecoveryScanById(deps.prisma, {
+        organizationId: actor.organizationId,
+        scanId: recoveryScan[1] ?? '',
+      });
+      if (scanRow === null) {
+        sendJson(res, 404, { error: 'RECOVERY_SCAN_NOT_FOUND' });
+        return true;
+      }
+      sendJson(res, 200, buildScanSummaryView(scanRow));
       return true;
     }
 
