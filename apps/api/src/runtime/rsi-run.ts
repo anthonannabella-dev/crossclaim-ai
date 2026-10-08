@@ -284,6 +284,13 @@ export async function composeRsiRuntime(input: {
   // **先**组装 domain-step-aware controller，**再**交给 event loop —— 否则 loop.start() / controller.emit()
   // 持有的是原始 controller，domain step 永远不会运行（只在手动 tick 时运行）。
   const domainStep = input.historicalScanDomainStep;
+  const runDomainStepIfScanTask = async (outcomeLike: unknown): Promise<void> => {
+    const claimed = (outcomeLike as { claimed?: { dedupeKey?: unknown } } | null | undefined)?.claimed;
+    const dedupeKey = claimed?.dedupeKey;
+    if (typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:')) {
+      await domainStep!({ dedupeKey });
+    }
+  };
   const controllerWithDomainSteps =
     domainStep === undefined
       ? controller
@@ -291,11 +298,14 @@ export async function composeRsiRuntime(input: {
           ...controller,
           async tick() {
             const outcome = await controller.tick();
-            const claimed = (outcome as { claimed?: { dedupeKey?: unknown } } | null | undefined)?.claimed;
-            const dedupeKey = claimed?.dedupeKey;
-            if (typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:')) {
-              await domainStep({ dedupeKey });
-            }
+            await runDomainStepIfScanTask(outcome);
+            return outcome;
+          },
+          // AUDIT-2R2 CHANGE 1（实测）：既有 event loop 的续跑路径调用的是 `controller.emit(event)`，
+          // `tick()` 仅在无事件可用时兜底 —— 因此 emit 路径必须同样被覆盖，否则 loop 驱动的链不会触发 domain step。
+          async emit(event: Parameters<typeof controller.emit>[0]) {
+            const outcome = await controller.emit(event);
+            await runDomainStepIfScanTask(outcome);
             return outcome;
           },
         };
