@@ -403,6 +403,18 @@ claim → Recovery pack proposal → park-for-judge → verdict 收口（既有�
 verdict watcher 的收口回调）确定最小接线点，再实现；同时补齐 CHANGE 1 的 loop 驱动用例。
 在接线点确定前不改 runtime 语义，避免引入「裁决前即完成 scan」的新旁路。
 
+### 13.11 CHANGE 2 已落地一半：park 期间不得执行 domain step（续跑接线待补）
+
+* **生产代码（`a4d4653f`）**：`composeRsiRuntime` 的 domain-step 包装先读
+  `controller.state().waitingForVerdict`；为 `true`（存在 domain pack 时强制 park-for-judge）→ **直接 return**，
+  不在裁决收口前完成 scan。该门只会**阻止**过早执行，不会引入旁路。
+* **E2E 断言**：claim 后 `waitingForVerdict === true` 且 `domainStepOutcomes.length === 0`（parked 期间零执行）。
+* **仍待完成**：裁决收口**之后**的续跑接线。实测 `markWaitingForVerdict('PASS') + tick()` 不会重新产生 claim，
+  因此「post-verdict → domain step → backfill → COMPLETED」还需读 `attachContinuationToController` 暴露的方法集
+  与 verdict watcher 的收口回调，确认既有续跑/重认领入口后再接。
+* 门禁：22/22、api tsc 0（`historical-scan-5y-e2e` 2/2、`historical-scan-runtime-scope` 8/8、
+  `rsi-si-runtime-e2e` 5/5、`agent-goal-runtime-wiring` 7/7）。
+
 ### 13.10 CHANGE 1 实测发现：loop 走的是 emit() 而不是 tick()
 
 * 实测（临时用例，未提交）：composition.loop.pollOnce() 驱动时，historicalScanDomainStep **未被调用**
