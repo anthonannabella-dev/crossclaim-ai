@@ -826,3 +826,56 @@ node tools/dev/run-si-rsi-suite.mjs --rounds 1 --per-file --label change4a-perfi
 = **NOT VERIFIED**；`REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`；`PRODUCTION_READY = NO`。
 
 **剩余未关闭**：仅 **P0-B1（P0 生产同构业务链 E2E）**，完成后申请 PHASE 2 FINAL-R2 复审。
+
+### 3.16 P0-B1（P0）生产同构业务链 E2E —— 已实现并取证
+
+**审计指出的缺口（`MSG-20261008-20`：`P0_B_CLOSED = NO`）**：此前只有**内存 dispatch log**；
+pack 跑完（只读步骤确实执行）之后**没有任何 durable 痕迹**，因此无法证明「真实业务步骤执行」，
+而不是「只写了一条 dispatch 日志」。审计明确要求：本地机会识别必须产生**可审计的 durable 记录**。
+
+**① 新增 `apps/api/src/runtime/recovery-domain-outcome-recorder.ts`**（host 层，**不是**第二套 runtime）
+- 把 domain step 的**最终结论**写成一条**追加式审计事实**（既有 `AuditLog` 表，租户归属）：
+  `action = RECOVERY_DOMAIN_STEP_EXECUTED`、`entityType = 'AutonomyTask'`、`entityId = taskId`；
+- `changes` 只放**非敏感投影**：`packId / dedupeKey / status / evidenceRef / reasonCodes / domain /
+  opportunityRef / guardActions / businessOutcome / externalWritePerformed=false`；
+- `businessOutcome` 用 §3.9 词表：**PASS ⇒ `OPPORTUNITY_IDENTIFIED`**，其它 ⇒ `BLOCKED`
+  —— **绝不**产生终局完成档（终局另有 CHANGE 3A 的可信证据门禁）；`updatesTaskState = false`；
+- **幂等**：PASS 以 `evidenceRef`、BLOCK 以**原因码集合**作稳定键，同因不重复追加、异因各留一条；
+- **fail-closed**：无可信租户 ⇒ 不写任何行（也不猜租户）。
+
+**② domain 派发层接入**（`rsi-domain-pack.ts`）：新增 host 钩子 `onEvidence`（含 `reasonCodes`）；
+PASS 与 BLOCK **都要留痕**；钩子抛错 ⇒ **降级为 BLOCK**（`domain-pack:outcome-record-failed`）
+—— 绝不允许「审计写失败但仍报 PASS」。
+`rsi-run.ts` 的 `composeRsiRuntime` 新增 `onDomainPackEvidence` 透传（缺省不记录 ⇒ 对既有调用方向后兼容）。
+
+**③ 验收 `si-rsi-phase2-production-e2e.test.ts`（6/6 PASS，真实 PostgreSQL）**
+组装方式与生产一致：`composeRsiRuntime` + `createAutonomyTaskSource`（durable 领取）+ `createProductionRecoveryPackDeps`
+（真实 Recovery pack + 既有 Prisma 只读 read ports）+ 结果记录器。
+
+| 用例 | 对应审计判据 | 断言要点 |
+| --- | --- | --- |
+| E1 | ① 入口 + ③ durable 记录 | 有效授权任务经 durable claim 进入 `recovery-si` 业务步骤；**读回数据库**得到 1 条 `AuditLog`：租户=org-A、`actorType=SYSTEM`、`entityType=AutonomyTask`、`entityId=任务行 id`、`status=PASS`、`domain=CARRIER`、`opportunityRef=<任务引用>`、`businessOutcome=OPPORTUNITY_IDENTIFIED`、`evidenceRef` 形如 `recovery-si:CARRIER:<12 hex>`、`externalWritePerformed=false` |
+| E2 | ② 真读业务事实（反证） | **不播种**机会行 ⇒ domain step 必须 BLOCK，且留痕 `reasonCodes=['RECOVERY_READ_TOOL_FAILED','recovery.opportunity.read','TOOL_THREW']` ⇒ 证明只读端口真在查库，而不是空跑成功 |
+| E3 | ④ 未授权 | 授权已撤销 ⇒ 任务未被领取、dispatch 为空、**审计表为空**（业务步骤未执行） |
+| E4 | ④ 授权中途撤销 | 领取后撤销 ⇒ `executionPreflight` 返回 `EXEC_PREFLIGHT_AUTHORIZATION_REVOKED`，业务步骤不执行、无留痕 |
+| E5 | ④ 跨租户 | org-B 的机会不会被 org-A 的任务读到（BLOCK），留痕归属**执行租户 org-A** |
+| E6 | ⑤ 边界 | 无外部写 / 不读凭据 / 不改任务状态 / 不产生终局完成；`runtimeMembers().secondRuntime = 0` 且 `domainPacks=['recovery-si']`（**无第二 runtime**）；重复记录幂等（`ALREADY_RECORDED`）；无可信租户拒绝写入 |
+
+**④ 回归**
+- SI-RSI 全套件 **14 文件 / 83 tests**（新增 1 文件 / 6 tests），`node tools/dev/run-si-rsi-suite.mjs --rounds 2` **连续 2 轮 ALL_GREEN**；
+- 受影响的**核心运行时定向回归**（`rsi-*`、`historical-scan-*`、`agent-goal*`、部署契约）**20 文件 / 199 tests 全绿**；
+- `api tsc --noEmit` = **0**；未改 Prisma schema（复用既有 `AuditLog`，无新迁移）。
+
+**⑤ 诚实登记（不得默认为已解决）**
+1. **全量套件未完成**：`apps/api` 共 **480 个测试文件**，且因共享数据库 `fileParallelism:false` 串行执行；
+   本轮一次全量尝试运行约 **18 分钟仍未结束**，已主动终止（未取得全量结果）。**不声称全量通过**；
+   继续沿用项目既有做法（定向回归 + SI-RSI 全套件多轮），并保留「全量耗时」为待办。日志/退出码：手动终止 ⇒ 无完整结论。
+2. **后台运行时进程（潜在隔离干扰源）**：本机存在 **3 个后台 `rsi-run` 进程**共享同一 dev 数据库
+   （2 个 `tsx src/runtime/rsi-run.ts` 起于 2026-10-05，1 个 `dist/src/runtime/rsi-run.js` 起于 2026-10-08 18:24）。
+   它们会周期性轮询同一 durable 队列，**可能是此前「未复现 1 项失败」与既有 P2E-DB5 隔离债的同源诱因**。
+   **未擅自终止**（非本任务创建），登记为待 HOST 决定的开发环境事项。
+3. 小时级 soak / 真实断电 / Linux 实机 systemd / 真实浏览器验收 = **NOT VERIFIED**；
+   `REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`；`PRODUCTION_READY = NO`。
+
+**PHASE 2 状态**：审计指定的三项（CHANGE 3A / CHANGE 4A / P0-B1）**均已实现并取证** ⇒
+`PHASE2_CLOSED` 仍为 **NO**，等待 **PHASE 2 FINAL-R2** 独立复审；复审前不自行宣告 CLOSED。
