@@ -314,3 +314,26 @@ claimRecoveryScanRun + loadScanScopeForClaimedTask（caller 自报范围被忽�
   `productRecoveryPack.scanScope` 透传在 `1aede231`。
 * 送审：`AUDIT-2R`，REVIEWED_HEAD = `6dada7cf`。
 
+### 13.6 AUDIT-2R 裁决（已归档）与下一步 CHANGE
+
+* `MSG-20261008-05`：`VERDICT = PASS WITH REVISE`（`REVIEWED_HEAD 6dada7cf`），FNV-1a `1d2a8e50` / `FULL_COPY_OK` 163/163。
+* 唯一 `SYNTHETIC_5Y_E2E = REVISE`：目前是**两条平行链** ——（A）Runtime → scanScope 装载 与
+  （B）scan → backfill → customs → summary。评审要求的是**同一条连续链**：
+
+```text
+5年 Goal → queue task → composeRsiRuntime → controller.tick actual claim
+  → product Recovery dispatch → durable scanScope
+  → historical scan executor → runHistoricalBackfill()
+  → checkpoint/backfill → existing Customs pipeline → durable summary
+```
+
+* 评审明确：**不要**把 `runHistoricalBackfill()` 硬塞进已封板的 read-only recovery pack
+  （会破坏 `writesDatabase=false` / `executesActions=false`）；而是在**既有 ONE SI Runtime 下**新增
+  historical scan execution port / domain step，由 server-owned composition 显式连接
+  （仍不创建新 scheduler / runtime）。
+* 待验证项：same taskKey / same scanId / same durable scope / backfill actually invoked /
+  `SOURCE_LIMITED` preserved / CLAIM_READY·NEEDS_EVIDENCE·NOT_CANDIDATE counts persisted /
+  `claimsFiled = 0` / `externalWrite = false` / `payment = false`。
+* 另需补强 runtime leg 证据（评审指出 `domainDispatchLog().length` 断言偏弱）。
+* 下一步：实现该 execution port + composition 连线 + 单条连续 E2E，再送 AUDIT-2 窄复审。
+

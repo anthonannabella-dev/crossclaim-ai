@@ -162041,3 +162041,250 @@ api tsc                = 0
 
 把 productRecoveryPack.scanScope wiring + actual runtime claim E2E 接上后，再送一个 AUDIT-2R 窄复审即可。
 ```
+
+### [MSG-20261008-05] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-2R 窄复审（REVIEWED_HEAD 6dada7cf）= PASS WITH REVISE（唯一 CHANGE：SYNTHETIC_5Y_E2E —— runtime claim 与 durable backfill 仍是两条链，需在既有 ONE SI Runtime 下新增 historical scan execution port 并由 server-owned composition 显式连接）
+
+```text
+SYNTHETIC_5Y_E2E = REVISE
+
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 6dada7cf3f356fb930462a86514dcbdbac3751b0
+
+这轮把上一轮最关键的 runtime wiring 缺口真实修掉了一半以上：
+
+纯文本
+productRecoveryPack.scanScope
+→ createProductRecoverySiPack()
+→ createRecoverySiPack()
+
+已经实际接通，而且：
+
+纯文本
+composeRsiRuntime()
+→ controller.tick()
+→ actual claimed task
+→ reserved Recovery domain dispatch
+→ runtime-side scanScope.load()
+→ durable RecoveryScanRun lookup
+
+这些都成立。
+
+但我仍不能把完整的 SYNTHETIC_5Y_E2E 判 PASS，因为目前还是两段链路，没有真正形成一条 runtime→backfill→customs→summary 的连续产品执行路径。
+
+已经 CLOSED 的部分
+
+这三点现在可以正式确认。
+
+第一，ONE SI Runtime actual claim = PASS。
+
+测试不再直接伪造 runtime outcome，而是真正：
+
+纯文本
+composeRsiRuntime(...)
+→ composition.controller.tick()
+→ outcome.claimed
+
+并断言：
+
+纯文本
+outcome.claimed.dedupeKey === taskKey
+
+第二，product composition scanScope wiring = PASS。
+
+createProductRecoverySiPack() 现在真实接受并透传：
+
+TypeScript
+scanScope?: RecoverySiPackDependencies['scanScope']
+
+rsi-run.ts 的 productRecoveryPack 组合也透传了它。
+
+第三，reserved Recovery dispatch = PASS。
+
+仍然保持：
+
+纯文本
+task:recovery:*
+→ Recovery domain runner only
+
+而 domainPacks 手工注入 recovery-si 仍会：
+
+纯文本
+RECOVERY_SI_RESERVED_PACK_ID_REJECTED
+
+所以没有引入第二条旁路。
+
+唯一剩余 CHANGE：runtime claim 与真实 backfill 仍未连接
+
+当前第一个测试走的是：
+
+纯文本
+ONE SI Runtime
+→ claim task
+→ scanScope load
+→ Recovery SI read-only pack
+→ domain dispatch
+
+第二个测试则是：
+
+纯文本
+直接 claimRecoveryScanRun()
+→ 直接 loadScanScopeForClaimedTask()
+→ runHistoricalBackfill()
+→ Customs
+→ summary
+
+也就是说两条链现在是：
+
+纯文本
+A. Runtime → scanScope
+
+和
+
+纯文本
+B. scan → backfill → customs → summary
+
+而不是：
+
+纯文本
+Runtime
+→ scanScope
+→ same scan execution
+→ backfill
+→ customs
+→ summary
+
+这一点很关键，因为当前 recovery-si-pack 本身仍是 read-only evidence pack：
+
+纯文本
+writesDatabase = false
+executesActions = false
+
+它加载了 scan scope 后，并不会调用：
+
+纯文本
+runHistoricalBackfill()
+
+也没有看到别的 production composition 将 runtime outcome 继续交给 historical backfill executor。
+
+因此现在能证明的是：
+
+ONE SI Runtime 能认领 historical task，并能安全加载其 durable scope。
+
+还不能证明：
+
+ONE SI Runtime 认领之后，产品链会真正启动该 scan 的 durable backfill，并最终产生 Customs/summary 结果。
+
+所以：
+
+SYNTHETIC_5Y_E2E = REVISE
+
+最小修改建议
+
+不建议把 runHistoricalBackfill() 硬塞进现有 read-only Recovery SI pack，因为这会破坏已经封板的：
+
+纯文本
+writesDatabase=false
+executesActions=false
+
+更稳妥的是新增一个既有 runtime 下的 historical scan execution port / domain step，由 server-owned composition 显式连接：
+
+纯文本
+runtime claimed historical task
+→ durable scanScope
+→ historical scan executor
+→ runHistoricalBackfill()
+
+它仍然属于同一个 ONE SI Runtime，不创建新 scheduler/runtime。
+
+然后只需要一条真正连续的 synthetic E2E：
+
+纯文本
+5年 Goal
+→ queue task
+→ composeRsiRuntime
+→ controller.tick actual claim
+→ product Recovery dispatch
+→ durable scanScope
+→ historical executor
+→ checkpoint/backfill
+→ existing Customs pipeline
+→ durable summary
+
+并验证：
+
+纯文本
+same taskKey
+same scanId
+same durable scope
+backfill actually invoked
+SOURCE_LIMITED preserved
+CLAIM_READY/NEEDS_EVIDENCE/NOT_CANDIDATE counts persisted
+claimsFiled = 0
+externalWrite = false
+payment = false
+证据还需补强一处
+
+当前 runtime leg 断言：
+
+纯文本
+domainDispatchLog().length > 0
+
+但没有断言该 dispatch 的最终 status/reason。
+
+建议至少增加：
+
+纯文本
+dispatchLog[0].taskId === claimed task
+dispatchLog[0].packId === 'recovery-si'
+
+以及明确验证 scope load 成功，而不仅仅是 loadedRefs 被调用。
+
+否则“scanScope 被调用后立即 BLOCK”也可能让当前断言通过。
+
+这不是安全漏洞，因为 BLOCK 是 fail-closed，但作为 E2E 证据还不够强。
+
+RISKS
+
+其余上一轮项目保持 PASS：
+
+纯文本
+CHECKPOINT_RESUME       = PASS
+SOURCE_COVERAGE_HONESTY = PASS
+NO_EXTERNAL_ACTION      = PASS
+NO_SECOND_RUNTIME       = PASS
+
+production wiring 缺口现在是功能未连通，不是越权风险；缺 scanScope 时仍会：
+
+纯文本
+RECOVERY_SCAN_SCOPE_LOADER_NOT_WIRED
+→ BLOCK
+
+所以本轮是 PASS WITH REVISE，不是 BLOCK。
+
+GitHub Actions 对 exact HEAD 仍：
+
+NOT_OBSERVED
+
+因此：
+
+纯文本
+historical-scan-5y-e2e 2/2
+runtime-scope          8/8
+rsi-si-runtime-e2e     5/5
+runtime-wiring         7/7
+api tsc                0
+
+仍属于 local/Codex evidence。
+
+最终边界继续：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+SECOND_*                 = 0
+全部 HOLD                = unchanged
+
+结论：runtime claim + scanScope wiring 已经 PASS；只差把同一次 runtime claim 真正接到 historical backfill executor，再一路跑到 Customs + summary。做到这一点，PHASE 10 才能正式 CLOSED。
+```
