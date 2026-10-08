@@ -575,3 +575,39 @@ rsi-event-loop 3）；api tsc 0。GitHub Actions = NOT_OBSERVED（仅 local/Code
 **证据**：`historical-scan-boundary` 7/7；与 5 年 E2E 合并定向批次 16/16；api tsc 0。GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
 
 **审计**：`AUDIT-3` 覆盖 PHASE 11/12 —— 受审计通道阻塞影响，待通道恢复后送审。
+
+### 15. PHASE 12 完成 —— 多 worker 并发 / 崩溃恢复 / 陈旧租约 / 检查点续跑 / 幂等（内部单元，DONE）
+
+新增 `apps/api/src/__tests__/historical-scan-concurrency.test.ts`（4/4，真实 PostgreSQL）。**不新增 runtime / scheduler / queue。**
+
+**① 多 worker 并发认领（CAS，唯一赢家）**
+
+* 两个 worker 同时对同一 `RecoveryScanRun` 调用 `claimRecoveryScanRun`（`Promise.all`）→ **恰好一个**拿到行；
+  因 `updateMany where status='CREATED'` 的 CAS，败者不产生任何写。
+* 断言 durable 行：`status=RUNNING`、`leaseOwner ∈ {winner}`、`recordsScanned=0`、`nextShardIndex=0`（败者零推进检查点）。
+* 第三个 worker 再次认领同样返回 `null`（RUNNING 不可被再次认领，杜绝第二执行者）。
+
+**② 崩溃恢复（跨 worker，durable checkpoint）**
+
+* worker A 认领后以 `maxPages=2` 中断（进程内状态全部丢弃，模拟崩溃）→ 返回 `PARTIAL`；
+  durable 行仍为 `RUNNING` 且 `nextShardIndex=2`（**落库的是 checkpoint，而不是 PARTIAL 终态**）。
+* worker B（不同 `leaseOwner`，等价新进程）不重新认领，直接续跑 → `COMPLETED`；
+  `Set(seen).size === seen.length`（**分片零重复**），`recordsScanned === 已处理分片数`。
+
+**③ 幂等（重放零副作用）**
+
+* `COMPLETED` 后再次执行同一 scan → 返回 `COMPLETED`，**pagePort 未被再次调用**（`seen.length` 不变），
+  `RecoveryScanRun` **行数不变**，`recordsScanned / nextShardIndex` 与首次完成后完全一致。
+
+**④ 陈旧租约（诚实边界，记录而不美化）**
+
+* scan 级**没有** lease reclaim / fencing：租约早已过期的 `RUNNING` scan 不会被自动回收，`claimRecoveryScanRun` 对非 `CREATED` 一律返回 `null`
+  —— 本 PHASE 不新增第二套 lease 引擎。
+* 恢复语义由**既有** ONE SI Runtime 的 task-lease reconcile 承担（`rsi-restart-reconcile.test.ts` 10/10、
+  `rsi-reboot-reconcile-db.test.ts` 10/10，本批一并复跑）。
+* 仍记为 `PRODUCTION_DURABLE_QUEUE_REQUIRED`（生产级 durable/atomic 队列 + 租约围栏），未在本 PHASE 解决。
+
+**证据**：`historical-scan-concurrency` 4/4；PHASE 12 批次 **40/40**（含 5 年 E2E 9、边界 7、runtime reconcile 20）；api tsc 0。
+GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
+
+**审计**：`AUDIT-3`（PHASE 11/12）待审计通道恢复后送审。
