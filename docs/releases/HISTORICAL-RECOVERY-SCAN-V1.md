@@ -717,6 +717,8 @@ durable 行 `RUNNING / nextShardIndex=2`；第二次同一域步骤调用（新�
 * 浏览器验收：**CHECKS_PASSED=123 / CHECKS_FAILED=0**（`reports/acceptance/2026-10-08T04-47-20-994Z`），含
   `scan.result.api.probe / coverage.notice / boundary.note`、`mobile.scan.result.*`、`browser.console.no.errors`、
   `browser.no.uncaught.exceptions` 全部 PASS。
+  *运行产物（含 desktop/mobile 截图与 `journey-summary.json`）为保持工作树 clean **不入库**，已归档到本机工作区
+  `work/hist-scan/acceptance-123-0/`（17 个文件）；仓库内 `reports/acceptance/*` 的生成型文件已还原至 HEAD。*
 * `historical-scan-http` 3/3；api tsc 0；`historical-scan-*` 全量批次保持全绿；全量回归仍为 4657/4658（唯一失败 = 既有 P2E-DB5 flake，隔离 20/20）。
 * **诚实记录**：该缺陷存在于 §10 的 UI_RESULT_VIEW 交付中，AUDIT-1（PHASE 8 + UI_RESULT_VIEW）当时**未发现**
   （其证据为视图渲染 + api-contract，未覆盖 HTTP 方法白名单）；本节为 PHASE 14 的补强，并将随 AUDIT-4 送审。
