@@ -1708,3 +1708,31 @@ SELECT t.typname
 
 **④ 下一步（本门禁的最后一项）**：重跑失败用例 + 受影响测试 + **全量 API 回归**（480 文件 / 4800 用例），
 冻结 **100% PASS** 证据后提交 `PHASE3_FINAL_R2` 复审（审计明确：不要求重复 60 分钟 soak，除非改动触及 runtime/lease/settlement/推进语义 —— 本次仅改测试查询）。
+
+### 3.37 `P3_FINAL_REGRESSION_GATE` 关闭 —— 全量 API 回归 **100% PASS**（`ALL_GREEN`）
+
+```
+node tools/dev/run-si-rsi-suite.mjs --rounds 1 --all --label p3-final-full-3   # head 341ac5b8，工作树 clean
+→ Test Files 484 passed (484) / Tests 4818 passed (4818) / failed 0 / Duration 1481.00 s（24.7 分钟）
+→ RESULT = ALL_GREEN
+```
+
+**三次全量回归的收敛过程（如实登记，全部由真实修复驱动）**
+| 轮次 | label | 文件 | 失败文件 / 用例 | 原因与处置 |
+| --- | --- | --- | --- | --- |
+| 1 | `p3-final-full` | 484 | 3 / 4 | **3 个引擎单测断言"旧预租行为"**（`rsi-continuation-engine` / `rsi-full-loop-e2e` / `rsi-park-for-judge`）⇒ 按 PRELEASE_FIX_B 口径调整（裁决事件不再预租；下一条由下一次正常 tick 领取） |
+| 2 | `p3-final-full-2` | 484 | 1 / 2 | `operations-dashboard-db` 钩子 `Hook timed out`（10.0s / 5.3s）⇒ 与 `email-verification-db` **同类锁竞争**；加固为有界 `lock_timeout=3s` + 退避重试 + 显式 30s hookTimeout（判据零变化） |
+| **3** | **`p3-final-full-3`** | **484** | **0 / 0** | **ALL_GREEN（4818/4818）** |
+
+**门禁四步全部完成**
+1. **隔离复现**：新建隔离 fresh 库 `crossclaim_p3r2_iso`，原失败用例 **27/27 通过** ⇒ 确认由共享库残留 schema 干扰（非代码缺陷）；
+2. **授权修订**：枚举查询改为关联 `pg_namespace` 并约束 `current_schema()`（断言未放宽，与同文件其它结构用例一致）；
+3. **受影响测试重跑**：被 prelease 修复影响的自测（含 4 处旧断言）与锁竞争类钩子全部处置并复验；
+4. **全量回归 100% PASS**：484 文件 / 4818 用例 / 0 失败（本轮 head `341ac5b8`）。
+
+**边界（严格遵守审计红线）**：未删除共享库 `rc_c3_fresh_check`、未终止 3 个后台 `rsi-run` 进程（均需 HOST 授权）；
+隔离库 `crossclaim_p3r2_iso` 保留供复验。证据：`tools/verification/si-rsi-suite-runs/p3-final-regression-gate-pass.json`
+（连同第 1–3 步证据 `p3-final-regression-gate.json`）。
+
+**下一步**：提交 **`PHASE3_FINAL_R2`** 最小范围复审（附本次修复清单：① 枚举查询 schema 约束；② 3 个引擎单测按 prelease 口径调整；③ `operations-dashboard-db` 钩子加固；④ 全量回归 ALL_GREEN 证据）。
+按审计口径，本次**未触及** runtime / lease / settlement / 任务推进语义（只改测试与其查询），故**不重复** 60 分钟 soak。
