@@ -356,8 +356,22 @@ NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
 | 06 | 发布门禁 `gates.requiredTestFiles` 已包含全部 6 个 PHASE 1 套件，且文件真实存在；仍要求 SHA 锁定 + 工作树 clean |
 | 07 | 门禁脚本 `deploy/verify-release.mjs` 会**真实执行**必需测试（`gate.tests.pass` + `vitest.mjs`），不是只列清单 |
 
-**实跑验证**：提交后执行 `node deploy/verify-release.mjs --root .`（见提交信息 / 本轮日志），
-门禁在有 DATABASE_URL 的开发库上实际跑完新增 PHASE 1 套件 —— `FULL_REGRESSION` 之外，发布门禁本身也覆盖了 PHASE 1 行为。
+**实跑验证**（提交 `41df44dc`，工作树 clean 后执行 `node deploy/verify-release.mjs --root .`）：
+
+```
+PASS  manifest.readable / manifest.releaseCommit.locked
+PASS  git.head.readable / git.branch.readable
+PASS  git.worktree.clean
+PASS  artifacts.present
+PASS  gate.api.build        ← tsc 构建通过
+PASS  gate.tests.pass       ← **门禁真实跑完必需的 10 个套件（含 6 个 PHASE 1 套件）**
+FAIL  git.branch.allowed    ← feat/* 属 manifest 的 forbiddenDeploymentBranches（**正确拒绝**）
+FAIL  release.commit.locked ← 开发分支与封板 releaseCommit(04a93666) 的差异含源码/迁移（**正确拒绝**）
+RELEASE_GATE=FAIL（2 项阻断）→ 必须停止部署
+```
+
+⇒ 这正是治理想要的行为：**开发分支不可部署**，同时门禁确实把 PHASE 1 行为纳入了发布前必跑集；
+正式发布需在新 RC 上重新锁定 `releaseCommit`（AUDIT-RC-3）。
 
 > 备注：`gates.requiredTestFiles` 的变更作用于**开发分支**的 manifest；正式封板时会在新 RC 上重新锁定
 > `releaseCommit`（AUDIT-RC-3 发布审计时执行）。GitHub Actions 仍未观测（`NOT_OBSERVED`），
