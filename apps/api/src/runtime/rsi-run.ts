@@ -184,6 +184,8 @@ export async function composeRsiRuntime(input: {
     appActionGuardDeps: AppActionGuardDeps;
     readPorts: RecoveryReadPorts;
     bind: (task: { id: string; dedupeKey: string; priority: string }) => RecoverySiTaskBinding | null;
+    /** HISTORICAL_RECOVERY_SCAN_V1：扫描任务必须装载 durable scan scope（缺省 = 该任务 BLOCK）。 */
+    scanScope?: import('./recovery-si-pack').RecoverySiPackDependencies['scanScope'];
   };
 }): Promise<RsiRuntimeComposition> {
   let tasks: readonly RsiSafeTask[] = [];
@@ -221,6 +223,7 @@ export async function composeRsiRuntime(input: {
           appActionGuardDeps: input.productRecoveryPack.appActionGuardDeps,
           readPorts: input.productRecoveryPack.readPorts,
           bind: input.productRecoveryPack.bind as never,
+          scanScope: input.productRecoveryPack.scanScope,
         });
   const siModelGateway =
     input.productRecoveryPack?.modelGateway ??

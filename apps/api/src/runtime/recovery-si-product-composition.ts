@@ -35,6 +35,8 @@ export function createProductRecoverySiPack(input: {
   appActionGuardDeps: AppActionGuardDeps;
   readPorts: RecoveryReadPorts;
   bind: RecoverySiPackDependencies['bind'];
+  /** HISTORICAL_RECOVERY_SCAN_V1：扫描任务的 durable scope 装载端口（透传给既有 recovery pack；不改 guard/claim 语义）。 */
+  scanScope?: RecoverySiPackDependencies['scanScope'];
   flags?: RsiFlags;
 }): RsiProductRecoverySiPack {
   if (!input.appActionGuardDeps) throw new Error('RECOVERY_SI_PRODUCT_GUARD_REQUIRED');
@@ -42,6 +44,7 @@ export function createProductRecoverySiPack(input: {
   const pack = createRecoverySiPack({
     readPorts: input.readPorts,
     bind: input.bind,
+    scanScope: input.scanScope,
     guard,
     ...(input.flags === undefined ? {} : { flags: input.flags }),
   });

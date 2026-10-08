@@ -293,3 +293,11 @@ claimRecoveryScanRun + loadScanScopeForClaimedTask（caller 自报范围被忽�
   ② E2E runtime leg 用 productRecoveryPack + 真实 DB loader（loadScanScopeForClaimedTask）断言 runtime 自己装载 durable scope；③ 再送 AUDIT-2 窄复审。
 * 本 tick 未提交失败的测试（已回退未提交改动，分支保持全绿：historical-scan-5y-e2e 1/1、runtime-scope 8/8）。
 
+### 13.4 AUDIT-2 CHANGE 接线（productRecoveryPack.scanScope 已透传）
+
+* ecovery-si-product-composition.ts 的 createProductRecoverySiPack() 新增可选 scanScope 并**透传**给既有 createRecoverySiPack()；
+  si-run.ts 的 productRecoveryPack 类型与组装处同步透传 —— 未改任何 guard / policy / claim 语义，未新增执行路径。
+* E2E runtime leg 仍需构造 ppActionGuardDeps：既有范例见 __tests__/rsi-si-runtime-real-guard-e2e.test.ts（ppGuardDeps() 辅助）与 gent-goal-runtime-wiring.test.ts；
+  下一 tick 依此把 runtime leg 加回 historical-scan-5y-e2e.test.ts（productRecoveryPack: { appActionGuardDeps, readPorts, bind, scanScope }，scanScope = 真实 DB loader）。
+* 证据：api tsc 0；historical-scan-runtime-scope 8/8、historical-scan-5y-e2e 1/1、rsi-si-runtime-e2e 5/5、agent-goal-runtime-wiring 7/7。
+
