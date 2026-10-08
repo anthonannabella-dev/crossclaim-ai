@@ -415,6 +415,34 @@ verdict watcher 的收口回调）确定最小接线点，再实现；同时补�
 * 门禁：22/22、api tsc 0（`historical-scan-5y-e2e` 2/2、`historical-scan-runtime-scope` 8/8、
   `rsi-si-runtime-e2e` 5/5、`agent-goal-runtime-wiring` 7/7）。
 
+### 13.12 AUDIT-2R2 两条 CHANGE 全部完成（CHANGE 1 覆盖 emit，CHANGE 2 收口后触发）
+
+**CHANGE 1（`f59a4a02` + `747ccd09`）**
+
+* domain-step-aware controller 在 `createRsiEventLoop()` **之前**组装（此前 loop 持有原始 controller）；
+* 包装同时覆盖 **`emit()`**（`rsi-event-loop.ts:69` 的真实续跑路径）与 `tick()`（`:83` 兜底），
+  函数签名与 `RsiControllerContinuation` 严格一致。
+
+**CHANGE 2（`a4d4653f` + `bd3ab708`）**
+
+* 组合层状态机：① 认领时记住 scan task；② **仅**在裁决收口后（`emit('JUDGE_VERDICT_RECEIVED')`
+  且 `controller.state().waitingForVerdict` 已不为 true）驱动 `historicalScanDomainStep`；
+  park 期间（含裁决 `BLOCK`）**直接 return**，绝不在裁决前完成 scan；
+* 依据：`rsi-controller-continuation.ts` 的 `awaitVerdict` 语义 —— runner 结果只作提案，
+  任务停在等待裁决，由 `JUDGE_VERDICT_RECEIVED` 收口（PASS 完成 / REVISE 插 P0 修订）。
+  read-only pack（`writesDatabase=false` / `executesActions=false`）未改动，未新增 runtime / scheduler。
+
+**E2E（单条连续链，`historical-scan-5y-e2e` 2/2）**
+
+claim `task:recovery:CUSTOMS:scan:v1:...` → runtime 装载 durable scope（`loadedRefs=[taskKey]`）→
+**parked：domain step 零执行** → `markWaitingForVerdict('PASS')` + `emit('JUDGE_VERDICT_RECEIVED')` →
+domain step **恰好一次** → `scanId === 该 scan`、`status=COMPLETED`、`ok=true`；
+另含非扫描任务 key → BLOCK、跨租户 → BLOCK（`scanId=null`）负向断言。
+
+**证据**：`historical-scan-5y-e2e` 2/2、`historical-scan-runtime-scope` 8/8、`rsi-si-runtime-e2e` 5/5、
+`agent-goal-runtime-wiring` 7/7、`rsi-controller-continuation` 3/3（合计 **25/25**）；api tsc 0。
+**送审**：`AUDIT-2R3`，REVIEWED_HEAD = `bd3ab708`。
+
 ### 13.10 CHANGE 1 实测发现：loop 走的是 emit() 而不是 tick()
 
 * 实测（临时用例，未提交）：composition.loop.pollOnce() 驱动时，historicalScanDomainStep **未被调用**
