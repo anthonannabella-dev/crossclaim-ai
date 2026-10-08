@@ -214,7 +214,15 @@ describe('PHASE 10 · 合成 5 年 E2E（Goal → scan → shard → customs →
     expect(composition.controller.state().waitingForVerdict).toBe(true);
     expect(domainStepOutcomes).toHaveLength(0);
 
-    // ④ AI：执行端口本身仍可用（负向：非扫描任务 key / 跨租户 → BLOCK）
+    // ④ 裁决收口（JUDGE_VERDICT_RECEIVED）后的续跑路径才驱动 domain step（恰好一次）
+    composition.controller.markWaitingForVerdict('PASS');
+    await composition.controller.emit('JUDGE_VERDICT_RECEIVED');
+    expect(domainStepOutcomes).toHaveLength(1);
+    expect(domainStepOutcomes[0]!.scanId).toBe(created.row.id);
+    expect(domainStepOutcomes[0]!.status).toBe('COMPLETED');
+    expect(domainStepOutcomes[0]!.ok).toBe(true);
+
+    // ⑤ 执行端口本身仍可用（负向：非扫描任务 key / 跨租户 → BLOCK）
     const notScanTask = await executionPort.run({
       organizationId: ORG,
       taskKey: 'task:recovery:CUSTOMS:opp-1',

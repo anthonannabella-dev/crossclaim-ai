@@ -284,17 +284,22 @@ export async function composeRsiRuntime(input: {
   // **先**组装 domain-step-aware controller，**再**交给 event loop —— 否则 loop.start() / controller.emit()
   // 持有的是原始 controller，domain step 永远不会运行（只在手动 tick 时运行）。
   const domainStep = input.historicalScanDomainStep;
-  const runDomainStepIfScanTask = async (outcomeLike: unknown): Promise<void> => {
+  // AUDIT-2R2 CHANGE 2：不得在 park-for-judge 之前完成 scan。
+  // 组合层状态机：① 认领时记住 scan task；② 裁决收口（JUDGE_VERDICT_RECEIVED 且已不再 park）后才驱动 domain step。
+  let pendingScanTaskKey: string | null = null;
+  const captureClaimedScanTask = (outcomeLike: unknown): void => {
     const claimed = (outcomeLike as { claimed?: { dedupeKey?: unknown } } | null | undefined)?.claimed;
     const dedupeKey = claimed?.dedupeKey;
-    if (typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:')) {
-      // AUDIT-2R2 CHANGE 2（MSG-20261008-06）：**不得绕过 park-for-judge**。
-      // 当 runtime 因存在 domain pack 而把任务停在等待裁决时，扫描的 backfill 不能在裁决收口前完成；
-      // 只有裁决已收口（waitingForVerdict 不再为 true）的续跑路径才允许驱动 domain step。
-      const parked = (controller.state() as { waitingForVerdict?: unknown }).waitingForVerdict === true;
-      if (parked) return;
-      await domainStep!({ dedupeKey });
-    }
+    if (typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:')) pendingScanTaskKey = dedupeKey;
+  };
+  const runPendingScanStepAfterVerdict = async (event: unknown): Promise<void> => {
+    if (domainStep === undefined || pendingScanTaskKey === null) return;
+    if (event !== 'JUDGE_VERDICT_RECEIVED') return;
+    const parked = (controller.state() as { waitingForVerdict?: unknown }).waitingForVerdict === true;
+    if (parked) return; // 例如裁决为 BLOCK → 仍 park，绝不推进扫描
+    const key = pendingScanTaskKey;
+    pendingScanTaskKey = null;
+    await domainStep({ dedupeKey: key });
   };
   const controllerWithDomainSteps =
     domainStep === undefined
@@ -303,14 +308,15 @@ export async function composeRsiRuntime(input: {
           ...controller,
           async tick() {
             const outcome = await controller.tick();
-            await runDomainStepIfScanTask(outcome);
+            captureClaimedScanTask(outcome);
             return outcome;
           },
           // AUDIT-2R2 CHANGE 1（实测）：既有 event loop 的续跑路径调用的是 `controller.emit(event)`，
           // `tick()` 仅在无事件可用时兜底 —— 因此 emit 路径必须同样被覆盖，否则 loop 驱动的链不会触发 domain step。
           async emit(event: Parameters<typeof controller.emit>[0]) {
             const outcome = await controller.emit(event);
-            await runDomainStepIfScanTask(outcome);
+            captureClaimedScanTask(outcome);
+            await runPendingScanStepAfterVerdict(event);
             return outcome;
           },
         };
