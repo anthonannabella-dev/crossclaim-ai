@@ -162796,3 +162796,172 @@ SECOND_*                 = 0
 
 结论：CHANGE 1 已 CLOSED；CHANGE 2 仍差 “PASS-only execution + verdictWatcher 使用 wrapped controller” 两个极窄修复。PHASE 10 当前仍为 PASS WITH REVISE / NOT CLOSED。
 ```
+
+### [MSG-20261008-08] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-2R4 窄复审（REVIEWED_HEAD 93912225）= PASS WITH REVISE；PASS-only 判据主体 / REVISE、BLOCK 即时零执行 / watchdog PASS / verdictWatcher wrapped controller / 幂等 均 PASS；唯一 CHANGE：REVISE、BLOCK 后 stale pendingScanTaskKey 未清除，后续其他任务的 PASS 不得消费原 scan（需 task-binding 收口）。
+
+```text
+SYNTHETIC_5Y_E2E = REVISE
+
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 93912225ad64a5e53e3b5c443004bb4ccc8bd341
+
+这轮你点名的两个直接问题都已经修对：
+
+纯文本
+PASS   → CONSUME_VERDICT → 可以执行
+REVISE → REVISION        → 当下不执行
+BLOCK  → OWNER_ACTION_REQUIRED → 当下不执行
+
+而且 verdictWatcher 已经全部改走 controllerWithDomainSteps，所以之前“测试路径正确、生产 watcher 绕过 wrapper”的问题已经 CLOSED。
+
+但我继续检查状态生命周期后，发现还剩 1 个跨任务残留旁路。
+
+唯一 CHANGE：REVISE/BLOCK 后 stale pendingScanTaskKey 没有清掉
+
+当前代码：
+
+TypeScript
+let pendingScanTaskKey: string | null = null;
+
+scan 被 claim 后写入。
+
+真正执行 PASS 时才：
+
+TypeScript
+const key = pendingScanTaskKey;
+pendingScanTaskKey = null;
+await domainStep({ dedupeKey: key });
+
+但是：
+
+纯文本
+REVISE → 不执行，但 pendingScanTaskKey 不清除
+BLOCK  → 不执行，但 pendingScanTaskKey 不清除
+
+这会产生一个实际串任务风险。
+
+最明确的是 REVISE：
+
+纯文本
+scan task claimed
+→ pendingScanTaskKey = SCAN-A
+
+Judge = REVISE
+→ scan 不执行 ✅
+→ engine 插入 P0 revision task
+→ pendingScanTaskKey 仍然 = SCAN-A ❌
+
+revision task 被认领
+→ 等待新的 Judge
+
+revision task Judge = PASS
+→ verdictBeforeConsume = PASS
+→ outcome.action = CONSUME_VERDICT
+→ pendingScanTaskKey 还是 SCAN-A
+→ historicalScanDomainStep(SCAN-A) 被执行 ❌
+
+也就是说：
+
+原始 scan 明明被判了 REVISE，却可能借后续 revision task 的 PASS 被错误执行。
+
+这正是 PASS-only gate 还需要再绑定一次“PASS 属于哪一个 task”的原因。
+
+当前新增测试只证明：
+
+纯文本
+REVISE 当下 → 0 execution
+BLOCK 当下  → 0 execution
+
+没有证明：
+
+纯文本
+REVISE
+→ 后续另一任务 PASS
+→ 原 scan 仍然 0 execution
+最小修复
+
+至少在任何非 PASS terminal verdict 收口时清掉旧 scan pending：
+
+纯文本
+VERDICT_REVISE
+→ pendingScanTaskKey = null
+
+VERDICT_BLOCK
+→ pendingScanTaskKey = null
+
+更稳的实现不是只存一个字符串，而是把 pending execution identity 与当前 claimed task 绑定，例如：
+
+纯文本
+pendingScan = {
+  taskId,
+  dedupeKey
+}
+
+只有这个同一个 task的 PASS verdict 才能消费它。
+
+最低新增测试：
+
+纯文本
+1. scan → REVISE
+   → revision task → PASS
+   → original scan domain step = 0
+
+2. scan → BLOCK
+   → 后续其它 PASS
+   → original scan domain step = 0
+
+如果做 task identity binding，再加：
+
+纯文本
+PASS for task B
+不得消费 pending scan task A
+本轮已经 PASS 的部分
+
+可以确认：
+
+纯文本
+PASS-only 判据主体                    = PASS
+REVISE immediate zero execution       = PASS
+BLOCK immediate zero execution        = PASS
+watchdog PASS path                     = PASS
+verdictWatcher uses wrapped controller = PASS
+duplicate PASS / poll idempotency      = PASS
+event loop uses wrapped controller     = PASS
+NO_SECOND_RUNTIME                      = PASS
+
+所以这不是大返工，只差 pending identity 生命周期收口。
+
+RISKS
+
+你已经记录的设计债仍然成立：
+
+纯文本
+pendingScanTaskKey = process memory only
+
+进程在：
+
+纯文本
+claim → park → restart → verdict
+
+之间重启，pending linkage 会丢失。这个可以继续作为 production enablement 前的 durability debt，不必在本次 synthetic closure 强行解决。
+
+另外一个小记录修正：352a0e33 不只是 docs/releases/...，还改了 AI-ARCHITECT-INBOX.md；不过两者都是文档/归档性质，不影响 reviewed code head。
+
+GitHub Actions 对 93912225：
+
+NOT_OBSERVED
+
+所以 43/43、api tsc 0 仍只算 local/Codex evidence。
+
+最终边界保持：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+SECOND_*                 = 0
+全部 HOLD                = unchanged
+
+结论：AUDIT-2R4 已把上一轮两个直接 blocker 修掉，但还差最后一个“stale pending scan 不得被后续其他任务 PASS 消费”的 task-binding 修订。修完这一条，我预计 SYNTHETIC_5Y_E2E = PASS。
+```

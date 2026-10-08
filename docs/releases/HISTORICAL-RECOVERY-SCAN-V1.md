@@ -492,3 +492,40 @@ domain step **恰好一次** → `scanId === 该 scan`、`status=COMPLETED`、`o
 * GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
 
 **下一步**：`AUDIT-2R4` 窄复审（CHANGE A + CHANGE B）；PASS 后 PHASE 10 方可 CLOSED，再进入 PHASE 11。
+
+### 13.14 AUDIT-2R4 裁决（PASS WITH REVISE）+ 最后一条 CHANGE：pending scan 的 task binding
+
+**裁决（已逐字归档 `AI-ARCHITECT-INBOX.md` → `MSG-20261008-08`，FNV1A `08aa9c6e`，compare = FULL_COPY_OK）**
+
+* REVIEWED_HEAD `93912225`；`SYNTHETIC_5Y_E2E = REVISE`、`VERDICT = PASS WITH REVISE`。
+* 已确认 PASS：PASS-only 判据主体、REVISE/BLOCK **即时**零执行、watchdog PASS 路径、
+  verdictWatcher 走 wrapped controller、重复 PASS/poll 幂等、event loop 走 wrapped controller、`NO_SECOND_RUNTIME`。
+* 唯一 CHANGE：**REVISE / BLOCK 收口后 stale `pendingScanTaskKey` 未清除** ——
+  REVISE 会插入 P0 revision task；若旧 pending 不清，revision task 之后的 PASS 会**错误执行原 scan**
+  （即 PASS 门还需要再绑定「这个 PASS 属于哪一个 task」）。
+* 审计预计：修完这一条即 `SYNTHETIC_5Y_E2E = PASS`。
+
+**本轮修复（`armedScanTaskKey` 重设计）**
+
+* `pendingScanTaskKey` → `armedScanTaskKey`，语义改为「**已认领、正在等待裁决**的那一个任务」：
+  - 仅当本轮出现新认领（`outcome.claimed !== null`）才（重新）武装；新认领非扫描任务则置 `null`；
+  - 结算顺序固定为 **先结算本轮裁决、再武装本轮新认领** —— 修掉此前「PASS 收口同一次调用里 engine 立刻认领下一个 scan，
+    导致 pending 被覆盖成下一个任务」的顺序缺陷。
+* 任何**终局裁决收口**（`CONSUME_VERDICT` / `REVISION` / `OWNER_ACTION_REQUIRED`）一律先解除武装；
+  仅当 `verdictBeforeConsume === 'PASS'` 且收口动作确为 `CONSUME_VERDICT` 时，才对**解除武装前的那个** scan 执行 domain step。
+  因此 REVISE / BLOCK 之后，后续任务的 PASS 不可能消费原 scan；无法识别 verdict 的收口也一律 fail-closed（不执行）。
+* 边界声明新增：`historicalScanPendingBinding = 'ARMED_CLAIMED_TASK_ONLY；NON_PASS_TERMINAL_VERDICT_CLEARS_PENDING'`。
+
+**新增回归（`historical-scan-5y-e2e` 9/9）**
+
+* AUDIT-2R4-①：REVISE 后 stale pending 必须清除 —— revision task 拿到 PASS 时原 scan 仍 0 执行、durable 仍 `CREATED`；
+* AUDIT-2R4-②：多个 scan 任务排队 —— 只执行当前 armed scan（A→COMPLETED，B 仍 `CREATED`），B 需自己的 PASS 才执行。
+
+**证据**：定向批次 **48/48**（9 文件：historical-scan-5y-e2e 9、historical-scan-runtime-scope 8、rsi-si-runtime-e2e 5、
+agent-goal-runtime-wiring 7、rsi-controller-continuation 3、rsi-run 7、rsi-park-for-judge 3、rsi-verdict-wiring 3、
+rsi-event-loop 3）；api tsc 0。GitHub Actions = NOT_OBSERVED（仅 local/Codex evidence）。
+
+**设计债（继续跟踪，不阻断本次 synthetic 收口）**：`armedScanTaskKey` 仍是**进程内变量**；
+`claim → park → 进程重启 → verdict 到达` 会丢失 pending 归链；production enablement 前需从 durable task/scan 状态重建。
+
+**下一步**：`AUDIT-2R5` 窄复审（task-binding 收口）。
