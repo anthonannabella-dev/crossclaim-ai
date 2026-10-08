@@ -149,7 +149,9 @@ describe('PHASE 11 · 静态边界（SECOND_* = 0 / 无外部网络与外写）'
     // Runtime composition
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.secondRuntime).toBe(0);
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.performsExternalWrite).toBe(false);
-    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.writesDatabase).toBe(false);
+    // AUDIT-3 CHANGE 1：composition 本体不写库；historical domain step（PASS 后）写内部扫描状态
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.coreWritesDatabase).toBe(false);
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.historicalDomainStepWritesInternalScanState).toBe(true);
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.readsCredentials).toBe(false);
     // PHASE 10 收口语义仍在
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.historicalScanDomainStepRequiresPassVerdict).toBe(true);
@@ -274,6 +276,7 @@ describe('PHASE 11 · 租户与外写边界（真实 PostgreSQL）', () => {
     const executed = await createHistoricalScanExecutionPort(prisma).run({
       organizationId: ORG,
       taskKey,
+      ownerRef: 'phase11-owner',
       pagePort: {
         async fetchPage({ shard }) {
           return {

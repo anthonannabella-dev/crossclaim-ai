@@ -135,10 +135,11 @@ async function seedScanFixture(organizationId: string, intent: string = INTENT) 
 /** domain step 调用计数 + 走既有 execution port（durable scope → runHistoricalBackfill）。 */
 function scanStepSpy() {
   const calls: Array<{ ok: boolean; scanId: string | null; status: string }> = [];
-  const step = async ({ dedupeKey }: { dedupeKey: string }) => {
+  const step = async ({ dedupeKey, ownerRef }: { dedupeKey: string; ownerRef: string }) => {
     const executed = await createHistoricalScanExecutionPort(prisma).run({
       organizationId: ORG,
       taskKey: dedupeKey,
+      ownerRef,
       pagePort: {
         async fetchPage({ shard }) {
           return {
@@ -166,7 +167,7 @@ function scanStepSpy() {
 async function composeScanRuntime(input: {
   taskKey: string;
   verdictArtifact: string;
-  onDomainStep: (args: { dedupeKey: string }) => Promise<unknown>;
+  onDomainStep: (args: { dedupeKey: string; ownerRef: string }) => Promise<unknown>;
   extraTaskKeys?: readonly string[];
 }) {
   const queue = [input.taskKey, ...(input.extraTaskKeys ?? [])].map((dedupeKey, index) => ({
@@ -297,10 +298,11 @@ describe('PHASE 10 · 合成 5 年 E2E（Goal → scan → shard → customs →
       readFile: async (path: string) =>
         path === 'mem://tasks' ? JSON.stringify([{ id: 'task-scan-1', dedupeKey: taskKey, priority: 'P2' }]) : '[]',
       tasksPath: 'mem://tasks',
-      historicalScanDomainStep: async ({ dedupeKey }) => {
+      historicalScanDomainStep: async ({ dedupeKey, ownerRef }) => {
         const executed = await executionPort.run({
           organizationId: ORG,
           taskKey: dedupeKey,
+          ownerRef,
           pagePort: {
             async fetchPage({ shard }) {
               return {
@@ -366,8 +368,9 @@ describe('PHASE 10 · 合成 5 年 E2E（Goal → scan → shard → customs →
 
     // ⑤ 执行端口本身仍可用（负向：非扫描任务 key / 跨租户 → BLOCK）
     const notScanTask = await executionPort.run({
-      organizationId: ORG,
-      taskKey: 'task:recovery:CUSTOMS:opp-1',
+          organizationId: ORG,
+          taskKey: 'task:recovery:CUSTOMS:opp-1',
+          ownerRef: 'runtime-a',
       pagePort: { async fetchPage() { return { records: [], nextCursor: null }; } },
       ingestPort: { async ingest() { return { accepted: 0, rejected: 0 }; } },
     });
@@ -375,6 +378,7 @@ describe('PHASE 10 · 合成 5 年 E2E（Goal → scan → shard → customs →
     const crossTenant = await executionPort.run({
       organizationId: ORG_B,
       taskKey,
+      ownerRef: 'runtime-a',
       pagePort: { async fetchPage() { return { records: [], nextCursor: null }; } },
       ingestPort: { async ingest() { return { accepted: 0, rejected: 0 }; } },
     });

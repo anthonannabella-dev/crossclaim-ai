@@ -142,6 +142,62 @@ export async function loadRecoveryScanById(
 }
 
 /** 并发安全：只有处于 CREATED 的 scan 能被一个 worker 抢到（否则返回 null）。 */
+/**
+ * HISTORICAL_RECOVERY_SCAN_V1 / AUDIT-3 CHANGE 2 —— durable ownership fencing。
+ * 当调用方携带 `expectedLeaseOwner` 时，所有 checkpoint / coverage / finish 写入都必须是**条件更新**
+ * （where leaseOwner = 期望的持有者）。若 0 行受影响，说明租约已被他人 reclaim 或已释放
+ * → 抛 `RECOVERY_SCAN_LEASE_FENCED`，陈旧 worker 绝不允许覆盖已接管的检查点。
+ */
+async function updateScanFenced(
+  prisma: PrismaClient,
+  input: { organizationId: string; scanId: string; expectedLeaseOwner?: string },
+  data: Prisma.RecoveryScanRunUpdateManyMutationInput,
+): Promise<RecoveryScanRun> {
+  if (input.expectedLeaseOwner === undefined) {
+    return prisma.recoveryScanRun.update({
+      where: { organizationId_id: { organizationId: input.organizationId, id: input.scanId } },
+      data,
+    });
+  }
+  const result = await prisma.recoveryScanRun.updateMany({
+    where: { organizationId: input.organizationId, id: input.scanId, leaseOwner: input.expectedLeaseOwner },
+    data,
+  });
+  if (result.count !== 1) {
+    throw new RecoveryScanError(
+      'RECOVERY_SCAN_LEASE_FENCED',
+      '租约已被接管或释放，拒绝陈旧 worker 写入扫描检查点。',
+    );
+  }
+  const row = await prisma.recoveryScanRun.findFirst({
+    where: { organizationId: input.organizationId, id: input.scanId },
+  });
+  if (row === null) throw new RecoveryScanError('RECOVERY_SCAN_NOT_FOUND', '扫描不存在。');
+  return row;
+}
+
+/**
+ * 接管**已过期**的 RUNNING 租约（CAS：仅当 `status=RUNNING` 且 `leaseExpiresAt < now`）。
+ * 返回 null 表示当前没有可接管的过期租约（他人仍持有 / 未认领 / 已终态）。
+ */
+export async function reclaimRecoveryScanLease(
+  prisma: PrismaClient,
+  input: { organizationId: string; scanId: string; leaseOwner: string; leaseExpiresAt: Date; now?: Date },
+): Promise<RecoveryScanRun | null> {
+  const now = input.now ?? new Date();
+  const result = await prisma.recoveryScanRun.updateMany({
+    where: {
+      organizationId: input.organizationId,
+      id: input.scanId,
+      status: 'RUNNING',
+      leaseExpiresAt: { lt: now },
+    },
+    data: { leaseOwner: input.leaseOwner, leaseExpiresAt: input.leaseExpiresAt, updatedAt: now },
+  });
+  if (result.count !== 1) return null;
+  return prisma.recoveryScanRun.findFirst({ where: { organizationId: input.organizationId, id: input.scanId } });
+}
+
 export async function claimRecoveryScanRun(
   prisma: PrismaClient,
   input: { organizationId: string; scanId: string; leaseOwner: string; leaseExpiresAt: Date; now?: Date },
@@ -176,14 +232,21 @@ export async function advanceRecoveryScanShard(
     eligibleFound?: number;
     expiredFound?: number;
     needsEvidenceFound?: number;
+    /** AUDIT-3 CHANGE 2：fencing —— 携带期望的租约持有者时，写入是条件更新（0 行 → FENCED） */
+    expectedLeaseOwner?: string;
     now?: Date;
   },
 ): Promise<RecoveryScanRun> {
   const increment = (value: number | undefined) => (value === undefined ? undefined : { increment: value });
   const shardFinished = input.cursor === null;
-  const row = await prisma.recoveryScanRun.update({
-    where: { organizationId_id: { organizationId: input.organizationId, id: input.scanId } },
-    data: {
+  const row = await updateScanFenced(
+    prisma,
+    {
+      organizationId: input.organizationId,
+      scanId: input.scanId,
+      ...(input.expectedLeaseOwner === undefined ? {} : { expectedLeaseOwner: input.expectedLeaseOwner }),
+    },
+    {
       shardCursor: input.cursor,
       ...(shardFinished
         ? { shardsCompleted: { increment: 1 }, nextShardIndex: input.shardIndex + 1 }
@@ -197,7 +260,7 @@ export async function advanceRecoveryScanShard(
       needsEvidenceFound: increment(input.needsEvidenceFound),
       updatedAt: input.now ?? new Date(),
     },
-  });
+  );
   return row;
 }
 
@@ -209,18 +272,24 @@ export async function setRecoveryScanCoverage(
     coverageStart: Date | string | null;
     coverageEnd: Date | string | null;
     sourceCoverageStatus: ScanCoverageStatus;
+    expectedLeaseOwner?: string;
     now?: Date;
   },
 ): Promise<RecoveryScanRun> {
-  return prisma.recoveryScanRun.update({
-    where: { organizationId_id: { organizationId: input.organizationId, id: input.scanId } },
-    data: {
+  return updateScanFenced(
+    prisma,
+    {
+      organizationId: input.organizationId,
+      scanId: input.scanId,
+      ...(input.expectedLeaseOwner === undefined ? {} : { expectedLeaseOwner: input.expectedLeaseOwner }),
+    },
+    {
       coverageStart: input.coverageStart ? dayToDate(toScanDay(input.coverageStart)) : null,
       coverageEnd: input.coverageEnd ? dayToDate(toScanDay(input.coverageEnd)) : null,
       sourceCoverageStatus: input.sourceCoverageStatus,
       updatedAt: input.now ?? new Date(),
     },
-  });
+  );
 }
 
 export async function finishRecoveryScan(
@@ -230,6 +299,7 @@ export async function finishRecoveryScan(
     scanId: string;
     status: ScanStatus;
     reasonCodes?: readonly string[];
+    expectedLeaseOwner?: string;
     now?: Date;
   },
 ): Promise<RecoveryScanRun> {
@@ -237,9 +307,14 @@ export async function finishRecoveryScan(
     throw new RecoveryScanError('RECOVERY_SCAN_INVALID_STATUS', '只有终态可以 finish：' + input.status);
   }
   const now = input.now ?? new Date();
-  return prisma.recoveryScanRun.update({
-    where: { organizationId_id: { organizationId: input.organizationId, id: input.scanId } },
-    data: {
+  return updateScanFenced(
+    prisma,
+    {
+      organizationId: input.organizationId,
+      scanId: input.scanId,
+      ...(input.expectedLeaseOwner === undefined ? {} : { expectedLeaseOwner: input.expectedLeaseOwner }),
+    },
+    {
       status: input.status,
       completedAt: now,
       updatedAt: now,
@@ -247,5 +322,5 @@ export async function finishRecoveryScan(
       leaseExpiresAt: null,
       ...(input.reasonCodes ? { reasonCodes: [...input.reasonCodes] } : {}),
     },
-  });
+  );
 }

@@ -71,10 +71,17 @@ export async function runHistoricalBackfill(
     readonly grain?: ShardGrain;
     readonly pageLimit?: number;
     readonly maxPages?: number;
+    /**
+     * AUDIT-3 CHANGE 2：durable ownership fencing —— 调用方声明自己是该 scan 的租约持有者；
+     * 所有权不符 / 租约过期 → BLOCKED；写入期间被他人 reclaim → BLOCKED（RECOVERY_SCAN_LEASE_FENCED）。
+     */
+    readonly expectedLeaseOwner?: string;
     readonly now?: () => Date;
   },
 ): Promise<BackfillRunResult> {
   const now = input.now ?? (() => new Date());
+  const lease = (): { expectedLeaseOwner?: string } =>
+    input.expectedLeaseOwner === undefined ? {} : { expectedLeaseOwner: input.expectedLeaseOwner };
   let scan = await loadRecoveryScanById(prisma, {
     organizationId: input.organizationId,
     scanId: input.scanId,
@@ -98,6 +105,29 @@ export async function runHistoricalBackfill(
       blocked: scan.status !== 'COMPLETED',
       reasonCodes: (scan.reasonCodes as string[] | null) ?? [],
     };
+  }
+  // AUDIT-3 CHANGE 2：执行资格必须先由 durable 租约证明（不再是「拿到 org + scanId 就能推进」）
+  if (input.expectedLeaseOwner !== undefined) {
+    if (scan.leaseOwner !== input.expectedLeaseOwner) {
+      return {
+        status: 'BLOCKED',
+        shardsCompleted: scan.shardsCompleted,
+        shardsTotal: scan.shardsTotal,
+        recordsScanned: scan.recordsScanned,
+        blocked: true,
+        reasonCodes: ['RECOVERY_SCAN_LEASE_NOT_HELD'],
+      };
+    }
+    if (scan.leaseExpiresAt !== null && scan.leaseExpiresAt.getTime() <= now().getTime()) {
+      return {
+        status: 'BLOCKED',
+        shardsCompleted: scan.shardsCompleted,
+        shardsTotal: scan.shardsTotal,
+        recordsScanned: scan.recordsScanned,
+        blocked: true,
+        reasonCodes: ['RECOVERY_SCAN_LEASE_EXPIRED'],
+      };
+    }
   }
 
   const shards = planScanShards({ from: scan.effectiveFrom, to: scan.effectiveTo, grain: input.grain });
@@ -145,6 +175,7 @@ export async function runHistoricalBackfill(
           coverageStart: page.coverageFrom ?? scan.coverageStart,
           coverageEnd: page.coverageTo ?? scan.coverageEnd,
           sourceCoverageStatus: page.coverageStatus ?? scan.sourceCoverageStatus as ScanCoverageStatus,
+          ...lease(),
           now: now(),
         });
       }
@@ -170,6 +201,7 @@ export async function runHistoricalBackfill(
         eligibleFound: ingested.eligibleFound,
         expiredFound: ingested.expiredFound,
         needsEvidenceFound: ingested.needsEvidenceFound,
+        ...lease(),
         now: now(),
       });
 
@@ -185,12 +217,14 @@ export async function runHistoricalBackfill(
         scanId: input.scanId,
         status: 'BLOCKED',
         reasonCodes: [blockedReason],
+        ...lease(),
         now: now(),
       })
     : await finishRecoveryScan(prisma, {
         organizationId: input.organizationId,
         scanId: input.scanId,
         status: 'COMPLETED',
+        ...lease(),
         now: now(),
       });
 

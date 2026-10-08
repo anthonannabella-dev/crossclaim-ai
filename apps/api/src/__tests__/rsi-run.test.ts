@@ -73,7 +73,8 @@ describe('RSI 运行组装入口', () => {
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.eventDriven).toBe(true);
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.watchdogFallbackOnly).toBe(true);
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.readsCredentials).toBe(false);
-    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.writesDatabase).toBe(false);
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.coreWritesDatabase).toBe(false);
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.historicalDomainStepWritesInternalScanState).toBe(true);
   });
 
   it('RSI_RUN_PUBLISHER_WIRED_WHEN_CONFIGURED：配置后随运行时起停并写出快照，未配置则为 null', async () => {

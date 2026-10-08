@@ -178,7 +178,12 @@ export async function composeRsiRuntime(input: {
    * composition 显式驱动的领域步骤（真实实现 = historical scan execution port）。
    * 仅当 claimed task 的 dedupeKey 含 `scan:v1:` 时调用；缺省 = 不接线（扫描任务保持既有行为）。
    */
-  historicalScanDomainStep?: (claimed: { dedupeKey: string }) => Promise<unknown>;
+  historicalScanDomainStep?: (claimed: { dedupeKey: string; ownerRef: string }) => Promise<unknown>;
+  /**
+   * AUDIT-3 CHANGE 2：本 runtime 实例的 durable 执行身份（写入扫描检查点时的 lease owner）。
+   * 缺省 = `rsi-runtime:<pid>`；同一进程内的 domain step 与 scan 租约必须使用同一 owner。
+   */
+  runtimeOwnerRef?: string;
   domainPacks?: readonly RsiDomainCapabilityPack[];
   /**
    * STEP 3 FINAL-4：**唯一 product 组装点** —— Recovery SI 固定接 shared guard adapter；
@@ -284,6 +289,7 @@ export async function composeRsiRuntime(input: {
   // **先**组装 domain-step-aware controller，**再**交给 event loop —— 否则 loop.start() / controller.emit()
   // 持有的是原始 controller，domain step 永远不会运行（只在手动 tick 时运行）。
   const domainStep = input.historicalScanDomainStep;
+  const runtimeOwnerRef = input.runtimeOwnerRef ?? 'rsi-runtime:' + String(process.pid);
   // AUDIT-2R2 CHANGE 2：不得在 park-for-judge 之前完成 scan。
   // 组合层状态机：① 认领时记住 scan task；② 裁决收口（JUDGE_VERDICT_RECEIVED 且已不再 park）后才驱动 domain step。
   // AUDIT-2R4（MSG-20261008-08）：pending scan 必须绑定「当前正在等待裁决的那一个任务」，
@@ -321,7 +327,7 @@ export async function composeRsiRuntime(input: {
     armedScanTaskKey = null;
     // 只有「PASS 且真的走了 CONSUME_VERDICT 收口」才执行该 scan
     if (consumeOutcomeIsPass(verdictBeforeConsume, outcomeLike)) {
-      await domainStep({ dedupeKey: armed });
+      await domainStep({ dedupeKey: armed, ownerRef: runtimeOwnerRef });
     }
   };
   const controllerWithDomainSteps =
@@ -457,7 +463,13 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   secondRuntime: 0,
   domainPackUnmatchedYieldsBlock: true,
   readsCredentials: false,
-  writesDatabase: false,
+  /**
+   * AUDIT-3 CHANGE 1：**composition 本体**不直接写库；但 server-owned 的 historical scan domain step
+   * （PASS 收口后经 execution port → 既有 runHistoricalBackfill）会写**内部**扫描状态
+   * （RecoveryScanRun 的 checkpoint / coverage / status）。两者必须分开声明，避免过时的单一常量。
+   */
+  coreWritesDatabase: false,
+  historicalDomainStepWritesInternalScanState: true,
   performsExternalWrite: false,
 } as const;
 

@@ -204,6 +204,7 @@ describe('PHASE 13 · 矩阵 B–G', () => {
     const first = await port.run({
       organizationId: ORG,
       taskKey,
+      ownerRef: 'runtime-a',
       pagePort: pagePort(seen),
       ingestPort,
       maxPages: 2,
@@ -220,6 +221,7 @@ describe('PHASE 13 · 矩阵 B–G', () => {
     const resumed = await port.run({
       organizationId: ORG,
       taskKey,
+      ownerRef: 'runtime-a',
       pagePort: pagePort(seen),
       ingestPort,
     } as never);
@@ -243,6 +245,7 @@ describe('PHASE 13 · 矩阵 B–G', () => {
       await createHistoricalScanExecutionPort(prisma).run({
         organizationId: ORG,
         taskKey,
+        ownerRef: 'runtime-a',
         pagePort: pagePort([]),
         ingestPort,
       } as never);
@@ -271,6 +274,7 @@ describe('PHASE 13 · 矩阵 B–G', () => {
     await createHistoricalScanExecutionPort(prisma).run({
       organizationId: ORG,
       taskKey: fullTask,
+      ownerRef: 'runtime-a',
       pagePort: pagePort([], 'FULL', REQUESTED_FROM),
       ingestPort,
     } as never);
@@ -341,6 +345,7 @@ describe('PHASE 13 · 矩阵 B–G', () => {
     const crossTenant = await port.run({
       organizationId: ORG,
       taskKey: b.taskKey,
+      ownerRef: 'runtime-a',
       pagePort: pagePort([]),
       ingestPort,
     } as never);
@@ -351,6 +356,7 @@ describe('PHASE 13 · 矩阵 B–G', () => {
     const nonScan = await port.run({
       organizationId: ORG,
       taskKey: 'task:recovery:CUSTOMS:opp-1',
+      ownerRef: 'runtime-a',
       pagePort: pagePort([]),
       ingestPort,
     } as never);
@@ -386,6 +392,7 @@ describe('PHASE 13 · 矩阵 B–G', () => {
     await createHistoricalScanExecutionPort(prisma).run({
       organizationId: ORG,
       taskKey,
+      ownerRef: 'runtime-a',
       pagePort: pagePort([]),
       ingestPort,
     } as never);

@@ -11,6 +11,12 @@ import type { PrismaClient } from '@prisma/client';
 
 import { runHistoricalBackfill, type BackfillIngestPort, type BackfillPagePort } from './backfill-executor';
 import { loadScanScopeForClaimedTask } from './scan-scope-loader';
+import {
+  claimRecoveryScanRun,
+  loadRecoveryScanById,
+  reclaimRecoveryScanLease,
+  RecoveryScanError,
+} from './scan-store';
 
 export interface HistoricalScanExecutionRequest {
   readonly organizationId: string;
@@ -18,6 +24,14 @@ export interface HistoricalScanExecutionRequest {
   readonly taskKey: string;
   readonly pagePort: BackfillPagePort;
   readonly ingestPort: BackfillIngestPort;
+  /**
+   * AUDIT-3 CHANGE 2：调用方（runtime worker）自己的 **durable 执行身份**。
+   * 端口不会「凭空推进」：必须先 claim（CREATED）或接管过期租约（RUNNING + 过期），
+   * 或已持有未过期租约；否则 BLOCKED。checkpoint/coverage/finish 写入均以该 owner 做条件更新（fencing）。
+   */
+  readonly ownerRef: string;
+  /** 租约时长（毫秒）；缺省 60s */
+  readonly leaseMs?: number;
   readonly grain?: 'MONTHLY' | 'QUARTERLY';
   readonly maxPages?: number;
   readonly now?: () => Date;
@@ -44,35 +58,85 @@ export interface HistoricalScanExecutionPort {
 export function createHistoricalScanExecutionPort(prisma: PrismaClient): HistoricalScanExecutionPort {
   return {
     async run(request: HistoricalScanExecutionRequest): Promise<HistoricalScanExecutionOutcome> {
+      const blocked = (scanId: string | null, reasonCodes: readonly string[]): HistoricalScanExecutionOutcome => ({
+        ok: false,
+        scanId,
+        status: 'BLOCKED',
+        blocked: true,
+        shardsCompleted: 0,
+        recordsScanned: 0,
+        reasonCodes,
+      });
+      if (typeof request.ownerRef !== 'string' || request.ownerRef.trim() === '') {
+        return blocked(null, ['RECOVERY_SCAN_OWNER_REQUIRED']);
+      }
       const scope = await loadScanScopeForClaimedTask(prisma, {
         organizationId: request.organizationId,
         dedupeKey: request.taskKey,
       });
       if (!scope.ok) {
-        return {
-          ok: false,
-          scanId: null,
-          status: 'BLOCKED',
-          blocked: true,
-          shardsCompleted: 0,
-          recordsScanned: 0,
-          reasonCodes: scope.reasonCodes,
-        };
+        return blocked(null, scope.reasonCodes);
       }
 
-      const result = await runHistoricalBackfill(prisma, {
-        organizationId: request.organizationId,
-        scanId: scope.scope.scanId,
-        pagePort: request.pagePort,
-        ingestPort: request.ingestPort,
-        ...(request.grain === undefined ? {} : { grain: request.grain }),
-        ...(request.maxPages === undefined ? {} : { maxPages: request.maxPages }),
-        ...(request.now === undefined ? {} : { now: request.now }),
-      });
+      const organizationId = request.organizationId;
+      const scanId = scope.scope.scanId;
+      const current = await loadRecoveryScanById(prisma, { organizationId, scanId });
+      if (current === null) return blocked(scanId, ['RECOVERY_SCAN_NOT_FOUND']);
+
+      const now = request.now?.() ?? new Date();
+      const leaseExpiresAt = new Date(now.getTime() + (request.leaseMs ?? 60_000));
+      const ownerRef = request.ownerRef;
+      if (current.status === 'CREATED') {
+        const claimed = await claimRecoveryScanRun(prisma, {
+          organizationId,
+          scanId,
+          leaseOwner: ownerRef,
+          leaseExpiresAt,
+          now,
+        });
+        if (claimed === null) return blocked(scanId, ['RECOVERY_SCAN_CLAIM_RACE']);
+      } else if (current.status === 'RUNNING') {
+        const heldBySelf =
+          current.leaseOwner === ownerRef &&
+          (current.leaseExpiresAt === null || current.leaseExpiresAt.getTime() > now.getTime());
+        const expired = current.leaseExpiresAt !== null && current.leaseExpiresAt.getTime() <= now.getTime();
+        if (!heldBySelf) {
+          if (!expired) return blocked(scanId, ['RECOVERY_SCAN_LEASE_NOT_HELD']);
+          const reclaimed = await reclaimRecoveryScanLease(prisma, {
+            organizationId,
+            scanId,
+            leaseOwner: ownerRef,
+            leaseExpiresAt,
+            now,
+          });
+          if (reclaimed === null) return blocked(scanId, ['RECOVERY_SCAN_LEASE_RECLAIM_FAILED']);
+        }
+      } else {
+        return blocked(scanId, ['RECOVERY_SCAN_NOT_RUNNABLE']);
+      }
+
+      let result;
+      try {
+        result = await runHistoricalBackfill(prisma, {
+          organizationId,
+          scanId,
+          pagePort: request.pagePort,
+          ingestPort: request.ingestPort,
+          expectedLeaseOwner: ownerRef,
+          ...(request.grain === undefined ? {} : { grain: request.grain }),
+          ...(request.maxPages === undefined ? {} : { maxPages: request.maxPages }),
+          ...(request.now === undefined ? {} : { now: request.now }),
+        });
+      } catch (error) {
+        if (error instanceof RecoveryScanError && error.code === 'RECOVERY_SCAN_LEASE_FENCED') {
+          return blocked(scanId, ['RECOVERY_SCAN_LEASE_FENCED']);
+        }
+        throw error;
+      }
 
       return {
         ok: result.status === 'COMPLETED',
-        scanId: scope.scope.scanId,
+        scanId,
         status: result.status,
         blocked: result.blocked,
         shardsCompleted: result.shardsCompleted,
@@ -89,6 +153,10 @@ export const HISTORICAL_SCAN_EXECUTION_PORT_BOUNDARY = {
   insideExistingOneSiRuntime: true,
   readOnlyPackUntouched: true,
   scopeFromDurableScanOnly: true,
+  /** AUDIT-3 CHANGE 2：执行资格必须由 durable 租约证明；写入以 owner 做条件更新（fencing） */
+  requiresDurableOwnership: true,
+  claimsOrReclaimsBeforeBackfill: true,
+  fencingOnCheckpointWrites: true,
   writesOnlyScanScopeAndCheckpoint: true,
   externalWritePerformed: false,
 } as const;
