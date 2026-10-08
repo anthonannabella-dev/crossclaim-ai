@@ -56,7 +56,7 @@ npx prisma migrate deploy     # 生产只用 deploy，不用 migrate dev
 npx prisma generate
 npx tsc --noEmit
 npm run build
-npm start                     # node dist/server.js
+npm start                     # node dist/src/server.js（tsconfig rootDir="."，产物在 dist/src/**）
 ```
 
 ## 4. 部署步骤（Web）

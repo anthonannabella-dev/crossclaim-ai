@@ -41,12 +41,41 @@ export interface ReadinessDeps {
   now?: () => Date;
 }
 
-/** 只读统计仓库中的迁移目录数（与服务端 schema 同源） */
-export function countLocalMigrations(
-  dir: string = path.join(__dirname, '..', '..', 'prisma', 'migrations'),
-): number {
+/**
+ * 只读统计仓库中的迁移目录数（与服务端 schema 同源）。
+ *
+ * 两种布局都必须正确（否则编译产物会恒判 MIGRATION_MISMATCH）：
+ *   · 源码布局  `src/services/readiness.ts`        → `../../prisma/migrations`
+ *   · 编译布局  `dist/src/services/readiness.js`   → `../../../prisma/migrations`
+ * （tsconfig 的 include 只含 `src/**`，`prisma/` 不会进 dist，因此必须向上多找一层。）
+ */
+export function migrationDirCandidates(here: string = __dirname): string[] {
+  return [
+    path.join(here, '..', '..', 'prisma', 'migrations'),
+    path.join(here, '..', '..', '..', 'prisma', 'migrations'),
+  ];
+}
+
+/** 在两种构建布局中择优解析真实迁移目录；全部不可用 → null（调用方据此 fail-closed）。 */
+export function resolveMigrationsDir(here: string = __dirname): string | null {
+  for (const candidate of migrationDirCandidates(here)) {
+    try {
+      if (readdirSync(candidate, { withFileTypes: true }).some((entry) => entry.isDirectory())) {
+        return candidate;
+      }
+    } catch {
+      // 尝试下一个候选位置
+    }
+  }
+  return null;
+}
+
+/** 只读统计迁移目录数。`dir` 为显式迁移目录（保持既有语义）；缺省则自动解析构建布局。 */
+export function countLocalMigrations(dir?: string): number {
+  const target = dir === undefined ? resolveMigrationsDir() : dir;
+  if (target === null) return -1;
   try {
-    return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length;
+    return readdirSync(target, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length;
   } catch {
     return -1;
   }

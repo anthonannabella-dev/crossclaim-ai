@@ -28,7 +28,8 @@ Environment=RSI_HEALTH_PORT=4319
 Environment=RSI_STATE_FILE=/var/lib/crossclaim-rsi/rsi-run.log
 Environment=RSI_ADMIN_SNAPSHOT_PATH=/var/lib/crossclaim-rsi/rsi-admin-snapshot.json
 # 事件驱动运行入口（本地只读源 + 事件循环 + 续跑引擎 + 控制器）：无事件时静默，60s 仅兜底。
-ExecStart=/usr/bin/node /opt/crossclaim/apps/api/dist/runtime/rsi-run.js
+# NOTE: tsconfig outDir=dist + rootDir="." => artifacts live under dist/src/**
+ExecStart=/usr/bin/node /opt/crossclaim/apps/api/dist/src/runtime/rsi-run.js
 KillSignal=SIGTERM
 TimeoutStopSec=30
 # 崩溃自动恢复 + 防 crash loop

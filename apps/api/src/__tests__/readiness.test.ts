@@ -1,12 +1,20 @@
 // P2-1（MSG-20260929-70）— /readyz 语义：DB / migration / resolver，且不泄漏内部信息
 
 import type { AddressInfo } from 'node:net';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { createLogger } from '../config/logger';
 import { createServer } from '../server';
-import { checkReadiness, readinessHttpStatus } from '../services/readiness';
+import {
+  checkReadiness,
+  countLocalMigrations,
+  migrationDirCandidates,
+  readinessHttpStatus,
+  resolveMigrationsDir,
+} from '../services/readiness';
 
 const prisma = new PrismaClient();
 
@@ -147,3 +155,44 @@ describe('HTTP /readyz（P2-1）', () => {
     });
   });
 });
+
+/**
+ * RC-20261008-LINUX-DEPLOY-PREP 修复回归：
+ * 之前 `countLocalMigrations()` 只按「源码布局」拼路径（`__dirname/../../prisma/migrations`）。
+ * 编译产物运行在 `dist/src/services/`，该路径解析为 `dist/prisma/migrations`（不存在）→ 返回 -1
+ * → `/readyz` 在**编译产物**下恒判 MIGRATION_MISMATCH 并返回 503（源码测试却全绿）。
+ * 这两条断言锁定两种布局的路径推导，防止再次回归。
+ */
+describe('countLocalMigrations 布局解析（RC-20261008 修复）', () => {
+  const apiRoot = join(__dirname, '..', '..');
+  const srcServices = join(apiRoot, 'src', 'services');
+  const distServices = join(apiRoot, 'dist', 'src', 'services');
+  const repoMigrations = join(apiRoot, 'prisma', 'migrations');
+  const distMigrations = join(apiRoot, 'dist', 'prisma', 'migrations');
+
+  it('09 源码布局：候选首位命中 prisma/migrations，计数 > 0', () => {
+    const candidates = migrationDirCandidates(srcServices);
+    expect(candidates[0]).toBe(repoMigrations);
+    expect(resolveMigrationsDir(srcServices)).toBe(repoMigrations);
+    expect(countLocalMigrations(resolveMigrationsDir(srcServices) ?? '')).toBeGreaterThan(0);
+  });
+
+  it('10 编译布局：首位（dist/prisma/migrations）不存在，第二候选命中仓库 prisma/migrations', () => {
+    const candidates = migrationDirCandidates(distServices);
+    expect(candidates[0]).toBe(distMigrations);
+    expect(candidates[1]).toBe(repoMigrations);
+    expect(resolveMigrationsDir(distServices)).toBe(repoMigrations);
+    expect(countLocalMigrations(resolveMigrationsDir(distServices) ?? '')).toBeGreaterThan(0);
+  });
+
+  it('11 编译布局下不会再退化成 -1（防止 /readyz 恒判 MIGRATION_MISMATCH）', () => {
+    const resolved = resolveMigrationsDir(distServices);
+    expect(resolved).not.toBeNull();
+    expect(countLocalMigrations()).toBeGreaterThan(0);
+    expect(countLocalMigrations()).toBe(migrationCountOf(resolved ?? ''));
+  });
+});
+
+function migrationCountOf(dir: string): number {
+  return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length;
+}
