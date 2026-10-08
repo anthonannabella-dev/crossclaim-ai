@@ -772,3 +772,57 @@ PRODUCTION_READY = NO
 `REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`；`PRODUCTION_READY = NO`。
 
 **剩余未关闭**：CHANGE 4A（P1 失败定位与隔离）、P0-B1（P0 生产同构业务链 E2E），随后申请 PHASE 2 FINAL-R2 复审。
+
+### 3.15 CHANGE 4A（P1）失败定位与测试隔离 —— 已实现并取证
+
+**审计要求（`MSG-20261008-20`）**：保存完整测试日志（含失败用例名、堆栈与**测试数据库标记**）；收拢 S1/S3/S5 的
+客户端释放、数据清理与共享表竞争；对偶发失败用例实现隔离；在固定环境下**连续 ≥5 轮**相关完整套件全部通过后再提交记录；
+小时级 soak / 真实断电 / Linux 实机验收仍属**独立生产验收事项**。
+
+**① 测试卫生助手** `apps/api/src/__tests__/si-rsi-test-db.helper.ts`（非 `.test.ts`，不被 vitest 收集）
+- `testDatabaseMarker()`：只回「主机:端口/库名」，**绝不回显用户名或口令** → 日志/汇总里可安全携带「跑的是哪个库」；
+- `unreachableDatabaseUrl()`：由**真实测试库 URL** 派生不可达 URL（只换端口 + 库名）—— 上一版 S5 里硬编码的
+  `postgresql://user:pass@127.0.0.1:55999/nope` **已移除**，仓库内不再出现任何凭据字面量；
+- `uniqueTaskKeys()`：每轮独立任务键，避免共享表上的跨轮键竞争。
+
+**② S1/S3/S5 收拢（`si-rsi-phase2-stability.test.ts`）**
+- S1：改用 `uniqueTaskKeys(...)` 逐轮独立键；清理移入 `try/finally`（断言失败也不把脏数据留给下一个用例）；
+  新增「赢家数 = 任务数 = 4 条 ACTIVE 租约」断言；
+- S3：新增「接管后仅 1 条租约行、仅 1 条任务行」断言（无重复副作用 / 无键漂移）；
+- S5：故障注入改用派生 URL；`$disconnect()` 仍在 `finally`；新增「真实库零残留（AutonomyTask / AutonomyLease 均为 0）」
+  与「数据库标记不含 `@`」断言。
+
+**③ 一次性取证器** `tools/dev/run-si-rsi-suite.mjs`（**不是**第二套运行时/调度器）
+- 一次性 CLI：跑完 N 轮即退出并返回退出码；**无定时器、无守护进程、无服务端**；
+- 每轮**完整原始日志**落 `tools/dev/logs/si-rsi-suite/<label>-round<N>.log`（该目录已 gitignore），
+  汇总里记录**失败用例名 / 堆栈片段 / `Failed Tests` 原文段落 / 每轮退出码 / 耗时 / HEAD / 是否 dirty / 数据库标记**；
+- `--per-file` 隔离模式：**每个测试文件单独进程**运行并记录每文件 `exitCode / tests / 失败用例名`
+  —— 用于把偶发失败定位到具体文件（这是本轮对「偶发失败用例隔离」的可执行答案：先按文件隔离复现，再按用例隔离）；
+- 失败**不做自动重试**（不掩盖 flaky）；有任何一轮非 0 退出即以非 0 退出码结束。
+
+**④ 取证结果（固定环境：本机 PostgreSQL；数据库标记 `127.0.0.1:55432/crossclaim`）**
+| 模式 | 标签 | HEAD | 工作树 | 轮数 | 结果 |
+| --- | --- | --- | --- | --- | --- |
+| 全套件连续 | `change4a-5x-clean` | `e5c73755` | clean | **5** | **ALL_GREEN**（每轮 13 文件 / **77 tests**，耗时 17.2–17.6s） |
+| 逐文件隔离 | `change4a-perfile-1x` | `e5c73755` | clean | 1（13 个独立进程） | **ALL_GREEN**（聚合 exit=0；每文件结果逐个记录） |
+
+冻存证据（可提交、含全部字段）：
+- `tools/verification/si-rsi-suite-runs/change4a-5x.json`
+- `tools/verification/si-rsi-suite-runs/change4a-perfile-1x.json`
+
+重放命令（同一台机器、真实 PostgreSQL）：
+```
+node tools/dev/run-si-rsi-suite.mjs --rounds 5 --label change4a-5x-clean
+node tools/dev/run-si-rsi-suite.mjs --rounds 1 --per-file --label change4a-perfile-1x
+```
+
+**⑤ 关于「先失败后修复」的诚实登记**：本轮实现过程中确实出现 1 次真实失败 ——
+`si-rsi-phase2-business-outcome.test.ts` B4 断言 `TERMINAL_EVIDENCE_SOURCE_DISABLED` 实测为 `TERMINAL_EVIDENCE_MISSING`
+（判定顺序：证据缺失先于来源启用判定）。**定位方式**：运行器输出的失败用例名 + `→ expected … to be …` 堆栈片段；
+**修复**：按实际判定顺序修正断言并补充顺序说明（属断言口径修正，非放宽安全语义）；修复后 5 轮全绿。
+该失败发生在 CHANGE 3A 单元（`a296879d` 之前），此处一并登记以便审计追溯。
+
+**仍为独立生产验收事项（本轮未做，不得默认为已解决）**：小时级长跑 soak、真实断电/断连、Linux 实机 systemd 与真实浏览器验收
+= **NOT VERIFIED**；`REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`；`PRODUCTION_READY = NO`。
+
+**剩余未关闭**：仅 **P0-B1（P0 生产同构业务链 E2E）**，完成后申请 PHASE 2 FINAL-R2 复审。

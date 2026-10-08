@@ -1,0 +1,124 @@
+{
+  "label": "change4a-perfile-1x",
+  "generatedAt": "2026-10-08T15:19:23.701Z",
+  "mode": "per-file",
+  "rounds": 1,
+  "files": [
+    "src/__tests__/si-rsi-p0-repro.test.ts",
+    "src/__tests__/si-rsi-phase1-authorization.test.ts",
+    "src/__tests__/si-rsi-phase1-durable-queue.test.ts",
+    "src/__tests__/si-rsi-phase1-fault-matrix.test.ts",
+    "src/__tests__/si-rsi-phase1-finalization.test.ts",
+    "src/__tests__/si-rsi-phase1-release-wiring.test.ts",
+    "src/__tests__/si-rsi-phase1-retry-lifecycle.test.ts",
+    "src/__tests__/si-rsi-phase2-business-outcome.test.ts",
+    "src/__tests__/si-rsi-phase2-execution-preflight.test.ts",
+    "src/__tests__/si-rsi-phase2-recovery-wiring.test.ts",
+    "src/__tests__/si-rsi-phase2-stability.test.ts",
+    "src/__tests__/si-rsi-phase2-startup-parity.test.ts",
+    "src/__tests__/si-rsi-phase2-trusted-terminal.test.ts"
+  ],
+  "headSha": "e5c73755aadb8313b7db26d2a9d03d6ae59dbcda",
+  "gitDirty": false,
+  "nodeVersion": "v24.16.0",
+  "vitestVersion": "2.1.9",
+  "databaseMarker": "127.0.0.1:55432/crossclaim",
+  "failedRounds": 0,
+  "result": "ALL_GREEN",
+  "detail": [
+    {
+      "round": 1,
+      "startedAt": "2026-10-08T15:18:56.455Z",
+      "durationMs": 27236,
+      "exitCode": 0,
+      "testFilesLine": "Test Files  1 passed (1)",
+      "testsLine": "Tests  5 passed (5)",
+      "durationLine": "Duration  1.08s (transform 443ms, setup 21ms, collect 723ms, tests 24ms, environment 0ms, prepare 107ms)",
+      "failedTestNames": [],
+      "stackLines": [],
+      "failureExcerpt": "",
+      "fileResults": [
+        {
+          "file": "src/__tests__/si-rsi-p0-repro.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  5 passed (5)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase1-authorization.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  6 passed (6)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase1-durable-queue.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  7 passed (7)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase1-fault-matrix.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  8 passed (8)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase1-finalization.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  5 passed (5)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase1-release-wiring.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  7 passed (7)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase1-retry-lifecycle.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  5 passed (5)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase2-business-outcome.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  4 passed (4)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase2-execution-preflight.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  4 passed (4)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase2-recovery-wiring.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  6 passed (6)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase2-stability.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  6 passed (6)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase2-startup-parity.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  5 passed (5)",
+          "failedTestNames": []
+        },
+        {
+          "file": "src/__tests__/si-rsi-phase2-trusted-terminal.test.ts",
+          "exitCode": 0,
+          "testsLine": "Tests  9 passed (9)",
+          "failedTestNames": []
+        }
+      ],
+      "logPath": "tools/dev/logs/si-rsi-suite/change4a-perfile-1x-round1.log"
+    }
+  ],
+  "rawLogsLocation": "tools/dev/logs/si-rsi-suite/（运行时产物，已 gitignore；可用同一命令重放）"
+}
