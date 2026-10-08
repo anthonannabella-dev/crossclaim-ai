@@ -181,6 +181,23 @@ Drawback 的 1825 天（exportDate 锚点）被明确定位为**合格窗口**�
 
 ## 11. 边界（不变）
 
+## 12. AUDIT-1 送审记录（PHASE 8 + UI_RESULT_VIEW）
+
+* AUDIT_ID：`AUDIT-1`
+* REVIEWED_HEAD：`cbf5c7e1bde00b3653fc2ca9ac29b311db712320`（分支 `feat/historical-recovery-scan-v1`，已 push）
+* 送审范围：PHASE 8（Customs 历史管线复用既有链）＋ UI_RESULT_VIEW（客户只读结果投影 + 路由接线）
+* 关键变更：`services/historical-scan/customs-historical-pipeline.ts`、
+  `services/workflow/http-routes.ts`（`GET /recovery-scans/:id`）、`apps/api/src/server.ts` 路由白名单、
+  `API.md`、`apps/web/app/recoveries/scans/[id]/{historical-scan-view.tsx,page.tsx}`、
+  5 语言 `historicalScan.*`、`ui-check-entry.tsx` 断言。
+* 测试证据：`customs-historical-pipeline` 8/8；UI render 219/219；i18n 5 语言 904 键 / 0 硬编码；
+  api tsc 0；web tsc 0；api-contract `API_CONTRACT_OK`（implemented=100 / documented=87）。
+* 待判问题：① 是否确认**复用既有** Customs 链（无第二 truth / eligibility / evidence / deadline engine）；
+  ② `CLAIM_READY` 是否严格 fail-closed（未核验政策 / 缺 anchor / 缺证据 / 非 EXACT 匹配 / 特殊条款一律不得进入）；
+  ③ UI 覆盖诚实规则是否成立（非 FULL 覆盖不得表述为「全部历史检查完成」）；
+  ④ 是否存在未授权的外部动作（filing / payment / external write）。
+* 裁决（等待中）：VERDICT = PENDING。
+
 * `SECOND_RUNTIME = 0`、`SECOND_POLICY_ENGINE = 0`、`SECOND_GUARD = 0`、`SECOND_FACT_SOURCE = 0`
   （本单元新增的只是 durable scan scope + 纯函数解析器 + 领域步骤执行器；未新增调度器/运行时/政策引擎/守卫）。
 * `REAL_PROVIDER_WRITE / CUSTOMS_FILING / PAYMENT / AUTO_COMMISSION_CHARGE / PRODUCTION_CREDENTIALS /
