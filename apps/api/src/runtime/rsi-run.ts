@@ -196,6 +196,20 @@ export async function composeRsiRuntime(input: {
    */
   runtimeOwnerRef?: string;
   domainPacks?: readonly RsiDomainCapabilityPack[];
+    /**
+     * P0-B1（审计 MSG-20261008-20）：domain step 结果的可审计持久记录钩子（host 注入）。
+     * 由 `createRecoveryDomainOutcomeRecorder()` 提供；缺省 = 不记录（保持既有行为）。
+     */
+    onDomainPackEvidence?: (record: {
+      taskId: string;
+      dedupeKey: string;
+      packId: string;
+      status: string;
+      evidenceRef: string;
+      guardActions: readonly { action: string; decision: string }[];
+      reasonCodes: readonly string[];
+      organizationId?: string;
+    }) => Promise<void> | void;
   /**
    * PHASE 1（SI/RSI 客户自治执行）—— 权威 durable 任务源：
    * 每次 watchdog tick 前向它领取「已就绪且本 worker 已原子领取」的任务，并采纳进**同一**引擎队列。
@@ -298,6 +312,7 @@ export async function composeRsiRuntime(input: {
       : createRsiDomainPackRunner({
           packs: domainPackList,
           ...(siModelGateway === undefined ? {} : { modelGateway: siModelGateway }),
+          ...(input.onDomainPackEvidence === undefined ? {} : { onEvidence: input.onDomainPackEvidence }),
         });
   /**
    * P2-CHANGE2：recovery 任务在**真正派发前**必须再通过一次授权复核（防「claim 后撤销授权」竞态）。

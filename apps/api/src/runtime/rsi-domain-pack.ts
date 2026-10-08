@@ -83,6 +83,22 @@ export function createRsiDomainPackRunner(input: {
   /** PHASE 2：唯一 Model Gateway port（由 host 用共享 Gateway 组装后注入） */
   modelGateway?: import('./rsi-si-model-gateway').RsiSiModelGatewayPort;
   log?: (line: string) => void;
+  /**
+   * P0-B1（审计 MSG-20261008-20）：domain step 的**可审计持久记录**钩子（host 注入）。
+   * 只有 resolved pack 路径会回调；抛出异常时本 runner **fail-closed 降级为 BLOCK**
+   * （绝不允许「审计写失败但仍报 PASS」）。
+   */
+  onEvidence?: (record: {
+    taskId: string;
+    dedupeKey: string;
+    packId: string;
+    status: RsiRunnerStatus;
+    evidenceRef: string;
+    guardActions: readonly RsiDomainPackGuardAction[];
+    /** BLOCK 时的原因码（用于 durable 记录与幂等键；不含客户数据） */
+    reasonCodes: readonly string[];
+    organizationId?: string;
+  }) => Promise<void> | void;
 }): RsiDomainPackRunner {
   const dispatched: { taskId: string; packId: string; status: RsiRunnerStatus; guardActions: readonly RsiDomainPackGuardAction[] }[] = [];
   return {
@@ -120,16 +136,56 @@ export function createRsiDomainPackRunner(input: {
         packId: pack.packId,
         ...(input.modelGateway === undefined ? {} : { modelGateway: input.modelGateway }),
       });
+      /**
+       * P0-B1：把本轮的**最终结论**交给 host 的持久记录器（PASS 与 BLOCK 都要留痕）。
+       * 记录失败 ⇒ BLOCK（fail-closed）：宁可让任务停在等待裁决，也不让审计断链。
+       */
+      const persistOutcome = async (
+        status: RsiRunnerStatus,
+        evidenceRef: string,
+        guardActions: readonly RsiDomainPackGuardAction[],
+        reasonCodes: readonly string[],
+      ): Promise<boolean> => {
+        if (input.onEvidence === undefined) return true;
+        try {
+          await input.onEvidence({
+            taskId: task.id,
+            dedupeKey: task.dedupeKey,
+            packId: pack.packId,
+            status,
+            evidenceRef,
+            guardActions,
+            reasonCodes,
+            ...(task.organizationId === undefined ? {} : { organizationId: task.organizationId }),
+          });
+          return true;
+        } catch (error) {
+          input.log?.(
+            `RSI_DOMAIN_PACK_OUTCOME_RECORD_FAILED task=${task.id} pack=${pack.packId} -> BLOCK (${String(
+              (error as Error)?.message ?? error,
+            )})`,
+          );
+          return false;
+        }
+      };
       if (evidence.externalWritePerformed !== false) {
         input.log?.(`RSI_DOMAIN_PACK_EXTERNAL_WRITE_REFUSED task=${task.id} pack=${pack.packId} -> BLOCK`);
+        const evidenceRef = 'domain-pack:external-write-refused';
+        const ok = await persistOutcome('BLOCK', evidenceRef, evidence.guardActions, evidence.reasonCodes);
         dispatched.push({ taskId: task.id, packId: pack.packId, status: 'BLOCK', guardActions: evidence.guardActions });
-        return { status: 'BLOCK', evidenceRef: 'domain-pack:external-write-refused' };
+        if (!ok) return { status: 'BLOCK', evidenceRef: 'domain-pack:outcome-record-failed' };
+        return { status: 'BLOCK', evidenceRef };
       }
       if (evidence.status === 'PASS' && evidence.evidenceRef.trim() === '') {
+        const evidenceRef = 'domain-pack:evidence-missing';
+        const ok = await persistOutcome('BLOCK', evidenceRef, evidence.guardActions, evidence.reasonCodes);
         dispatched.push({ taskId: task.id, packId: pack.packId, status: 'BLOCK', guardActions: evidence.guardActions });
-        return { status: 'BLOCK', evidenceRef: 'domain-pack:evidence-missing' };
+        if (!ok) return { status: 'BLOCK', evidenceRef: 'domain-pack:outcome-record-failed' };
+        return { status: 'BLOCK', evidenceRef };
       }
+      const ok = await persistOutcome(evidence.status, evidence.evidenceRef, evidence.guardActions, evidence.reasonCodes);
       dispatched.push({ taskId: task.id, packId: pack.packId, status: evidence.status, guardActions: evidence.guardActions });
+      if (!ok) return { status: 'BLOCK', evidenceRef: 'domain-pack:outcome-record-failed' };
       return { status: evidence.status, evidenceRef: evidence.evidenceRef };
     },
   };
