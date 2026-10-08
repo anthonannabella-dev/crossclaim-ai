@@ -166171,3 +166171,230 @@ PRODUCTION_READY = NO
 
 最终裁决：REVISE，非 FAIL。 已验证的启动装配、可信租户控制和执行前授权复核予以保留；下一轮只补足三处证据和实现缺口，不允许为通过审计而放宽安全门禁，也不允许修改已封板 RC。
 ```
+
+### [MSG-20261009-01] SI-RSI PHASE 2 FINAL-R2 独立审计（reviewed ref 5732b190，AUDIT_BASIS = SUBMITTED_EVIDENCE_ONLY）= **PASS**；CHANGE3A_TRUSTED_TERMINAL_EVIDENCE / CHANGE4A_TEST_ISOLATION / P0_B1_REAL_DOMAIN_E2E = PASS；**P0_B_CLOSED = YES、PHASE2_CLOSED = YES**（PHASE 2 范围内验收通过；**不代表生产就绪**）；NEXT = **PHASE 3 — Production Validation & Provider Readiness**；FULL_API_REGRESSION / LINUX_SYSTEMD_E2E / HOUR_LEVEL_SOAK = NOT_VERIFIED；REAL_VALIDATION_COMPLETE = NO、PRODUCTION_READY = NO、外写/申报/支付/扣佣 = HOLD（会话 https://chatgpt.com/c/6ac7ba95-9654-83ec-bd86-557f4ec1d78a）
+
+```text
+CrossClaim · SI-RSI PHASE 2 FINAL-R2 独立审计裁决
+
+AUDIT ID: MSG-20261009-01 · REVIEWED_HEAD: 5732b190
+
+PASS — 范围内验收通过
+
+裁决结论：PHASE 2 可以关闭，P0-B 可以关闭，但不代表生产就绪。
+
+依据本轮提交的证据，CHANGE 3A、CHANGE 4A 和 P0-B1 均已满足各自的验收目标。前次裁决中的三个阻断项已有对应实现、正反测试和回归证据。
+
+本次是基于 Codex 提交材料的证据审计，并非独立拉取 5732b190 后重新执行的源码审计。以下 PASS 均限定于本轮已验证范围，不扩展到真实 Provider、生产环境或全量回归。
+
+一、逐项裁决
+
+审计项目
+
+	
+
+裁决
+
+	
+
+关键依据
+
+
+
+
+CHANGE3A_TRUSTED_TERMINAL_EVIDENCE
+
+	
+
+PASS
+
+	
+
+终局证据来源白名单、生产默认关闭、事务内权威事实复核、9/9 PostgreSQL 测试
+
+
+
+
+CHANGE4A_TEST_ISOLATION
+
+	
+
+PASS
+
+	
+
+全套件连续 5 轮 77/77、13 个独立进程全部通过、失败日志完整保留
+
+
+
+
+P0_B1_REAL_DOMAIN_E2E
+
+	
+
+PASS
+
+	
+
+真实 PostgreSQL、durable claim、实际 read ports、AuditLog 持久化、6/6 E2E
+
+
+
+
+P0_B_CLOSED
+
+	
+
+YES
+
+	
+
+已提供真实业务步骤执行与数据库事实证据，而非仅内存 dispatch
+
+
+
+
+PHASE2_CLOSED
+
+	
+
+YES
+
+	
+
+CHANGE1/2 沿用前次 PASS，CHANGE3A/4A/P0-B1 本轮通过
+
+二、CHANGE 3A：可信终局事实
+
+裁决：PASS
+
+本轮最关键的变化是将“任务执行器声称已完成”和“系统存在可信终局证据”明确分离。
+
+证据显示：
+
+Runner、Task Input、Local Simulation 无权自行认定 Provider 已确认或者资金已到账。
+
+可信来源必须经过白名单、类别匹配、验签主体资格、事件身份、租户、账户和任务谱系校验。
+
+settle() 在同一事务中重新判断服务端可信事实，拒绝时不产生部分写入。
+
+生产可信终局来源全部默认关闭，未接入真实 Provider 时不能虚构成功回款。
+
+9/9 真实 PostgreSQL 测试覆盖正反路径。
+
+特别确认： T7 使用显式启用的测试来源验证门禁可通行，不等于真实生产来源已经开通。
+
+本项通过，不授权开启生产终局证据来源。
+
+三、CHANGE 4A：运行时稳定性与测试隔离
+
+裁决：PASS（限已执行测试范围）
+
+连续五轮全绿及逐文件独立进程全绿，足以支持本轮要求的重复性验证。
+
+同时，取证器保存完整失败信息，不自动重试掩盖异常；测试唯一键、数据库清理及故障注入条件也得到补强。
+
+但必须明确：
+
+这不等于运行时稳定性已经得到生产级证明。
+
+尚存三项验证限制：
+
+全量 API 测试没有完成，不能宣称 480 个测试文件全部通过。
+
+三个长期运行的 rsi-run 进程共享开发数据库，仍有环境干扰风险。
+
+小时级 soak、Linux systemd 实机、断连与重启恢复没有完成。
+
+这些事项不推翻 CHANGE 4A 的限定范围 PASS，但必须进入后续部署前的稳定性验收。
+
+四、P0-B1：真实业务链 E2E
+
+裁决：PASS
+
+本轮提供了相较此前 dispatch log 更强的事实证据。
+
+本轮已验证的运行路径
+
+Durable Task + Standing Authorization
+
+服务端权威租户及授权校验
+
+ONE SI Runtime
+
+Claim / Lease / Execution Preflight
+
+Recovery SI Domain Pack
+
+调用实际 Prisma 只读业务端口
+
+Durable AuditLog
+
+PASS / BLOCK / EvidenceRef / ReasonCodes
+
+OPPORTUNITY_IDENTIFIED
+
+非回款终局状态 · 无外部写入
+
+E1 证明正向任务产生了真实数据库审计事实；E2 证明不存在机会数据时读取端口确实失败；E3–E5 证明授权撤销与跨租户隔离能够阻断执行；E6 证明没有越过外写边界，也没有产生虚假终局完成。
+
+这足以关闭本阶段的 P0-B：业务步骤是否真实接入 ONE SI Runtime 并执行。
+
+需要保留一项语义区分：RECOVERY_DOMAIN_STEP_EXECUTED 证明执行结论被持久化，不等于真实索赔已提交、Provider 已确认或款项已经到账。当前尚无证据证明外部追回完整闭环。
+
+五、PHASE 2 关闭后的下一步
+
+本次不要求继续修改 CHANGE3A、CHANGE4A 或 P0-B1，也不要求重新进行 PHASE 2 FINAL-R3。
+
+建议进入独立的 PHASE 3 — Production Validation & Provider Readiness，按以下顺序执行：
+
+环境隔离：确认三个既有 rsi-run 进程的用途及所有者，由 HOST 决定停止或迁移；创建独立 staging 数据库。
+
+生产同构验收：在 Linux systemd 环境验证启动、停止、重启、租约接管、授权撤销、幂等和审计一致性。
+
+稳定性与回归：执行小时级 soak、故障恢复测试，并完成尚未取得结果的全量 API 回归。
+
+真实 Provider 集成：只有取得授权、合规审查和有效凭据后，才能分别验证真实读取、外部提交、终局确认与结算。
+
+发布门禁：在所有关键生产验证关闭前继续保持外写、关税申报、支付和自动扣佣 HOLD。
+
+尤其不能因本轮 PHASE2_CLOSED=YES 自动将 PRODUCTION_READY 改为 YES。
+
+六、机器可读终局块
+
+CODEX-SI-RSI-P2-FINAL-R2
+
+复制裁决
+
+可直接回传 Codex
+
+AUDIT_ID = MSG-20261009-01
+REVIEWED_HEAD = 5732b190
+AUDIT_BASIS = SUBMITTED_EVIDENCE_ONLY
+
+PHASE2_FINAL_R2_VERDICT = PASS
+CHANGE3A = PASS
+CHANGE4A = PASS
+P0_B1 = PASS
+
+P0_B_CLOSED = YES
+PHASE2_CLOSED = YES
+
+NEXT = PHASE3_PRODUCTION_VALIDATION_AND_PROVIDER_READINESS
+
+FULL_API_REGRESSION = NOT_VERIFIED
+LINUX_SYSTEMD_E2E = NOT_VERIFIED
+HOUR_LEVEL_SOAK = NOT_VERIFIED
+
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY = NO
+
+EXTERNAL_WRITE = HOLD
+CUSTOMS_FILING = HOLD
+PAYMENT = HOLD
+AUTO_COMMISSION_CHARGE = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+最终裁决：PHASE 2 正式通过本轮提交证据的范围内验收。 下一阶段重点不再是反复补写内部业务链，而是以独立 staging 环境、Linux 实机验证和真实 Provider 测试，把已经打通的内部能力逐步转化为可安全上线的生产能力。
+```

@@ -414,7 +414,7 @@ AUDIT_BASIS=CODEX_REPORTED_EVIDENCE_NOT_INDEPENDENTLY_EXECUTED
 
 ---
 
-## 3. PHASE 2 / C5 —— Recovery pack 生产装配（设计已定稿，实现待执行）
+## 3. PHASE 2 / C5 —— Recovery pack 生产装配（**已 CLOSED**：`MSG-20261009-01` PHASE2_CLOSED = YES）
 
 ### 3.1 侦察结论（本 tick 实测，只读）
 
@@ -879,3 +879,84 @@ PASS 与 BLOCK **都要留痕**；钩子抛错 ⇒ **降级为 BLOCK**（`domain
 
 **PHASE 2 状态**：审计指定的三项（CHANGE 3A / CHANGE 4A / P0-B1）**均已实现并取证** ⇒
 `PHASE2_CLOSED` 仍为 **NO**，等待 **PHASE 2 FINAL-R2** 独立复审；复审前不自行宣告 CLOSED。
+
+### 3.17 PHASE 2 FINAL-R2 独立审计结论（`MSG-20261009-01`）= **PASS** ⇒ PHASE 2 = CLOSED
+
+- 会话：`https://chatgpt.com/c/6ac7ba95-9654-83ec-bd86-557f4ec1d78a`（本轮**新开**会话）
+- 审查锚点：**`5732b190`**；审计方自定编号 **`MSG-20261009-01`**；`AUDIT_BASIS = SUBMITTED_EVIDENCE_ONLY`
+- **投递校验**：composer 粘贴前为空 → 粘贴后 **6258 字符（= 请求文本长度，无重复）**；标记 `CODEX-SI-RSI-P2-FINAL-R2` 作为**新用户轮**出现；进入生成态（`停止` 按钮在场）；等待至 `回答已完成`
+- **逐字归档**：`AI-ARCHITECT-INBOX.md` → `MSG-20261009-01`
+  （`FNV1A_MATCH ea6e1d04`（原文文件 = 浏览器抽取）；`FULL_COPY_OK` 原文 99 行 / 归档 99 行 / 缺失 0 / 多出 0）；
+  会话原始抽取 sha256 = `bbe649ac…`
+
+**逐项裁决（审计方原文）**
+
+| 项 | 裁决 | 审计方关键依据 |
+| --- | --- | --- |
+| CHANGE3A_TRUSTED_TERMINAL_EVIDENCE | **PASS** | 终局证据来源白名单、生产默认关闭、事务内权威事实复核、9/9 PostgreSQL 测试 |
+| CHANGE4A_TEST_ISOLATION | **PASS** | 全套件连续 5 轮 77/77、13 个独立进程全部通过、失败日志完整保留 |
+| P0_B1_REAL_DOMAIN_E2E | **PASS** | 真实 PostgreSQL、durable claim、实际 read ports、AuditLog 持久化、6/6 E2E |
+| P0_B_CLOSED | **YES** | 已提供真实业务步骤执行与数据库事实证据，而非仅内存 dispatch |
+| PHASE2_CLOSED | **YES** | CHANGE1/2 沿用前次 PASS，CHANGE3A/4A/P0-B1 本轮通过 |
+
+**审计方明确写下的限制（逐字要点）**
+
+1. 「本次是基于 Codex 提交材料的**证据审计**，并非独立拉取 `5732b190` 后重新执行的源码审计」⇒ `AUDIT_BASIS = SUBMITTED_EVIDENCE_ONLY`；
+2. 「裁决结论：PHASE 2 可以关闭，P0-B 可以关闭，但**不代表生产就绪**」；
+3. CHANGE 3A：`PASS`，但**「本项通过，不授权开启生产终局证据来源」**；T7 的测试来源启用 ≠ 生产来源开通；
+4. CHANGE 4A：`PASS（限已执行测试范围）`，并列出三项验证限制 —— **全量 API 测试未完成（480 文件不得宣称全通过）**、
+   **三个长期运行的 `rsi-run` 进程共享开发数据库仍有环境干扰风险**、**小时级 soak / Linux systemd 实机 / 断连与重启恢复未完成**；
+5. P0-B1：`PASS`，但保留语义区分 —— `RECOVERY_DOMAIN_STEP_EXECUTED` **只证明执行结论被持久化**，
+   不等于真实索赔已提交 / Provider 已确认 / 款项已到账；「当前尚无证据证明外部追回完整闭环」。
+
+**机器可读终局块（审计方原文）**
+```
+AUDIT_ID = MSG-20261009-01
+REVIEWED_HEAD = 5732b190
+AUDIT_BASIS = SUBMITTED_EVIDENCE_ONLY
+PHASE2_FINAL_R2_VERDICT = PASS
+CHANGE3A = PASS
+CHANGE4A = PASS
+P0_B1 = PASS
+P0_B_CLOSED = YES
+PHASE2_CLOSED = YES
+NEXT = PHASE3_PRODUCTION_VALIDATION_AND_PROVIDER_READINESS
+FULL_API_REGRESSION = NOT_VERIFIED
+LINUX_SYSTEMD_E2E = NOT_VERIFIED
+HOUR_LEVEL_SOAK = NOT_VERIFIED
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY = NO
+EXTERNAL_WRITE = HOLD
+CUSTOMS_FILING = HOLD
+PAYMENT = HOLD
+AUTO_COMMISSION_CHARGE = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+```
+审计方并明确要求：**不得因本轮 `PHASE2_CLOSED = YES` 自动把 `PRODUCTION_READY` 改为 YES**。
+
+#### 3.17.1 阶段编号歧义（登记，待 HOST 确认一次即可）
+
+本文件 §2 的**原始** PHASE 2–6 是「自恢复能力」计划（PHASE 2 = API 故障自动诊断与恢复、PHASE 3 = 业务错误自动重新规划…）；
+而本轮 HOST 指令把 **PHASE 2** 定义为「Recovery pack 生产装配（C5）」，审计方随该口径给出
+`NEXT = PHASE 3 — Production Validation & Provider Readiness`（生产验证与 Provider 就绪）。
+两者**编号相同、内容不同**。处理口径（本轮采用）：
+- **PHASE 2 以本轮 HOST 指令的口径为准并已 CLOSED**（`MSG-20261009-01`）；
+- **下一单元按审计方 `NEXT` 推进 PHASE 3 = Production Validation & Provider Readiness**；
+- 原始自恢复计划的 PHASE 3–6（业务重新规划 / 持续学习 / Bug 自发现 / 故障注入矩阵）**不删除、不顺延改号**，
+  仍以 §2 表格为准，待 PHASE 3 推进到位后由 HOST 决定二者先后。
+
+#### 3.17.2 下一单元（PHASE 3）的可自行执行子集 vs HOST 阻断
+
+审计方给出的 PHASE 3 五步中，**只有前两类可在本机自行推进**：
+
+| PHASE 3 步骤 | 本机可执行性 | 处置 |
+| --- | --- | --- |
+| ① 环境隔离：确认 3 个既有 `rsi-run` 进程的用途/所有者；创建独立 staging 数据库 | 核查可自行做；**停止他人进程 / 建 staging 库需 HOST 决定** | 本 tick 只登记，不擅自动手 |
+| ② 生产同构验收：Linux systemd 启动/停止/重启/租约接管/授权撤销/幂等/审计一致性 | **不可**（本机无 systemd、无 Linux 实机） | **HOST_ACTION_REQUIRED**：提供 Linux 实机或确认同构容器方案 |
+| ③ 稳定性与回归：小时级 soak、故障恢复、**尚未取得结果的全量 API 回归** | soak 可自行做但耗时；全量 API 回归（480 文件）本机可得但需长时间串行 | 下一单元优先「取得全量 API 回归结果」 |
+| ④ 真实 Provider 集成（读取/提交/终局确认/结算） | **不可**（需授权、合规审查与有效凭据） | **HOLD**，HOST 单独授权 |
+| ⑤ 发布门禁：关键生产验证关闭前继续 HOLD 外写/申报/支付/扣佣 | 口径已固化 | 继续执行 |
+
+**本 tick 结论**：PHASE 2 = **CLOSED**（范围内验收通过）；`PRODUCTION_READY = NO` 不变；
+下一步 = PHASE 3 的**本机可执行子集**（先取得全量 API 回归结果），Linux 实机 / staging / 真实 Provider 属 HOST_ACTION_REQUIRED。
