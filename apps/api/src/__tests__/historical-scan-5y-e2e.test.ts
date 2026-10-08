@@ -148,10 +148,38 @@ describe('PHASE 10 · 合成 5 年 E2E（Goal → scan → shard → customs →
         audit: { async write() { /* no-op（本用例不校验审计落盘） */ } },
       }) as never;
 
+    // AUDIT-2R：runtime 认领之后，由 server-owned composition 显式驱动 historical scan execution port
+    const executionPort = createHistoricalScanExecutionPort(prisma);
+    const domainStepOutcomes: Array<{ ok: boolean; scanId: string | null; status: string }> = [];
     const composition = await composeRsiRuntime({
       readFile: async (path: string) =>
         path === 'mem://tasks' ? JSON.stringify([{ id: 'task-scan-1', dedupeKey: taskKey, priority: 'P2' }]) : '[]',
       tasksPath: 'mem://tasks',
+      historicalScanDomainStep: async ({ dedupeKey }) => {
+        const executed = await executionPort.run({
+          organizationId: ORG,
+          taskKey: dedupeKey,
+          pagePort: {
+            async fetchPage({ shard }) {
+              return {
+                records: [syntheticCustomsRecord('ENTRY-D-' + shard.key, 'PERFECT')],
+                nextCursor: null,
+                coverageFrom: '2025-10-08',
+                coverageTo: REQUESTED_TO,
+                coverageStatus: 'SOURCE_LIMITED',
+              };
+            },
+          },
+          ingestPort: {
+            async ingest({ records }: { records: readonly unknown[] }) {
+              const batch = evaluateCustomsHistoricalBatch(records as never);
+              return { accepted: batch.summary.scanned, rejected: 0, eligibleFound: batch.summary.claimReady };
+            },
+          },
+        });
+        domainStepOutcomes.push({ ok: executed.ok, scanId: executed.scanId, status: executed.status });
+        return executed;
+      },
       productRecoveryPack: {
         appActionGuardDeps: appGuardDeps(),
         readPorts,
@@ -180,36 +208,13 @@ describe('PHASE 10 · 合成 5 年 E2E（Goal → scan → shard → customs →
     // ② runtime 自行经扫描范围端口装载 durable scope（不是测试直接查库）
     expect(loadedRefs).toEqual([taskKey]);
     expect(composition.domainDispatchLog().length).toBeGreaterThan(0);
+    // ③ 同一次 tick 内，server-owned composition 继续驱动该 scan 的 durable backfill（单条连续链）
+    expect(domainStepOutcomes).toHaveLength(1);
+    expect(domainStepOutcomes[0]!.scanId).toBe(created.row.id);
+    expect(domainStepOutcomes[0]!.status).toBe('COMPLETED');
+    expect(domainStepOutcomes[0]!.ok).toBe(true);
 
-    // ③+ 既有 runtime 认领后，由 server-owned execution port 真正启动该 scan 的 durable backfill
-    const executionPort = createHistoricalScanExecutionPort(prisma);
-    const executed = await executionPort.run({
-      organizationId: ORG,
-      taskKey,
-      pagePort: {
-        async fetchPage({ shard }) {
-          return {
-            records: [syntheticCustomsRecord('ENTRY-R-' + shard.key, 'PERFECT')],
-            nextCursor: null,
-            coverageFrom: '2025-10-08',
-            coverageTo: REQUESTED_TO,
-            coverageStatus: 'SOURCE_LIMITED',
-          };
-        },
-      },
-      ingestPort: {
-        async ingest({ records }: { records: readonly unknown[] }) {
-          const batch = evaluateCustomsHistoricalBatch(records as never);
-          return { accepted: batch.summary.scanned, rejected: 0, eligibleFound: batch.summary.claimReady };
-        },
-      },
-    });
-    expect(executed.ok).toBe(true);
-    expect(executed.scanId).toBe(created.row.id);
-    expect(executed.status).toBe('COMPLETED');
-    expect(executed.recordsScanned).toBeGreaterThan(0);
-
-    // 负向：非扫描任务 key → BLOCK；跨租户 → BLOCK
+    // ④ execution port 的负向：非扫描任务 key / 跨租户 → BLOCK
     const notScanTask = await executionPort.run({
       organizationId: ORG,
       taskKey: 'task:recovery:CUSTOMS:opp-1',

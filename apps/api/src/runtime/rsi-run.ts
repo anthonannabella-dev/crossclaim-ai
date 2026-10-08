@@ -173,6 +173,12 @@ export async function composeRsiRuntime(input: {
    * STEP_3（3A）：domain capability pack（例如 Recovery SI）。
    * 仅在**未显式注入 runner** 时作为唯一 runner 使用；未匹配任务判 BLOCK，绝不 PASS。
    */
+  /**
+   * HISTORICAL_RECOVERY_SCAN_V1 / AUDIT-2R：扫描任务被既有 runtime 认领后，由 server-owned
+   * composition 显式驱动的领域步骤（真实实现 = historical scan execution port）。
+   * 仅当 claimed task 的 dedupeKey 含 `scan:v1:` 时调用；缺省 = 不接线（扫描任务保持既有行为）。
+   */
+  historicalScanDomainStep?: (claimed: { dedupeKey: string }) => Promise<unknown>;
   domainPacks?: readonly RsiDomainCapabilityPack[];
   /**
    * STEP 3 FINAL-4：**唯一 product 组装点** —— Recovery SI 固定接 shared guard adapter；
@@ -318,9 +324,30 @@ export async function composeRsiRuntime(input: {
         });
 
   const reconcileSpec = input.reconcile;
+  // HISTORICAL_RECOVERY_SCAN_V1 / AUDIT-2R（MSG-20261008-05）：
+  // runtime **认领之后**由 server-owned composition 显式驱动的领域步骤（例如 historical scan execution port）。
+  // 它不是第二 runtime / 第二 scheduler：只在既有 tick 之后被调用，且只在扫描任务上触发；
+  // claim / lease / park-for-judge / reserved namespace 语义一律不变。
+  const domainStep = input.historicalScanDomainStep;
+  const controllerWithDomainSteps =
+    domainStep === undefined
+      ? controller
+      : {
+          ...controller,
+          async tick() {
+            const outcome = await controller.tick();
+            const claimed = (outcome as { claimed?: { dedupeKey?: unknown } } | null | undefined)?.claimed;
+            const dedupeKey = claimed?.dedupeKey;
+            if (typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:')) {
+              await domainStep({ dedupeKey });
+            }
+            return outcome;
+          },
+        };
+
   return {
     loop,
-    controller,
+    controller: controllerWithDomainSteps,
     publisher,
     verdictWatcher,
     taskGeneration: () => generation,
