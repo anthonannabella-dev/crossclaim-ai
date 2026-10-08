@@ -1,0 +1,56 @@
+# CrossClaim API —— 正式 systemd 服务模板
+#
+#   · 服务器启动后 API 自动启动；崩溃自动恢复；reboot 后自动恢复；
+#   · 与 crossclaim-rsi / crossclaim-web 完全独立：API 崩溃不得拖垮 RSI（反之亦然）；
+#   · 防 crash loop：RestartSec + StartLimitIntervalSec/StartLimitBurst 超阈值后 systemd 停止重启；
+#   · 本 unit 不含任何凭据：DATABASE_URL / STORAGE_URL_SECRET / AUDIT_IP_SALT 由宿主以
+#     EnvironmentFile 或密钥管理注入（见 DEPLOYMENT.md §2）。
+#
+# 安装：sudo deploy/install-services.sh（或 install -m 0644 本文件到 /etc/systemd/system/）
+
+[Unit]
+Description=CrossClaim API (HTTP + persistence)
+Documentation=file:/opt/crossclaim/DEPLOYMENT.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 最小权限：专用系统用户（无 login shell、无 sudo、无 docker 组）
+User=crossclaim-api
+Group=crossclaim-api
+WorkingDirectory=/opt/crossclaim
+# 环境变量文件由宿主创建（**不得**包含明文生产凭据；密钥走密钥管理注入）
+EnvironmentFile=/etc/crossclaim/api.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+# 本地存储：ProtectSystem=strict 下 /opt 只读，因此显式指向 StateDirectory
+Environment=STORAGE_DRIVER=local
+Environment=STORAGE_LOCAL_ROOT=/var/lib/crossclaim-api/storage
+# 编译产物入口（tsconfig outDir=dist + rootDir="." ⇒ 产物在 dist/src/**）
+ExecStart=/usr/bin/node /opt/crossclaim/apps/api/dist/src/server.js
+KillSignal=SIGTERM
+TimeoutStopSec=30
+# 崩溃自动恢复 + 防 crash loop
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+# 日志进 journald：journalctl -u crossclaim-api -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=crossclaim-api
+
+# ── 硬化：不接触支付 / 报关 / 客户凭据 ─────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/crossclaim-api
+StateDirectory=crossclaim-api
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

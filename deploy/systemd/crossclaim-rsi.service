@@ -21,6 +21,9 @@ User=crossclaim-rsi
 Group=crossclaim-rsi
 WorkingDirectory=/opt/crossclaim
 # 正式环境变量文件（由宿主创建；**不得**包含明文生产凭据，密钥走密钥管理注入）
+# 生产默认：durable reconcile 必须接线。缺少 DATABASE_URL 时 RSI 直接启动失败（fail-closed），
+# 绝不静默退化成 RSI_RECONCILE=NOT_CONFIGURED。放在 EnvironmentFile 之前，允许宿主机覆写。
+Environment=RSI_RECONCILE_REQUIRED=true
 EnvironmentFile=/etc/crossclaim/rsi.env
 Environment=NODE_ENV=production
 Environment=RSI_HEALTH_PORT=4319
@@ -29,6 +32,8 @@ Environment=RSI_STATE_FILE=/var/lib/crossclaim-rsi/rsi-run.log
 Environment=RSI_ADMIN_SNAPSHOT_PATH=/var/lib/crossclaim-rsi/rsi-admin-snapshot.json
 # 事件驱动运行入口（本地只读源 + 事件循环 + 续跑引擎 + 控制器）：无事件时静默，60s 仅兜底。
 # NOTE: tsconfig outDir=dist + rootDir="." => artifacts live under dist/src/**
+# 单实例：本 runtime 只由本 unit 启动（无 @ 模板实例、无其它 unit 引用同一入口）；
+# 跨实例互斥由 durable lease（ownerRef = 进程启动 UUID + pid，租约到期才可被接管）承担。
 ExecStart=/usr/bin/node /opt/crossclaim/apps/api/dist/src/runtime/rsi-run.js
 KillSignal=SIGTERM
 TimeoutStopSec=30

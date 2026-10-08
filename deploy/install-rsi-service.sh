@@ -48,6 +48,8 @@ RSI_AUTO_VALIDATE_ENABLED=true
 RSI_AUTO_JUDGE_ENABLED=true
 RSI_AUTO_PROMOTE_LOW_RISK_ENABLED=false
 RSI_HEALTH_PORT=4319
+# durable reconcile 必须接线：缺 DATABASE_URL 时 RSI 启动失败（fail-closed），不静默降级
+RSI_RECONCILE_REQUIRED=true
 # DATABASE_URL 由宿主密钥管理注入（本脚本不写）
 #
 # 事件驱动运行入口（rsi-run）读取的只读 artifact 路径；

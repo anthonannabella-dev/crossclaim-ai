@@ -1,0 +1,54 @@
+# CrossClaim Web（Next.js）—— 正式 systemd 服务模板
+#
+#   · 服务器启动后 Web 自动启动；崩溃自动恢复；reboot 后自动恢复；
+#   · Web 不直连数据库：只经 CROSSCLAIM_API_URL 访问 API（见 DEPLOYMENT.md §4）；
+#   · 与 crossclaim-api / crossclaim-rsi 进程隔离：Web 崩溃不影响主业务与 RSI。
+#
+# 安装：sudo deploy/install-services.sh（或 install -m 0644 本文件到 /etc/systemd/system/）
+
+[Unit]
+Description=CrossClaim Web (Next.js)
+Documentation=file:/opt/crossclaim/DEPLOYMENT.md
+After=network-online.target crossclaim-api.service
+Wants=network-online.target crossclaim-api.service
+
+[Service]
+Type=simple
+# 最小权限：专用系统用户；Web 不需要任何数据库凭据
+User=crossclaim-web
+Group=crossclaim-web
+WorkingDirectory=/opt/crossclaim/apps/web
+# 环境变量文件由宿主创建（含 CROSSCLAIM_API_URL；**不得**包含明文生产凭据）
+EnvironmentFile=/etc/crossclaim/web.env
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=NEXT_TELEMETRY_DISABLED=1
+# 编译产物入口：node_modules 内的 next CLI（不依赖 PATH / npx）
+ExecStart=/usr/bin/node /opt/crossclaim/apps/web/node_modules/next/dist/bin/next start -p 3001
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+# 日志进 journald：journalctl -u crossclaim-web -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=crossclaim-web
+
+# ── 硬化 ──────────────────────────────────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# Next.js server（ISR / 静态再生成）需要写自身 build 目录的 cache；显式、最小地放开：
+#   · /opt/crossclaim/apps/web/.next  → 仅该应用的 build/cache 目录
+#   · /var/lib/crossclaim-web         → StateDirectory（日志 / 临时产物）
+ReadWritePaths=/var/lib/crossclaim-web /opt/crossclaim/apps/web/.next
+StateDirectory=crossclaim-web
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

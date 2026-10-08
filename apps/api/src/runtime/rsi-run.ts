@@ -37,6 +37,7 @@ import {
   type RsiReconcileStore,
   type RsiReconcileTrigger,
 } from './rsi-restart-reconcile';
+import { openPrismaReconcile, planReconcileBootstrap } from './rsi-run-bootstrap';
 import {
   generateRsiWork,
   parseRsiSignals,
@@ -486,6 +487,28 @@ const isDirectRun = process.argv[1] !== undefined && process.argv[1].includes('r
 if (isDirectRun) {
   void (async () => {
     const fsPromises = await import('node:fs/promises');
+
+    /**
+     * AUDIT-RC-1 CHANGE 3：durable reconcile 必须接线（fail-closed）。
+     * 决策是纯函数；只有 PRISMA 分支才动态加载 PrismaClient（不牵连骨架运行）。
+     */
+    const reconcileDecision = planReconcileBootstrap(process.env, {
+      defaultOwnerRef: DEFAULT_RUNTIME_OWNER_REF,
+    });
+    if (reconcileDecision.kind === 'REQUIRED_BUT_MISSING_DATABASE_URL') {
+      console.error(
+        'RSI_RECONCILE=REQUIRED_BUT_NO_DATABASE_URL reason=' +
+          reconcileDecision.reason +
+          '（RSI_RECONCILE_REQUIRED=true 但未注入 DATABASE_URL；拒绝启动，不回退内存队列）',
+      );
+      process.exit(1);
+    }
+    const openedReconcile =
+      reconcileDecision.kind === 'PRISMA' ? await openPrismaReconcile(reconcileDecision.ownerRef) : null;
+    console.log(
+      'RSI_RECONCILE_SOURCE=' + reconcileDecision.kind + ' reason=' + reconcileDecision.reason,
+    );
+
     const composition = await composeRsiRuntime({
       readFile: async (path) => fsPromises.readFile(path, 'utf8'),
       tasksPath: process.env.RSI_TASKS_PATH,
@@ -495,6 +518,7 @@ if (isDirectRun) {
       testResultsPath: process.env.RSI_TEST_RESULTS_PATH,
       runner: await resolveRunnerFromEnv(),
       intervalMs: Number(process.env.RSI_WATCHDOG_INTERVAL_MS ?? 60_000),
+      ...(openedReconcile === null ? {} : { reconcile: openedReconcile.spec }),
     });
     const reconcile = await composition.reconcileNow();
     console.log(
@@ -522,7 +546,9 @@ if (isDirectRun) {
     );
     const shutdown = (): void => {
       composition.stop();
-      process.exit(0);
+      // 优雅停止：先收敛 reconcile 的 DB 连接，再退出（无连接时直接退出）
+      if (openedReconcile === null) process.exit(0);
+      else void openedReconcile.disconnect().finally(() => process.exit(0));
     };
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
