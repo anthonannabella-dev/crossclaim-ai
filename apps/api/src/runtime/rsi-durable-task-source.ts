@@ -26,6 +26,17 @@ export const RECOVERY_QUEUE_TASK_PREFIX = 'task:recovery:';
 export interface RsiDurableTaskSource {
   /** 原子领取至多 limit 条已就绪任务；只有 CAS 成功者会被返回。 */
   claim(limit: number): Promise<readonly RsiSafeTask[]>;
+  /** 运行中租约恢复：把**已到期**的 ACTIVE 租约标 EXPIRED，并把其任务放回 READY（无需进程重启）。 */
+  reclaimExpired(limit: number): Promise<readonly string[]>;
+  /**
+   * 结果提交（**fenced**）：只有「本 owner 仍持有未过期 ACTIVE 租约」才允许落终态。
+   * 旧 worker 在被接管后调用本方法会被拒绝（不覆盖新 owner 的结果）。
+   */
+  settle(input: {
+    taskId: string;
+    ownerRef: string;
+    outcome: 'COMPLETED' | 'BLOCKED';
+  }): Promise<{ applied: boolean; reason: string }>;
   /** 该任务源使用的命名空间（可观测 / 断言用） */
   taskPrefix(): string;
 }
@@ -60,33 +71,108 @@ export function createAutonomyTaskSource(input: {
 
       const claimed: RsiSafeTask[] = [];
       for (const row of candidates) {
-        const cas = await input.prisma.autonomyTask.updateMany({
-          where: { id: row.id, status: 'READY' },
-          data: { status: 'IN_PROGRESS' },
-        });
-        if (cas.count !== 1) continue; // 已被其它 worker 领取
         const expiresAt = new Date(at.getTime() + leaseMs);
-        await input.prisma.autonomyLease.upsert({
-          where: { taskId: row.id },
-          create: {
-            taskId: row.id,
-            ownerRef: input.ownerRef,
-            acquiredAt: at,
-            renewedAt: at,
-            expiresAt,
-            status: 'ACTIVE',
-          },
-          update: {
-            ownerRef: input.ownerRef,
-            acquiredAt: at,
-            renewedAt: at,
-            expiresAt,
-            status: 'ACTIVE',
-          },
+        /**
+         * C1（审计 CHANGE 1）—— claim 与 lease 创建在**同一事务**：
+         * 要么「任务 IN_PROGRESS + 租约 ACTIVE」同时成立，要么整体回滚，
+         * 杜绝「IN_PROGRESS 但无有效租约」的悬挂任务。
+         */
+        const won = await input.prisma.$transaction(async (tx) => {
+          const cas = await tx.autonomyTask.updateMany({
+            where: { id: row.id, status: 'READY' },
+            data: { status: 'IN_PROGRESS' },
+          });
+          if (cas.count !== 1) return false; // 已被其它 worker 领取
+          await tx.autonomyLease.upsert({
+            where: { taskId: row.id },
+            create: {
+              taskId: row.id,
+              ownerRef: input.ownerRef,
+              acquiredAt: at,
+              renewedAt: at,
+              expiresAt,
+              status: 'ACTIVE',
+            },
+            update: {
+              ownerRef: input.ownerRef,
+              acquiredAt: at,
+              renewedAt: at,
+              expiresAt,
+              status: 'ACTIVE',
+            },
+          });
+          return true;
         });
-        claimed.push({ id: row.id, priority, dedupeKey: row.dedupeKey });
+        if (won) claimed.push({ id: row.id, priority, dedupeKey: row.dedupeKey });
       }
       return claimed;
+    },
+
+    /**
+     * C2（审计 CHANGE 2）—— 运行中租约恢复：
+     * 对每条**已到期**的 ACTIVE 租约做 CAS（ACTIVE + expiresAt<=now ⇒ EXPIRED），
+     * 成功者再把其任务 CAS（IN_PROGRESS ⇒ READY）放回可领取。
+     * 两步都在事务内，且都以状态为前置条件 ⇒ 幂等、并发安全、无需重启进程。
+     */
+    async reclaimExpired(limit: number): Promise<readonly string[]> {
+      if (!Number.isInteger(limit) || limit <= 0) return [];
+      const at = now();
+      const expired = await input.prisma.autonomyLease.findMany({
+        where: { status: 'ACTIVE', expiresAt: { lte: at } },
+        orderBy: [{ expiresAt: 'asc' }],
+        take: limit,
+        select: { id: true, taskId: true },
+      });
+      const requeued: string[] = [];
+      for (const lease of expired) {
+        const done = await input.prisma.$transaction(async (tx) => {
+          const leaseCas = await tx.autonomyLease.updateMany({
+            where: { id: lease.id, status: 'ACTIVE', expiresAt: { lte: at } },
+            data: { status: 'EXPIRED', renewedAt: at },
+          });
+          if (leaseCas.count !== 1) return false;
+          const taskCas = await tx.autonomyTask.updateMany({
+            where: { id: lease.taskId, status: 'IN_PROGRESS' },
+            data: { status: 'READY' },
+          });
+          return taskCas.count === 1;
+        });
+        if (done) requeued.push(lease.taskId);
+      }
+      return requeued;
+    },
+
+    /**
+     * C2 fencing —— 结果提交必须持有「本 owner 的未过期 ACTIVE 租约」：
+     * 旧 worker 被接管后（租约已 EXPIRED / 已换 owner）提交会被拒绝，
+     * 从而不会覆盖新 owner 的结果，也不会产生重复副作用。
+     */
+    async settle(request): Promise<{ applied: boolean; reason: string }> {
+      const at = now();
+      return input.prisma.$transaction(async (tx) => {
+        const lease = await tx.autonomyLease.findUnique({ where: { taskId: request.taskId } });
+        if (lease === null) return { applied: false, reason: 'LEASE_MISSING' };
+        if (lease.status !== 'ACTIVE') return { applied: false, reason: 'LEASE_NOT_ACTIVE' };
+        if (lease.ownerRef !== request.ownerRef) return { applied: false, reason: 'FENCED_OWNER_MISMATCH' };
+        if (lease.expiresAt.getTime() <= at.getTime()) return { applied: false, reason: 'FENCED_LEASE_EXPIRED' };
+        const released = await tx.autonomyLease.updateMany({
+          where: { id: lease.id, status: 'ACTIVE', ownerRef: request.ownerRef, expiresAt: { gt: at } },
+          data: { status: 'RELEASED', renewedAt: at },
+        });
+        if (released.count !== 1) return { applied: false, reason: 'FENCED_LEASE_RACE' };
+        const taskCas = await tx.autonomyTask.updateMany({
+          where: { id: request.taskId, status: 'IN_PROGRESS' },
+          /**
+           * 终态映射（复用既有 DB 检查约束 AutonomyTask_status_chk 的合法取值：
+           * READY / IN_PROGRESS / CANDIDATE_READY / VALIDATED / JUDGED / PROMOTED / REJECTED / BLOCKED）：
+           *   成功 → PROMOTED（该词汇表没有 COMPLETED；语义映射已登记为已知限制）
+           *   阻断 → BLOCKED
+           */
+          data: { status: request.outcome === 'COMPLETED' ? 'PROMOTED' : 'BLOCKED' },
+        });
+        if (taskCas.count !== 1) return { applied: false, reason: 'TASK_STATE_CONFLICT' };
+        return { applied: true, reason: 'SETTLED_' + request.outcome };
+      });
     },
   };
 }
@@ -97,7 +183,10 @@ export const RSI_DURABLE_TASK_SOURCE_BOUNDARY = {
   createsSecondQueue: false,
   createsScheduler: false,
   createsRuntime: false,
-  atomicClaim: 'CAS(updateMany where status=READY)',
+  atomicClaim: 'CAS(updateMany where status=READY) + lease upsert **同一事务**',
+  atomicClaimAndLeaseInOneTransaction: true,
+  runningLeaseReclaimWithoutRestart: true,
+  resultSubmissionFencedByOwnerAndUnexpiredLease: true,
   leasePerClaim: true,
   crashRecoveryDelegatedTo: 'rsi-restart-reconcile（IN_PROGRESS → READY）',
   readsCredentials: false,

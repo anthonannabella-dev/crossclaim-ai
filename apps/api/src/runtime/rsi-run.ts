@@ -201,7 +201,11 @@ export async function composeRsiRuntime(input: {
    * 不新建 scheduler / loop：复用既有事件循环的 60s tick（事件驱动 + 兜底）。
    * 缺省 = 不接线（行为与旧版完全一致）。
    */
-  taskSource?: { claim(limit: number): Promise<readonly RsiSafeTask[]> };
+  taskSource?: {
+    claim(limit: number): Promise<readonly RsiSafeTask[]>;
+    /** 运行中租约恢复（C2）：先接管到期租约，再领取，避免重启才恢复。 */
+    reclaimExpired?(limit: number): Promise<readonly string[]>;
+  };
   /**
    * STEP 3 FINAL-4：**唯一 product 组装点** —— Recovery SI 固定接 shared guard adapter；
    * 只接受 shared guard 类型（RuntimeActionGuard / AppActionGuardDeps），不接受自定义 guard port。
@@ -354,6 +358,8 @@ export async function composeRsiRuntime(input: {
   const adoptFromTaskSource = async (): Promise<void> => {
     const source = input.taskSource;
     if (source === undefined) return;
+    // C2：先接管**已到期**租约（运行中恢复，无需重启），再领取可用任务。
+    if (source.reclaimExpired !== undefined) await source.reclaimExpired(5);
     const claimed = await source.claim(5);
     if (claimed.length > 0) controller.adoptTasks(claimed);
   };

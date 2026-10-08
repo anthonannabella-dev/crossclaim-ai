@@ -227,3 +227,33 @@ NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
 
 > 下一轮起点：**PHASE 1 FINALIZATION**（关闭 CHANGE 1–4）→ **PHASE 2**（CHANGE 5）。
 > 不得在 PHASE 2 完成前宣布客户 Recovery 自动执行闭环 CLOSED。
+
+### 2.3 PHASE 1 FINALIZATION（进行中）—— C1 + C2 已关闭
+
+| CHANGE | 状态 | 实现与证据 |
+| --- | --- | --- |
+| **C1** claim 与 lease **原子化**（P0） | **CLOSED** | `rsi-durable-task-source.claim()` 改为 `prisma.$transaction`：CAS(`READY→IN_PROGRESS`) 与 lease upsert 同事务，任一失败整体回滚 ⇒ 不会出现「IN_PROGRESS 但无有效租约」 |
+| **C2** 运行中租约恢复 + fencing（P0） | **CLOSED** | 新增 `reclaimExpired()`：对**已到期** ACTIVE 租约做 CAS(`ACTIVE+expiresAt<=now ⇒ EXPIRED`) 并把任务 CAS(`IN_PROGRESS ⇒ READY`)，**无需进程重启**；接入既有 tick（`adoptFromTaskSource` 先 reclaim 再 claim）。新增 `settle()`：只有「本 owner 且未过期 ACTIVE 租约」才允许落终态 ⇒ 旧 worker 迟到提交被 fence 拒绝 |
+| C3 完整生命周期/重试/死信（P0） | NOT CLOSED | 终态落库已实现（成功→`PROMOTED`、阻断→`BLOCKED`）；**重试、指数退避、最大次数、死信、审计记录尚未实现** |
+| C4 租户/账户/授权与撤销拦截（P0） | NOT CLOSED | 尚未实现（执行前从可信事实重解析 + 撤销拦截） |
+| C6 多 worker 故障注入矩阵（P1） | PARTIAL | 已覆盖：并发领取、租约过期接管、旧 worker 迟到提交（fencing）、重复提交、事务失败（约束违反即整体失败）；未覆盖：跨租户/账户边界矩阵 |
+| C7 发布配置与 CI（P1） | PARTIAL | API 与 RSI 已共用同一 durable 源；JSON 仅显式 legacy 回退；CI 命中未验证（GitHub Actions = NOT_OBSERVED） |
+| C5 → PHASE 2 Recovery 装配（P0） | NOT STARTED | 见 PHASE 2 |
+
+**C1/C2 验收测试**：`apps/api/src/__tests__/si-rsi-phase1-finalization.test.ts`（**5/5 PASS**，真实 PostgreSQL）
+
+| 用例 | 断言 |
+| --- | --- |
+| C1-1 | 三 worker 并发领取后，**所有** IN_PROGRESS 任务都持有 ACTIVE 租约（无悬挂） |
+| C1-2 | 未赢得 CAS 的 worker 不留下自己的租约（无部分写入） |
+| C2-1 | 租约到期后 `reclaimExpired()` 把租约置 EXPIRED、任务回 READY，新 worker 无需重启即可领取 |
+| C2-2 | 接管后旧 worker 迟到 `settle()` 被拒（`FENCED_OWNER_MISMATCH`），**不覆盖**新 owner；新 owner 正常提交 |
+| C2-3 | 即使 owner 相同，租约已过期也拒绝提交（`FENCED_LEASE_EXPIRED`） |
+
+**新增已知限制（如实登记）**
+
+6. `AutonomyTask` 的 DB 检查约束 `AutonomyTask_status_chk` **没有 `COMPLETED`**（合法值：READY/IN_PROGRESS/CANDIDATE_READY/VALIDATED/JUDGED/PROMOTED/REJECTED/BLOCKED）⇒ 客户任务成功终态暂映射为 `PROMOTED`；建议后续 Schema Delta 增加语义化终态；
+7. `AutonomyLease` 有 `AutonomyLease_time_order_chk`（acquiredAt ≤ renewedAt ≤ expiresAt）⇒ 时间推进必须保持一致（测试夹具已遵循）。
+
+> 当前口径：**C1 / C2 = CLOSED（CODE_IMPLEMENTED + TEST_VERIFIED）**；
+> **PHASE 1 整体仍 NOT CLOSED**（C3/C4/C6/C7 未关闭，C5 属 PHASE 2）。
