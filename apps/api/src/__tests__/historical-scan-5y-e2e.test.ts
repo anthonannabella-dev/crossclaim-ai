@@ -97,8 +97,8 @@ function scanGuardDeps() {
   } as never;
 }
 
-async function seedScanFixture(organizationId: string) {
-  const compiled = compileAgentGoal({ text: INTENT });
+async function seedScanFixture(organizationId: string, intent: string = INTENT) {
+  const compiled = compileAgentGoal({ text: intent });
   if (!compiled.ok) throw new Error('compile failed');
   const validated = validateAgentGoalDraft({
     draft: compiled.draft,
@@ -109,7 +109,7 @@ async function seedScanFixture(organizationId: string) {
       id: validated.goalId,
       organizationId,
       createdBy: USER,
-      rawUserIntent: INTENT,
+      rawUserIntent: intent,
       normalizedGoal: { version: validated.version, goalDigest: validated.goalDigest },
       status: 'ADMITTED',
       createdAt: NOW,
@@ -167,12 +167,16 @@ async function composeScanRuntime(input: {
   taskKey: string;
   verdictArtifact: string;
   onDomainStep: (args: { dedupeKey: string }) => Promise<unknown>;
+  extraTaskKeys?: readonly string[];
 }) {
+  const queue = [input.taskKey, ...(input.extraTaskKeys ?? [])].map((dedupeKey, index) => ({
+    id: 'task-scan-' + (index + 1),
+    dedupeKey,
+    priority: 'P2',
+  }));
   return composeRsiRuntime({
     readFile: async (path: string) => {
-      if (path === 'mem://tasks') {
-        return JSON.stringify([{ id: 'task-scan-1', dedupeKey: input.taskKey, priority: 'P2' }]);
-      }
+      if (path === 'mem://tasks') return JSON.stringify(queue);
       if (path === 'mem://verdict') return input.verdictArtifact;
       return '[]';
     },
@@ -656,5 +660,64 @@ describe('PHASE 10 · 合成 5 年 E2E（Goal → scan → shard → customs →
     expect(spy.calls).toHaveLength(1);
     const row = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId: created.row.id });
     expect(row!.status).toBe('COMPLETED');
+  });
+
+  it('AUDIT-2R4：REVISE 后 stale pending 必须清除 —— 后续任务 PASS 不得执行被 REVISE 的原 scan', async () => {
+    const { taskKey, created } = await seedScanFixture(ORG);
+    const spy = scanStepSpy();
+    const composition = await composeScanRuntime({
+      taskKey,
+      verdictArtifact: JSON.stringify({ messageId: 'msg-revise-stale', verdict: 'REVISE' }),
+      onDomainStep: spy.step,
+    });
+
+    // ① 认领 scan task → park
+    await composition.controller.tick();
+    expect(composition.controller.state().waitingForVerdict).toBe(true);
+    // ② REVISE 收口：当下零执行
+    const polled = await composition.verdictWatcher!.pollOnce();
+    expect(polled.delivered).toBe(true);
+    expect(spy.calls).toHaveLength(0);
+    // ③ engine 已插入 P0 revision task 并认领；随后该 revision task 拿到 PASS
+    composition.controller.markWaitingForVerdict('PASS');
+    await composition.controller.emit('JUDGE_VERDICT_RECEIVED');
+    await composition.controller.tick();
+    // 关键：原 scan 被判 REVISE，绝不能借后续任务的 PASS 被执行
+    expect(spy.calls).toHaveLength(0);
+    const row = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId: created.row.id });
+    expect(row!.status).toBe('CREATED');
+    expect(row!.recordsScanned).toBe(0);
+  });
+
+  it('AUDIT-2R4：多个 scan 任务排队 → PASS 只执行当前 armed scan，不误执行下一个', async () => {
+    const first = await seedScanFixture(ORG);
+    // 第二个 Goal 必须真的不同（goalDigest / scan dedupeKey 都不同）→ 用不同回溯年限
+    const second = await seedScanFixture(ORG, '检查我过去 4 年的关税损失，能追回的全部处理');
+    expect(second.taskKey).not.toBe(first.taskKey);
+    const spy = scanStepSpy();
+    const composition = await composeScanRuntime({
+      taskKey: first.taskKey,
+      extraTaskKeys: [second.taskKey],
+      verdictArtifact: JSON.stringify({ messageId: 'msg-pass-armed', verdict: 'PASS' }),
+      onDomainStep: spy.step,
+    });
+
+    // 认领 A（arm A）→ park
+    await composition.controller.tick();
+    expect(composition.controller.state().waitingForVerdict).toBe(true);
+    // PASS 收口：同一次调用里 engine 完成 A 并立刻认领 B（arm B）——不得误执行 B
+    composition.controller.markWaitingForVerdict('PASS');
+    await composition.controller.emit('JUDGE_VERDICT_RECEIVED');
+    // 只应执行 A
+    expect(spy.calls).toHaveLength(1);
+    expect(spy.calls[0]!.scanId).toBe(first.created.row.id);
+    const secondRow = await loadRecoveryScanById(prisma, { organizationId: ORG, scanId: second.created.row.id });
+    expect(secondRow!.status).toBe('CREATED');
+
+    // B 拿到自己的 PASS → 执行 B
+    composition.controller.markWaitingForVerdict('PASS');
+    await composition.controller.emit('JUDGE_VERDICT_RECEIVED');
+    expect(spy.calls).toHaveLength(2);
+    expect(spy.calls[1]!.scanId).toBe(second.created.row.id);
   });
 });

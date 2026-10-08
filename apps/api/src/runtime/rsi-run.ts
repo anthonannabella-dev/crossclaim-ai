@@ -286,31 +286,43 @@ export async function composeRsiRuntime(input: {
   const domainStep = input.historicalScanDomainStep;
   // AUDIT-2R2 CHANGE 2：不得在 park-for-judge 之前完成 scan。
   // 组合层状态机：① 认领时记住 scan task；② 裁决收口（JUDGE_VERDICT_RECEIVED 且已不再 park）后才驱动 domain step。
-  let pendingScanTaskKey: string | null = null;
-  const captureClaimedScanTask = (outcomeLike: unknown): void => {
+  // AUDIT-2R4（MSG-20261008-08）：pending scan 必须绑定「当前正在等待裁决的那一个任务」，
+  // 且任何终局裁决（PASS / REVISE / BLOCK）收口后都必须**先解除武装**，再考虑是否执行：
+  //   REVISE 会插入 P0 revision task；若旧 pending 不清除，revision task 之后的 PASS 会错误地执行原 scan。
+  // 读法：armedScanTaskKey = 「已认领、正在等待裁决」的 scan task（仅当该任务确为历史扫描任务，否则为 null）。
+  let armedScanTaskKey: string | null = null;
+  const armClaimedScanTask = (outcomeLike: unknown): void => {
     const claimed = (outcomeLike as { claimed?: { dedupeKey?: unknown } } | null | undefined)?.claimed;
-    const dedupeKey = claimed?.dedupeKey;
-    if (typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:')) pendingScanTaskKey = dedupeKey;
+    if (claimed === null || claimed === undefined) return; // 本轮没有新认领 → 保持现状（仍在 wait）
+    const dedupeKey = claimed.dedupeKey;
+    armedScanTaskKey = typeof dedupeKey === 'string' && dedupeKey.includes('scan:v1:') ? dedupeKey : null;
   };
   // AUDIT-2R3 CHANGE A（MSG-20261008-07）：domain step 只在真实 PASS 裁决收口后执行。
   // continuation engine 真实语义：PASS => action=CONSUME_VERDICT；REVISE => action=REVISION；
   // BLOCK => action=OWNER_ACTION_REQUIRED（三者都会把 waitingForVerdict 置为 false）。
   // 因此绝不能用 `!waitingForVerdict` 放行（会误放 REVISE / BLOCK：BLOCK 也不得推进 scan）。
   // 必须同时满足：① 收口前 controller 记录的 verdict === 'PASS'；② 收口 outcome.action === 'CONSUME_VERDICT'。
-  const consumeOutcomeIsPass = (verdictBeforeConsume: unknown, outcomeLike: unknown): boolean => {
-    if (verdictBeforeConsume !== 'PASS') return false;
-    const action = (outcomeLike as { action?: unknown } | null | undefined)?.action;
-    return action === 'CONSUME_VERDICT';
+  const outcomeAction = (outcomeLike: unknown): unknown =>
+    (outcomeLike as { action?: unknown } | null | undefined)?.action;
+  /** 精确 PASS 判据：收口前记录 verdict === 'PASS' 且收口动作确为 CONSUME_VERDICT。 */
+  const consumeOutcomeIsPass = (verdictBeforeConsume: unknown, outcomeLike: unknown): boolean =>
+    verdictBeforeConsume === 'PASS' && outcomeAction(outcomeLike) === 'CONSUME_VERDICT';
+  const isVerdictClosure = (outcomeLike: unknown): boolean => {
+    const action = outcomeAction(outcomeLike);
+    return action === 'CONSUME_VERDICT' || action === 'REVISION' || action === 'OWNER_ACTION_REQUIRED';
   };
-  const maybeRunPendingScanStep = async (verdictBeforeConsume: unknown, outcomeLike: unknown): Promise<void> => {
-    if (domainStep === undefined || pendingScanTaskKey === null) return;
-    if (!consumeOutcomeIsPass(verdictBeforeConsume, outcomeLike)) return;
-    // 注意：这里**不再**用 parked(waitingForVerdict) 作放行条件 —— 裁决收口后引擎可能立刻为
-    // 「下一个」任务重新 park（awaitVerdict=true），若用 parked 兜底会误伤本轮已获 PASS 授权的 scan。
-    // 「未裁决 / BLOCK / REVISE → 零执行」已由上面的精确 PASS 门覆盖，语义更强。
-    const key = pendingScanTaskKey;
-    pendingScanTaskKey = null;
-    await domainStep({ dedupeKey: key });
+  const settleArmedScanTask = async (verdictBeforeConsume: unknown, outcomeLike: unknown): Promise<void> => {
+    if (domainStep === undefined) return;
+    const armed = armedScanTaskKey;
+    if (armed === null) return;
+    // 本轮没有裁决收口（仍在 park / 无事件）→ 保持武装，等真实裁决
+    if (!isVerdictClosure(outcomeLike)) return;
+    // 裁决已收口：先解除武装（PASS / REVISE / BLOCK 一律清除，杜绝跨任务 stale 执行）
+    armedScanTaskKey = null;
+    // 只有「PASS 且真的走了 CONSUME_VERDICT 收口」才执行该 scan
+    if (consumeOutcomeIsPass(verdictBeforeConsume, outcomeLike)) {
+      await domainStep({ dedupeKey: armed });
+    }
   };
   const controllerWithDomainSteps =
     domainStep === undefined
@@ -320,8 +332,9 @@ export async function composeRsiRuntime(input: {
           async tick() {
             const verdictBeforeConsume = controller.state().verdict;
             const outcome = await controller.tick();
-            captureClaimedScanTask(outcome);
-            await maybeRunPendingScanStep(verdictBeforeConsume, outcome);
+            // 先结算本轮裁决（若有），再把本轮新认领的任务武装为下一次的待裁决任务
+            await settleArmedScanTask(verdictBeforeConsume, outcome);
+            armClaimedScanTask(outcome);
             return outcome;
           },
           // AUDIT-2R2 CHANGE 1（实测）：既有 event loop 的续跑路径调用的是 `controller.emit(event)`，
@@ -329,8 +342,8 @@ export async function composeRsiRuntime(input: {
           async emit(event: Parameters<typeof controller.emit>[0]) {
             const verdictBeforeConsume = controller.state().verdict;
             const outcome = await controller.emit(event);
-            captureClaimedScanTask(outcome);
-            await maybeRunPendingScanStep(verdictBeforeConsume, outcome);
+            await settleArmedScanTask(verdictBeforeConsume, outcome);
+            armClaimedScanTask(outcome);
             return outcome;
           },
         };
@@ -422,6 +435,8 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   historicalScanDomainStepRequiresPassVerdict: true,
   /** AUDIT-2R3 CHANGE B：verdictWatcher 复用 domain-step-aware controller（生产 watcher 与测试同一 runtime path） */
   verdictWatcherUsesDomainStepController: true,
+  /** AUDIT-2R4：pending scan 绑定「正在等待裁决」的那一个任务，且任何终局裁决（PASS/REVISE/BLOCK）收口后一律先解除武装 */
+  historicalScanPendingBinding: 'ARMED_CLAIMED_TASK_ONLY；NON_PASS_TERMINAL_VERDICT_CLEARS_PENDING',
   verdictValueFromArtifact: true,
   restartReconcileSupported: true,
   signalDrivenTaskGeneration: true,
