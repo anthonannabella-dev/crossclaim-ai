@@ -215,6 +215,17 @@ Drawback 的 1825 天（exportDate 锚点）被明确定位为**合格窗口**�
   （`coverage=FULL` 且覆盖区间包住请求区间），避免 server/UI 两套判断漂移。
 * 证据：`customs-historical-pipeline` **11/11**；定向批次 6 文件 **215/215**；api tsc **0**；web tsc **0**。
 
+### 12.2 AUDIT-1 窄复审送审记录（CHANGE 1 修订）
+
+* AUDIT_ID：`AUDIT-1R`（AUDIT-1 的唯一 CHANGE 复审）
+* REVIEWED_HEAD：`1a0cb42b4a226a660fec2409302934e9d3779ff3`（分支已 push、工作树 clean）
+* 送审范围：仅 CHANGE 1（PHASE 8 消费 Historical Window `blocksClaimReady`）；UI_RESULT_VIEW 已在本轮判 PASS，不重复审。
+* 变更文件：`services/historical-scan/customs-historical-pipeline.ts`（gate 消费 + 降级 + reason 保留）、
+  `services/historical-scan/summary.ts`（server/UI 同一覆盖判据）、
+  `__tests__/customs-historical-pipeline.test.ts`（+3 条评审点名回归）。
+* 证据：11/11（该套件）；定向批次 215/215；api tsc 0；web tsc 0。
+* 裁决（等待中）：VERDICT = PENDING。
+
 * `SECOND_RUNTIME = 0`、`SECOND_POLICY_ENGINE = 0`、`SECOND_GUARD = 0`、`SECOND_FACT_SOURCE = 0`
   （本单元新增的只是 durable scan scope + 纯函数解析器 + 领域步骤执行器；未新增调度器/运行时/政策引擎/守卫）。
 * `REAL_PROVIDER_WRITE / CUSTOMS_FILING / PAYMENT / AUTO_COMMISSION_CHARGE / PRODUCTION_CREDENTIALS /
