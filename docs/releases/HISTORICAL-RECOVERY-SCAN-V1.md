@@ -885,3 +885,45 @@ stale worker 不能再绕过 lease fencing 修改执行状态）；② durable f
 因此：**PHASE 14 的缺陷修复按 `5832ed1d` 审**，而**整个 HISTORICAL_RECOVERY_SCAN_V1 的收官树锚点
 应为包含全部已通过修复的当时 tip `c5d70d72`**（其后若再有变更则取最后 runtime head）。
 本更正已记录，后续送审/收口一律使用「最后一次 runtime head + 当时的树 tip」双写口径，避免把已通过的 fencing 修复误当作回退。
+---
+
+## 最终收官（AUDIT-4 = PASS / CLOSED；`MSG-20261008-13`，FNV1A `87c46a38`，FULL_COPY_OK）
+
+| 判项 | 结果 |
+| --- | --- |
+| PHASE13_MATRIX_B_G | **PASS**（矩阵文件实际覆盖 B–G 六组：范围传播 / 断点续跑 / 覆盖诚实（含 FULL 正向对照）/ Customs 六格含三道 fail-closed / 租户与外写 / 行数不变式） |
+| PHASE14_ACCEPTANCE | **PASS**（浏览器旅程包含真实 cookie 的 API 探针并要求 200；结果页断言标题、覆盖提示、边界说明、无原始枚举、无申报声称、移动端无横向溢出、0 console error、0 未捕获异常；seeder 复用 server-owned 链路，数据源 synthetic 且 acceptance-only） |
+| UI_RESULT_VIEW_HTTP_REACHABILITY | **PASS**（确认修复前 `recoveryScan` 未列入 GET 白名单 → 落 `['POST']` → 405；修复后 GET 可达、POST 仍 405；新增真实 HTTP 契约 200/401/404/405 且 200 响应含 coverage/requestedMonths/claimsFiled=0/三个 false） |
+| FULL_REGRESSION_HONESTY | **PASS**（未把 4657/4658 包装成全绿；明示唯一失败 P2E-DB5 与隔离 20/20；从 916f7e97 → 5832ed1d 的改动未触碰该测试与 payment 实现） |
+| NO_EXTERNAL_ACTION | **PASS**（只读投影无 claim submit / filing / payment / provider mutation / transport；旅程禁止显示「已提交/已报关/已扣款」） |
+
+**锚点口径（审计要求，已采纳）**：
+
+```
+PHASE14_CODE_HEAD      = 5832ed1d（PHASE 14 最后一次 HTTP/runtime 路由修复）
+PHASE13_MATRIX_HEAD    = 916f7e97
+LAST_RUNTIME_CODE_HEAD = ce541b7c（AUDIT-3R2 fencing 修复，是 5832ed1d 的后继）
+FINAL_INTEGRATED_TREE  = c5d70d72（送审时含全部已 CLOSED 修复的树）
+```
+
+其后仅追加**文档**提交（锚点更正 `11483fef`、本次收官归档）。**结论**：
+
+```
+HISTORICAL_RECOVERY_SCAN_V1 = PASS / CLOSED
+AUDIT-1 / AUDIT-2 / AUDIT-3 / AUDIT-4 = PASS / CLOSED
+PHASE 8(UI_RESULT_VIEW) / 10 / 11 / 12 / 13 / 14 = CLOSED
+AUDIT-4R_REQUIRED = NO
+```
+
+**保留的生产启用债（不反转本次 PASS，需在外部 Provider / staging / production enablement 阶段处理）**：
+
+1. `REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`、`REAL_VALIDATION_COMPLETE = NO`、`PRODUCTION_READY = NO`；
+2. `PRODUCTION_DURABLE_QUEUE_REQUIRED` 继续跟踪（`createJsonTaskQueuePort()` 未用于 scan durability）；
+3. scan fencing 暂无独立 `leaseEpoch / fencingVersion` 列（当前以全局唯一 ownerRef + 未过期租约承担）；
+4. acceptance seeder 与 legacy 内部测试仍可走 unfenced `runHistoricalBackfill`（production 唯一入口已强制 `ownerRef`），长期应限制为 test/internal-only；
+5. 单个 `fetchPage()` 若超过 `leaseMs` 仍存在窗口，接真实 provider 时需调大租约或改为时间型/后台续租；
+6. 全量回归中的 P2E-DB5 隔离 flake 应作为独立测试隔离债单独处理，**不重开** HISTORICAL_RECOVERY_SCAN_V1。
+
+**证据口径**：GitHub Actions 对 exact reviewed head = **NOT_OBSERVED**，因此 90/90、57/57、3/3、123/123、4657/4658、20/20（隔离）、tsc/build/migration 结果一律记为 **local/Codex evidence**，不得表述为 CI green。
+
+**下一步（超出本看门狗/本单元范围）**：进入外部 Provider / staging / production enablement 阶段；本单元不再继续加修复。

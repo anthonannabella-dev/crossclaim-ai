@@ -164179,3 +164179,348 @@ HOLD / FORBIDDEN         = unchanged
 
 最终裁决：CONCURRENCY_CRASH_RESUME = PASS，AUDIT-3 / PHASE 11/12 = PASS / CLOSED。
 ```
+
+### [MSG-20261008-13] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-4 收官审计（PHASE 13/14）= PASS；PHASE13_MATRIX_B_G / PHASE14_ACCEPTANCE / UI_RESULT_VIEW_HTTP_REACHABILITY（405 修复+真实 HTTP 契约）/ FULL_REGRESSION_HONESTY / NO_EXTERNAL_ACTION = PASS；**HISTORICAL_RECOVERY_SCAN_V1 = PASS / CLOSED，AUDIT-4 = PASS / CLOSED，AUDIT-4R_REQUIRED = NO**；全部 4 审计节点与 PHASE 8/10/11/12/13/14 均 CLOSED。审计要求锚点口径：PHASE14_CODE_HEAD=5832ed1d，PHASE13_MATRIX_HEAD=916f7e97，LAST_RUNTIME_CODE_HEAD=ce541b7c，FINAL_INTEGRATED_TREE=c5d70d72；并强调 4657/4658 不得写成全绿、全部数字仍为 local/Codex evidence。
+
+```text
+PHASE13_MATRIX_B_G = PASS
+PHASE14_ACCEPTANCE = PASS
+UI_RESULT_VIEW_HTTP_REACHABILITY = PASS
+FULL_REGRESSION_HONESTY = PASS
+NO_EXTERNAL_ACTION = PASS
+
+VERDICT: PASS
+
+不过需要把 Git 锚点口径纠正清楚：
+
+纯文本
+PHASE14_CODE_HEAD       = 5832ed1ddd4edec623f0f51f20221d0470311ef1
+PHASE13_MATRIX_HEAD     = 916f7e97c38877ee87d5694d5b98c0f5fa205653
+LAST_RUNTIME_CODE_HEAD  = ce541b7c6c679a7b27a669f937f0760405c5c9f3
+FINAL_INTEGRATED_TREE   = c5d70d72f32bf95d79bd9b07315324d2c749e60d
+
+5832ed1d 是 PHASE 14 最后那次 HTTP/runtime 路由代码修复，但不是最终完整产品树的最后 runtime HEAD。后面已经 CLOSED 的 AUDIT-3R2 fencing 修复 ce541b7c 是它的后继；当前 c5d70d72 又是在 ce541b7c 上的文档归档。
+
+所以收官不能表述成“整个最终系统 reviewed at 5832ed1d”。准确表述应是：
+
+PHASE 13/14 change reviewed at 5832ed1d; final integrated tree including all previous closed fixes = c5d70d72, last runtime implementation head = ce541b7c.
+
+PHASE13_MATRIX_B_G = PASS
+
+实际矩阵文件确实覆盖 B–G 六组，不是文档声明。
+
+已确认：
+
+纯文本
+B range propagation
+5 years requested
+→ SOURCE_LIMITED effective range
+→ caller assertedRange ignored
+→ callerRangeTrusted=false
+→ requestedMonths=60 retained
+
+C 的 resume 也确实：
+
+纯文本
+execution port
+→ PARTIAL
+→ durable checkpoint
+→ same scan resume
+→ COMPLETED
+→ no duplicate shards
+
+D 同时有负向和正向：
+
+纯文本
+SOURCE_LIMITED
+→ scanCoverageIsFull=false
+→ COVERAGE_NOT_FULL
+
+FULL actual source coverage
+→ scanCoverageIsFull=true
+→ no COVERAGE_NOT_FULL
+
+E 的 Customs 六格与送审描述一致，特别是三道 fail-closed：
+
+纯文本
+missing historicalWindow
+→ NEEDS_MANUAL_REVIEW
+
+blocksClaimReady=true
+→ NEEDS_MANUAL_REVIEW
+
+missing jurisdiction
+→ NEEDS_MANUAL_REVIEW
+
+F/G 的 tenant、external-action、row-count 不变式也存在实际断言。
+
+因此：
+
+PHASE13_MATRIX_B_G = PASS
+
+UI_RESULT_VIEW_HTTP_REACHABILITY = PASS
+
+这是本轮最重要的一项，也确实修到了真实 bug。
+
+修复前的问题成立：
+
+纯文本
+RECOVERY_SCAN_PATH recognized
+but recoveryScan missing from GET whitelist
+→ default ['POST']
+→ GET /recovery-scans/:id = 405
+
+现在方法闸门明确包含：
+
+TypeScript
+recoveryScan !== null
+
+进入：
+
+纯文本
+['GET']
+
+实际 handler 又只有：
+
+纯文本
+recoveryScan !== null && method === 'GET'
+
+才读取 tenant-scoped RecoveryScanRun 并返回 buildScanSummaryView()。
+
+因此：
+
+纯文本
+GET  → reachable
+POST → method gate 405
+
+没有因为修 GET 顺便开放写接口。
+
+新增 HTTP 契约也实际覆盖：
+
+纯文本
+authenticated GET → 200
+anonymous GET     → 401
+cross-tenant GET  → 404
+POST              → 405
+
+200 响应还检查：
+
+纯文本
+coverage = SOURCE_LIMITED
+requestedMonths = 60
+claimsFiled = 0
+filingPerformed = false
+paymentPerformed = false
+externalWritePerformed = false
+
+所以：
+
+UI_RESULT_VIEW_HTTP_REACHABILITY = PASS
+
+之前 AUDIT-1 没发现这个 405，应保留你现在的诚实修正记录。此前的 UI fixture/api-contract 证据确实不足以证明真实 HTTP 可达。
+
+PHASE14_ACCEPTANCE = PASS
+
+浏览器验收脚本确实不是只看静态 fixture。
+
+它会：
+
+纯文本
+seed durable scan
+→ 打开 /recoveries/scans/:id
+→ Playwright context 带真实 cookie
+→ GET API probe
+→ 要求 status === 200
+
+也就是说，如果之前那个 405 仍存在，当前旅程会直接失败。
+
+结果页的实际检查包括：
+
+纯文本
+标题可见
+数据源未覆盖完整请求区间提示
+“尚未向任何平台...”边界说明
+无 SOURCE_LIMITED 等 raw enums
+无 CLAIM_READY / NEEDS_EVIDENCE / NEEDS_MANUAL_REVIEW
+无“已提交”声称
+mobile 390×844 无横向溢出
+console errors = 0
+uncaught exceptions = 0
+
+acceptance seeder 也不是直接伪造 summary。它复用：
+
+纯文本
+compileAgentGoal
+→ validateAgentGoalDraft
+→ createOrGetRecoveryScan
+→ claimRecoveryScanRun
+→ runHistoricalBackfill
+→ evaluateCustomsHistoricalBatch
+
+数据源本身是 synthetic，且明确 acceptance-only，这个口径是正确的。
+
+所以从代码和验收设计上：
+
+PHASE14_ACCEPTANCE = PASS
+
+但 123/123、fresh DB 94 migrations、Next build、219/219 等执行数字仍是 local/Codex evidence；我没有观察到 exact SHA 的 GitHub Actions run。
+
+FULL_REGRESSION_HONESTY = PASS
+
+这一项我判的是“报告是否诚实”，不是“全量 CI 是否全绿”。
+
+你没有把：
+
+纯文本
+4657 / 4658
+
+包装成 4658/4658。
+
+而且明确披露唯一失败：
+
+纯文本
+P2E-DB5
+prisma.payment.count()
+expected 0
+got 1
+
+并说明隔离重跑 20/20。
+
+从 PHASE 13 matrix 916f7e97 → 5832ed1d 的实际改动看，没有修改 recovery-si-phase2-e-db 那个测试，也没有修改 payment 领域实现；PHASE 14 产品代码只改了：
+
+纯文本
+workflow/http-routes.ts
+
+以及 HTTP test / acceptance seed / browser journey。
+
+因此这个失败没有明显证据指向 Historical Scan 本轮改动。
+
+所以：
+
+FULL_REGRESSION_HONESTY = PASS
+
+但表述必须继续保持：
+
+纯文本
+FULL REGRESSION = 4657/4658
+NOT 100% GREEN
+
+不能写成：
+
+纯文本
+all tests passed
+CI green
+NO_EXTERNAL_ACTION = PASS
+
+整个 PHASE 13/14 没有打开真实外部动作。
+
+HTTP scan endpoint 是纯 GET projection：
+
+纯文本
+loadRecoveryScanById()
+→ buildScanSummaryView()
+
+没有：
+
+纯文本
+claim submission
+customs filing
+payment
+provider mutation
+transport
+
+矩阵和 HTTP 契约还持续验证：
+
+纯文本
+filingPerformed=false
+paymentPerformed=false
+externalWritePerformed=false
+claimsFiled=0
+
+浏览器旅程也明确禁止显示：
+
+纯文本
+已真实提交
+已报关
+已扣款
+已向平台提交
+
+因此：
+
+NO_EXTERNAL_ACTION = PASS
+
+CHANGES
+
+无阻断性 CHANGE。
+
+不需要 AUDIT-4R。
+
+从 HISTORICAL_RECOVERY_SCAN_V1 本轮定义的内部范围看，可以正式收官：
+
+纯文本
+AUDIT-1  = PASS / CLOSED
+AUDIT-2  = PASS / CLOSED
+AUDIT-3  = PASS / CLOSED
+AUDIT-4  = PASS / CLOSED
+
+PHASE 8 UI_RESULT_VIEW = CLOSED
+PHASE 10               = CLOSED
+PHASE 11               = CLOSED
+PHASE 12               = CLOSED
+PHASE 13               = CLOSED
+PHASE 14               = CLOSED
+RISKS
+
+剩余的都属于已知 production enablement debt，不反转本次 PASS：
+
+纯文本
+1. REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+2. REAL_VALIDATION_COMPLETE = NO
+3. PRODUCTION_READY = NO
+4. PRODUCTION_DURABLE_QUEUE_REQUIRED 仍跟踪
+5. scan fencing 暂无独立 leaseEpoch/fencingVersion
+6. acceptance seeder / legacy internal tests 仍可走 unfenced runHistoricalBackfill
+7. 单个 fetchPage 若超过 leaseMs，仍需合理 lease 配置或更细粒度续租
+8. P2E-DB5 full-suite isolation flake 仍存在
+
+其中第 8 点应该继续作为独立测试隔离债处理，但不应重新打开 HISTORICAL_RECOVERY_SCAN_V1。
+
+GitHub Actions：
+
+纯文本
+exact reviewed head = NOT_OBSERVED
+
+因此所有：
+
+纯文本
+90/90
+57/57
+3/3
+123/123
+4657/4658
+20/20 isolated
+tsc/build/migration results
+
+继续标记为 local/Codex evidence。
+
+最终收官状态：
+
+纯文本
+PHASE13_MATRIX_B_G                  = PASS
+PHASE14_ACCEPTANCE                  = PASS
+UI_RESULT_VIEW_HTTP_REACHABILITY    = PASS
+FULL_REGRESSION_HONESTY             = PASS
+NO_EXTERNAL_ACTION                  = PASS
+
+HISTORICAL_RECOVERY_SCAN_V1         = PASS / CLOSED
+AUDIT-4                             = PASS / CLOSED
+AUDIT-4R_REQUIRED                   = NO
+
+REAL_EXTERNAL_EXECUTION             = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE            = NO
+PRODUCTION_READY                    = NO
+SECOND_*                            = 0
+HOLD / FORBIDDEN                    = unchanged
+
+结论：历史 5 年扫描这一内部产品单元可以正式封板；下一步不应继续往这个单元加修复，而应进入外部 Provider / staging / production enablement 阶段。
+```
