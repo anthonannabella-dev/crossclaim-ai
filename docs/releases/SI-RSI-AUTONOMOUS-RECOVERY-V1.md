@@ -616,3 +616,25 @@ R6 断言已按实测更新为「无 recovery-si 记录 + caller runner 0」—�
 
 **连带更新**：PHASE 1 的 4 处 `settle(COMPLETED)` lifecycle 测试补上 `businessOutcome: 'SETTLEMENT_RECEIVED'`
 （它们验证的是状态机本身，需显式提供真实终局证据）。回归：SI-RSI 全套件 **11 文件 / 62 tests 全绿**，api tsc 0。
+
+### 3.11 P2-CHANGE4（P1）运行时稳定性与可观察性 —— 已实现并取证
+
+**代码新增**：durable 任务源新增 **租约续租** `renew({taskId, ownerRef, leaseMs})` —— CAS
+`(status=ACTIVE ∧ ownerRef ∧ expiresAt>now)` 延长 `expiresAt`；被接管后旧 owner 续租一律 **FENCED** 拒绝。
+
+**验收**（`si-rsi-phase2-stability.test.ts`，6/6 PASS，真实 PostgreSQL）
+| 用例 | 覆盖复审要求 |
+| --- | --- |
+| S1 | 多 worker 并发（2 轮 × 4 任务 × 5 worker）⇒ 无重复领取、无遗漏 |
+| S2 | **租约到期与续租竞争**：本 owner 续租成功；被 B 接管后旧 owner 续租被 `FENCED_OWNER_MISMATCH` 拒绝且不改变 B 的租约 |
+| S3 | 任务执行中进程退出 ⇒ 租约到期后新 owner 接管（无重复副作用） |
+| S4 | 重启后幂等恢复 ⇒ 既有 reconcile 第二次 `idempotentNoop=true` |
+| S5 | **DB 不可用（注入）** ⇒ 操作 fail-closed、真实库零部分写入，随后仍可正常领取 |
+| S6 | **dispatch 日志与 durable 状态一致** ⇒ taskId 与 durable 行一致，状态 `IN_PROGRESS`（派发 ≠ 完成，未误标 `PROMOTED`） |
+
+**⚠️ 如实登记的测试抖动（未掩盖）**：本单元三次连续运行全套件的结果为
+**绿 → 1 项失败（未记录到用例名）→ 绿（68/68）**。失败项**未能复现**，因此**无法认定**它与本单元改动无关；
+已知诱因是 S1/S3/S5 会创建额外客户端并操作共享表（与仓库既有 P2E-DB5 隔离债同类）。**登记为独立测试隔离债**，
+不并入六项生产启用债，也不因此宣称「稳定绿」。
+
+**诚实边界**：S5 是**故障注入**（错误连接串），非真实断电/断连；小时级长跑 soak 与 Linux 实机 **仍未验证**。

@@ -75,6 +75,12 @@ export interface RsiDurableTaskSource {
     ownerRef: string;
     errorCode: string;
   }): Promise<{ applied: boolean; reason: string; attempts?: number; deadLettered?: boolean; nextAttemptAt?: string | null }>;
+  /**
+   * P2-CHANGE4 —— 租约续租（CAS + fence）：
+   * 只有「本 owner 仍持有未过期 ACTIVE 租约」才允许延长；
+   * 被他人接管后调用一律拒绝（`FENCED_*`），旧 owner 无法复活自己的租约。
+   */
+  renew(input: { taskId: string; ownerRef: string; leaseMs?: number }): Promise<{ applied: boolean; reason: string; expiresAt?: string }>;
   /** 该任务源使用的命名空间（可观测 / 断言用） */
   taskPrefix(): string;
 }
@@ -352,6 +358,27 @@ export function createAutonomyTaskSource(input: {
         };
       });
     },
+
+    async renew(request) {
+      const at = now();
+      const extraMs = request.leaseMs ?? leaseMs;
+      if (!Number.isInteger(extraMs) || extraMs <= 0) {
+        return { applied: false, reason: 'LEASE_RENEW_INVALID_LEASE_MS' };
+      }
+      const existing = await input.prisma.autonomyLease.findUnique({ where: { taskId: request.taskId } });
+      if (existing === null) return { applied: false, reason: 'LEASE_MISSING' };
+      if (existing.status !== 'ACTIVE') return { applied: false, reason: 'LEASE_NOT_ACTIVE' };
+      if (existing.ownerRef !== request.ownerRef) return { applied: false, reason: 'FENCED_OWNER_MISMATCH' };
+      if (existing.expiresAt.getTime() <= at.getTime()) return { applied: false, reason: 'FENCED_LEASE_EXPIRED' };
+
+      const expiresAt = new Date(at.getTime() + extraMs);
+      const cas = await input.prisma.autonomyLease.updateMany({
+        where: { id: existing.id, status: 'ACTIVE', ownerRef: request.ownerRef, expiresAt: { gt: at } },
+        data: { expiresAt, renewedAt: at },
+      });
+      if (cas.count !== 1) return { applied: false, reason: 'FENCED_LEASE_RACE' };
+      return { applied: true, reason: 'LEASE_RENEWED', expiresAt: expiresAt.toISOString() };
+    },
   };
 }
 
@@ -366,6 +393,7 @@ export const RSI_DURABLE_TASK_SOURCE_BOUNDARY = {
   runningLeaseReclaimWithoutRestart: true,
   resultSubmissionFencedByOwnerAndUnexpiredLease: true,
   retryWithExponentialBackoff: true,
+  leaseRenewal: 'CAS(owner + ACTIVE + unexpired) → extend expiresAt；被接管后旧 owner 无法续租',
   backoffGateOnClaim: true,
   maxAttemptsEnforcedByDbConstraint: 'AutonomyTask_attempts_chk',
   deadLetterState: 'DEAD_LETTER (+ deadLetteredAt, DB-enforced by AutonomyTask_dead_letter_chk)',
