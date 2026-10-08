@@ -167262,3 +167262,381 @@ NEXT = IMPLEMENT_PRELEASE_FIX_B_THEN_REAL_PG_R9_THEN_REQUEST_PHASE3_FINAL_AUDIT
 
 最终结论：批准修复 B，不批准将默认五分钟租约当作正常吞吐标准。 R1–R8 已报告通过，但 R9 尚未成立；PHASE 3 必须证明安全收口和持续推进两者同时成立，才能进入最终 CLOSED 裁决。
 ```
+
+### [MSG-20261009-04] SI-RSI PHASE 3 FINAL 独立审计（reviewed ref 18364f1a）= **REVISE**；**R1–R8 = PASS**、**PRELEASE_FIX_B = CLOSED**、P3-3 = PASS、**R9 = PASS（含 60 分钟 SOAK_PASS）**、`AUDIT_2R4_ADJUSTMENT = ACCEPTED`；**`PHASE3_RECOVERY_CLOSURE = PASS` 但 `PHASE3_CLOSED = NO`**；唯一阻断 = **`P3_FINAL_REGRESSION_GATE`**（全量 API 回归须 100% PASS；**只允许**在隔离 fresh DB/独立 schema 复现，并按 `pg_namespace` 约束 schema 修订查询——**未经 HOST 授权不得删 `rc_c3_fresh_check`、不得终止 3 个 rsi-run 进程**；若隔离环境仍复现则须改判为代码/测试缺陷）；登记 7 项发布门禁（P3_FINAL_REGRESSION / LINUX_SYSTEMD / REAL_PROVIDER / FAILURE_RECOVERY / SCHEMA_HYGIENE / PROCESS_ISOLATION / PAYMENT_AND_EXTERNAL_WRITE）；`PRODUCTION_READY = NO`；NEXT = **ISOLATE_TEST_DATABASE → RESOLVE_RECONCILIATION_SCHEMA_S1_DB → RUN_FULL_API_REGRESSION → SUBMIT_PHASE3_FINAL_R2_AUDIT**（会话 https://chatgpt.com/c/6ac7fb19-d6c4-83ec-b47d-fd3dcd8f4a2b）
+
+```text
+CrossClaim · SI-RSI PHASE 3 FINAL 独立审计裁决
+
+AUDIT ID：MSG-20261009-04 · REVIEWED_HEAD：18364f1a · 2026-10-09
+
+FINAL VERDICT：REVISE
+
+核心结论：PHASE 3 的 Recovery 运行时闭环已达到功能验收标准，但整体阶段暂不正式 CLOSED。
+
+本次裁决仅依据 CODEX 提交的证据摘要，未直接读取仓库、执行 SQL 或复核原始日志。
+
+R1–R8、PRELEASE_FIX_B、R9-1…R9-12 的报告结果支持 PASS。唯一阻止正式封板的是：全量 API 回归仍有 1 个失败，且测试数据库环境隔离尚未完成确认。
+
+这属于发布质量门禁，不应推翻已经成立的 Recovery 功能验收，也不能在未核实前直接将失败归类为纯环境问题。
+
+一、逐项裁决
+
+审计项目
+
+	
+
+裁决
+
+	
+
+依据
+
+
+
+
+R1–R8
+
+	
+
+PASS
+
+	
+
+裁决映射、fenced settle、durable INTENT/APPLIED、崩溃恢复和失败回落均已报告验证
+
+
+
+
+PRELEASE_FIX_B
+
+	
+
+CLOSED
+
+	
+
+裁决事件不再预租下一任务；正常 tick 负责后续领取
+
+
+
+
+P3-3
+
+	
+
+PASS
+
+	
+
+claim 后崩溃仍可由 reclaimExpired 和 fencing 接管
+
+
+
+
+R9-1…R9-12
+
+	
+
+PASS
+
+	
+
+多 worker、租户隔离、幂等、崩溃恢复与 60 分钟 soak 达到报告指标
+
+
+
+
+AUDIT-2R4 调整
+
+	
+
+ACCEPTED
+
+	
+
+改变的是任务步进时点，不是安全契约
+
+
+
+
+Recovery 功能闭环
+
+	
+
+PASS
+
+	
+
+可以认定内部 Recovery closure 功能验收通过
+
+
+
+
+PHASE 3 整体封板
+
+	
+
+REVISE
+
+	
+
+全量回归尚非 100% PASS
+
+
+
+
+生产就绪
+
+	
+
+NO
+
+	
+
+真实 Provider、Linux 实机与外部业务验证仍未完成
+
+二、关键技术判断
+1. R1–R8：PASS
+
+认可所述 RUNTIME_VERDICT_AWARE_FENCED_SETTLEMENT 设计及验收结果。
+
+尤其确认以下安全语义：
+
+PASS 不等于业务完成；必须具有可信业务完成证据才能进入 COMPLETED。
+
+REJECT/DENY/REVISE 不得被提升为成功。
+
+无效、超时或不可信裁决保持安全等待，不得伪造终态。
+
+INTENT 到 APPLIED 的恢复路径不得重新执行 domain step。
+
+fencing 拒绝陈旧 owner 时，不得污染任务状态。
+
+VERDICT_TRUSTED_EVIDENCE_REFUSED_FALLBACK_BLOCKED 的回退策略符合此前裁决。
+
+2. PRELEASE_FIX_B：CLOSED
+
+接受移除 JUDGE_VERDICT_RECEIVED 路径内的预租调用，同时保留正常领取和 watchdog 的既有调用。
+
+报告中的三个任务三轮完成、每任务一次 domain step、租约全部释放，以及完整 INTENT/APPLIED 记录，满足要求。
+
+不得恢复裁决路径预租，也不得为提高吞吐而缩短默认租约或增加第二套 scheduler。
+
+3. R9：PASS
+
+连续运行
+
+3,606 秒
+约 60 分钟
+
+终态完成
+
+696/696
+非终态 0
+
+安全违规
+
+0
+重复执行 0
+
+接受第二次 60 分钟 SOAK_PASS。
+
+第一次失败已保留证据且根因得到解释，不要求删除历史失败记录。
+
+但需要明确：第二次采用空闲重启策略，并不能替代真实在飞任务进程被杀或断电恢复测试。这部分继续留在后续故障验证门禁。
+
+另外，报告中的 747 次收口 与 696 个任务终态 不要求数值相等，因为收口尝试可以重复；但应在最终报告中标明收口尝试次数与实际成功状态转换次数的区别，避免被误读为重复业务执行。
+
+4. AUDIT-2R4：ACCEPTED
+
+接受历史扫描测试调整。
+
+新的正确时序是：
+
+当前任务收到裁决
+
+仅收口当前任务，释放租约
+
+下一轮正常 tick
+
+领取并执行下一任务
+
+只要原有跨扫描隔离、armed scan 限制和禁止提前执行的断言仍然有效，就不需要恢复旧的同一 emit 内预租行为。
+
+三、唯一阻断项及修订要求
+
+CHANGE 1 — 全量 API 回归必须清零失败。
+
+当前 4799/4800 PASS 不等于全量 PASS。
+
+批准 CODEX 在独立测试环境中采取以下修复措施：
+
+首选隔离的 fresh PostgreSQL 数据库或独立 schema 重新运行失败用例，确认是否确实由旧 schema 枚举干扰导致。
+
+如测试预期仅针对当前 schema，允许修改 pg_type 查询，正确关联 pg_namespace 并约束目标 schema；不得通过放宽断言掩盖问题。
+
+未经 HOST 授权，不得删除共享开发库中的 rc_c3_fresh_check 或其他未知归属的 schema。
+
+不得擅自终止 3 个现有 rsi-run 进程；应使用独立数据库和隔离运行环境排除影响。
+
+修复后重新执行失败用例及受影响测试，并提供全量 API 回归 PASS 的最终证据。
+
+此项属于 P3_FINAL_REGRESSION_GATE。
+
+如隔离环境仍复现失败，必须重新判定为代码或测试缺陷，不能继续沿用“环境漂移”的未经验证归因。
+
+完成该项后，可以申请最小范围 FINAL-R2 复审，不要求重复已经通过的 60 分钟 soak，除非修订触及 runtime、lease、settlement 或任务推进语义。
+
+四、后续发布门禁登记
+
+以下门禁与 PHASE 3 内部功能验收分别管理，不要求真实 Provider 已上线才能确认 Recovery 功能闭环。
+
+门禁
+
+	
+
+当前状态
+
+	
+
+关闭条件
+
+
+
+
+P3_FINAL_REGRESSION
+
+	
+
+BLOCKED
+
+	
+
+全量 API 回归通过
+
+
+
+
+LINUX_SYSTEMD
+
+	
+
+NOT VERIFIED
+
+	
+
+实际 Linux systemd 启停、重启、恢复验证
+
+
+
+
+REAL_PROVIDER
+
+	
+
+HOLD
+
+	
+
+合法凭据、授权、真实读取及受控沙箱业务链路验证
+
+
+
+
+FAILURE_RECOVERY
+
+	
+
+NOT VERIFIED
+
+	
+
+在飞任务 kill、断连、断电及重启后的 durable reconcile
+
+
+
+
+SCHEMA_HYGIENE
+
+	
+
+OPEN
+
+	
+
+schema 隔离/残留处置并复验
+
+
+
+
+PROCESS_ISOLATION
+
+	
+
+OPEN
+
+	
+
+现有后台进程归属确认和测试隔离
+
+
+
+
+PAYMENT_AND_EXTERNAL_WRITE
+
+	
+
+HOLD
+
+	
+
+独立授权、Action Guard、合规及结算验证
+
+即便下一轮 PHASE 3 被正式判定 CLOSED，也仅代表内部运行时开发与测试阶段完成，不代表真实追回资金闭环已经完成。
+
+PRODUCTION_READY 必须持续保持 NO，直到生产部署、真实 Provider 验证、故障恢复和外部业务/支付安全门禁分别通过。
+
+五、机器可读终局块
+
+CODEX 审计回传
+
+复制
+
+AUDIT_ID = MSG-20261009-04
+REVIEWED_HEAD = 18364f1a
+
+PHASE3_FINAL_VERDICT = REVISE
+
+R1_R8 = PASS
+PRELEASE_FIX_B = CLOSED
+P3_3 = PASS
+R9 = PASS
+R9_11_60M_SOAK = PASS
+AUDIT_2R4_ADJUSTMENT = ACCEPTED
+
+PHASE3_RECOVERY_CLOSURE = PASS
+PHASE3_CLOSED = NO
+
+P3_FINAL_REGRESSION_GATE = BLOCKED
+
+REMAINING_GATES =
+  P3_FINAL_REGRESSION,
+  LINUX_SYSTEMD,
+  REAL_PROVIDER,
+  FAILURE_RECOVERY,
+  SCHEMA_HYGIENE,
+  PROCESS_ISOLATION,
+  PAYMENT_AND_EXTERNAL_WRITE
+
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+PRODUCTION_READY = NO
+
+NEXT =
+  ISOLATE_TEST_DATABASE;
+  RESOLVE_RECONCILIATION_SCHEMA_S1_DB;
+  RUN_FULL_API_REGRESSION;
+  SUBMIT_PHASE3_FINAL_R2_AUDIT
+
+终局意见： 本次不要求重做 PHASE 3，也不允许因最后一个回归失败而推翻已通过的 R1–R9 安全验收。CODEX 应只处理最后的回归阻断项，通过后申请 FINAL-R2。外部 API、生产授权及真实资金操作继续保持 HOLD。
+```

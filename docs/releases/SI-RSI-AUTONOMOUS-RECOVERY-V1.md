@@ -1609,3 +1609,71 @@ NEXT_AUDIT = PHASE3_RECOVERY_DURABLE_CLOSURE_R1
 **PHASE 3 下一步**：整理**最终审计包**并送独立审计（`NEXT_AUDIT = PHASE3_FINAL`），
 其中须如实包含：PRELEASE_FIX_B、`AUDIT-2R4` 用例调整说明、R1–R8、R9-1…R9-12、60 分钟 soak 两次运行（第一次失败+根因、第二次通过）、
 全量回归口径（4799/4800，唯一失败为开发库 schema 漂移）与未验证项（Linux systemd / 真实 Provider / 断连）。
+
+### 3.35 PHASE 3 FINAL 独立审计（`MSG-20261009-04`）= **REVISE**（Recovery 功能闭环 PASS；**PHASE 3 未封板**）
+
+- 会话：`https://chatgpt.com/c/6ac7fb19-d6c4-83ec-b47d-fd3dcd8f4a2b`（本轮新开）；审查锚点 **`18364f1a`**
+- 投递校验：粘贴后 5185 字符（= 文本长度，无重复）；标记作为新用户轮出现；进入生成态；等待至 `回答已完成`
+- **逐字归档**：`AI-ARCHITECT-INBOX.md` → `MSG-20261009-04`（`FNV1A_MATCH fca7a757`；`FULL_COPY_OK` 142/142）
+
+**逐项裁决（审计方原文）**
+| 项 | 裁决 |
+| --- | --- |
+| R1–R8 | **PASS**（确认安全语义：PASS ≠ 业务完成；REJECT/DENY/REVISE 不得升格；无效/超时裁决保持安全等待；INTENT→APPLIED 恢复不重跑 domain step；fencing 拒绝不得污染状态；`VERDICT_TRUSTED_EVIDENCE_REFUSED_FALLBACK_BLOCKED` 回落符合预期） |
+| PRELEASE_FIX_B | **CLOSED**（不得恢复裁决路径预租；不得为提高吞吐缩短默认租约或增加第二套 scheduler） |
+| P3-3 | **PASS** |
+| R9-1…R9-12（含 60 分钟 soak） | **PASS**（3,606 秒 / 696/696 终态 / 非终态 0 / 违规 0 / 重复执行 0；接受第二次 SOAK_PASS；第一次失败记录保留不要求删除） |
+| AUDIT-2R4 调整 | **ACCEPTED**（改变的是任务步进时点，不是安全契约） |
+| **Recovery 功能闭环** | **PASS** |
+| **PHASE 3 整体封板** | **REVISE**（全量回归尚非 100% PASS） |
+| 生产就绪 | **NO** |
+
+**唯一阻断项 —— `CHANGE 1`（`P3_FINAL_REGRESSION_GATE`）**
+当前 4799/4800 ≠ 全量 PASS。审计批准在**独立测试环境**中按以下顺序处置：
+1. **首选**用**隔离的 fresh PostgreSQL 数据库或独立 schema**重新运行失败用例，确认是否确由旧 schema 枚举干扰导致；
+2. 若该测试预期**仅针对当前 schema**，**允许**修改 `pg_type` 查询：正确关联 `pg_namespace` 并约束目标 schema；
+   **不得**通过放宽断言掩盖问题；
+3. **未经 HOST 授权不得删除**共享开发库中的 `rc_c3_fresh_check` 或其它未知归属 schema；
+   **不得擅自终止** 3 个现有 `rsi-run` 进程 —— 用独立数据库与隔离运行环境排除影响；
+4. 修复后重跑失败用例 + 受影响测试，并提供**全量 API 回归 PASS 的最终证据**；
+5. **若隔离环境仍复现失败 ⇒ 必须重新判定为代码或测试缺陷**，不得继续沿用"环境漂移"的未经验证归因。
+完成后可申请**最小范围 FINAL-R2 复审**；**不要求**重复 60 分钟 soak，除非修订触及 runtime / lease / settlement / 任务推进语义。
+
+**审计方另注**：R9 报告中的"747 次收口"与"696 个任务终态"不要求数值相等（收口尝试可重复），但最终报告应**标明"收口尝试次数"与"实际成功状态转换次数"的区别**，避免被误读为重复业务执行。
+另：第二次 soak 采用**空闲重启**策略，**不能替代**"真实在飞任务被 kill / 断电"的恢复测试 —— 该部分保留在 `FAILURE_RECOVERY` 门禁。
+
+**发布门禁登记（审计方给出，均与 PHASE 3 内部功能验收分别管理）**
+| 门禁 | 当前状态 | 关闭条件 |
+| --- | --- | --- |
+| P3_FINAL_REGRESSION | **BLOCKED** | 全量 API 回归通过 |
+| LINUX_SYSTEMD | NOT VERIFIED | 实际 Linux systemd 启停、重启、恢复验证 |
+| REAL_PROVIDER | HOLD | 合法凭据、授权、真实读取及受控沙箱业务链路验证 |
+| FAILURE_RECOVERY | NOT VERIFIED | 在飞任务 kill、断连、断电及重启后的 durable reconcile |
+| SCHEMA_HYGIENE | OPEN | schema 隔离/残留处置并复验 |
+| PROCESS_ISOLATION | OPEN | 现有后台进程归属确认和测试隔离 |
+| PAYMENT_AND_EXTERNAL_WRITE | HOLD | 独立授权、Action Guard、合规及结算验证 |
+
+审计方明确：即使下一轮 PHASE 3 被判定 CLOSED，也**仅代表内部运行时开发与测试阶段完成**，不代表真实追回资金闭环完成；
+`PRODUCTION_READY` 必须持续保持 **NO**。
+
+**机器可读终局块（审计方原文）**
+```
+AUDIT_ID = MSG-20261009-04
+REVIEWED_HEAD = 18364f1a
+PHASE3_FINAL_VERDICT = REVISE
+R1_R8 = PASS / PRELEASE_FIX_B = CLOSED / P3_3 = PASS / R9 = PASS / R9_11_60M_SOAK = PASS / AUDIT_2R4_ADJUSTMENT = ACCEPTED
+PHASE3_RECOVERY_CLOSURE = PASS
+PHASE3_CLOSED = NO
+P3_FINAL_REGRESSION_GATE = BLOCKED
+REMAINING_GATES = P3_FINAL_REGRESSION, LINUX_SYSTEMD, REAL_PROVIDER, FAILURE_RECOVERY, SCHEMA_HYGIENE, PROCESS_ISOLATION, PAYMENT_AND_EXTERNAL_WRITE
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+PRODUCTION_READY = NO
+NEXT = ISOLATE_TEST_DATABASE; RESOLVE_RECONCILIATION_SCHEMA_S1_DB; RUN_FULL_API_REGRESSION; SUBMIT_PHASE3_FINAL_R2_AUDIT
+```
+
+**下一单元（已获准的最小范围）**：`P3_FINAL_REGRESSION_GATE` ——
+① 用**隔离 fresh DB / 独立 schema** 复现 `reconciliation-schema-s1-db`；
+② 若确为旧 schema 干扰，按 `pg_namespace` 约束修订该查询（**不放宽断言**）；
+③ 重跑失败用例 + 受影响测试 + **全量 API 回归**并冻结 PASS 证据；
+④ 申请 `PHASE3_FINAL_R2` 复审。
+**不**删除共享 schema、**不**终止后台进程（均需 HOST 授权）。
