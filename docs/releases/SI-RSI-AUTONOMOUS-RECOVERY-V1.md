@@ -1484,3 +1484,33 @@ NEXT_AUDIT = PHASE3_RECOVERY_DURABLE_CLOSURE_R1
   emit 只收口当前任务，下一个 scan 由**下一次正常 tick** 领取。已按新口径调整该用例，并**保留其安全断言**
   （任何时刻只执行当前 armed scan、绝不误执行下一个；第二个 scan 在 emit 后仍为 `CREATED`，直到被正常 tick 认领后才执行）。
   该调整将随下一轮复审包一并提交审计确认（属"审计要求重跑并复核"的情形，不是静默放宽）。
+
+### 3.31 R9 多 worker 最低验收 —— 已达成 R9-1…R9-10 / R9-12（R9-11 的 60 分钟连续运行另计）
+
+**新增** `apps/api/src/__tests__/si-rsi-phase3-r9-multiworker.test.ts`（**3/3 PASS**，真实 PostgreSQL），
+全部通过**既有** `composeRsiRuntime()` / durable 任务源 / 生产 Recovery pack / 既有 verdictWatcher 驱动（R9-12：未替换被测路径）。
+
+| 审计项 | 本文件如何证明 | 结果 |
+| --- | --- | --- |
+| R9-1 独立实例 | 3 个独立 runtime 实例（`r9-w1/w2/w3`，各自 ownerRef），共享同一 durable 队列 | ✅ |
+| R9-2 任务数量 + 跨租户 | 同租户 **6** 个任务 + 另一租户 1 个任务（跨租户隔离场景） | ✅ |
+| R9-3 推进活性 | 6 个任务在 `任务数+3` 轮内**全部**进入 `BLOCKED` 终态（无完成证据的合法收口） | ✅ |
+| R9-4 claim 互斥 | **每轮采样** SQL：同一 taskId 存在 >1 条 ACTIVE 租约的行数为 0 | ✅ |
+| R9-5 domain step | 按 opportunityRef 聚合的只读端口调用数：每任务**恰好 1** | ✅ |
+| R9-6 收口唯一性 | 每任务恰好 1 条 INTENT + 1 条 APPLIED；并按 `(entityId, verdictRef)` 做 **DB 级唯一性**校验（重复行数 = 0） | ✅ |
+| R9-7 裁决隔离 | 跨租户 ⇒ `SETTLEMENT_TENANT_MISMATCH`（**前置拒绝、零写入**）；错任务 ⇒ `SETTLEMENT_TASK_LINEAGE_MISMATCH`（**零写入**）；错 owner / 旧租约 ⇒ 既有 fencing 拒绝（任务状态不变） | ✅ |
+| R9-8 崩溃恢复 | (i) claim 后崩溃 ⇒ `reclaimExpired` + 新 owner 接管；(ii) INTENT 后崩溃 ⇒ `resumePendingSettlements` 补齐 APPLIED 且未重跑 domain step | ✅ |
+| R9-9 租约残留 | 全部完成后本租户任务 ACTIVE 租约数 = **0** | ✅ |
+| R9-10 外部安全 | claim/payment/settlement/ledger/billing/platformWrite 六类业务事实 = **0** | ✅ |
+| R9-11 连续运行 | 真实 PG **连续 60 分钟**无任务永久卡死 | **未做（下一单元单独执行）** |
+
+**新增实现（R9-7 所需）**：`recovery-verdict-settlement.ts` 增加**错任务 lineage 守卫** ——
+先用权威租户解析（task → incident.sourceRefs）同时取出该 durable 任务的 `dedupeKey`，
+与请求不一致即**拒绝且不写任何行**（`SETTLEMENT_TASK_LINEAGE_MISMATCH`）。
+同时明确区分两类拒绝：**前置拒绝**（跨租户 / 错任务 ⇒ 零写入）与 **fenced 拒绝**（错 owner / 旧租约 ⇒
+如实记录 `settleApplied=false` 的尝试，作为后续合法 owner `resumePendingSettlements` 补齐收口的依据）。
+
+**回归**：SI-RSI 全套件 **18 文件 / 101 tests 全绿**；`api tsc --noEmit` = **0**。
+
+**剩余**：R9-11（真实 PG 连续 60 分钟）→ 完成后即可整理 **PHASE 3 最终审计包**
+（含：PRELEASE_FIX_B、AUDIT-2R4 用例调整说明、R1–R8、R9-1…R9-11、全量回归口径与未验证项清单）。

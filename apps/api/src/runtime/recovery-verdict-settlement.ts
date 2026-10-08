@@ -117,6 +117,8 @@ export interface RecoverySettlementRecord {
 export const RECOVERY_SETTLEMENT_REFUSAL = {
   TENANT_MISMATCH: 'SETTLEMENT_TENANT_MISMATCH',
   TASK_NOT_FOUND: 'SETTLEMENT_TASK_NOT_FOUND',
+  /** R9-7「错任务」：请求的去重键与该 durable 任务不一致（lineage 不符）⇒ 拒绝收口 */
+  TASK_LINEAGE_MISMATCH: 'SETTLEMENT_TASK_LINEAGE_MISMATCH',
 } as const;
 
 export interface RecoveryVerdictSettlement {
@@ -152,10 +154,12 @@ export function createRecoveryVerdictSettlement(input: {
   const now = (): Date => (input.now ?? (() => new Date()))();
 
   /** 权威租户：task → incident(必须是服务端写入的队列 incident) → sourceRefs[0].organizationId */
-  const authoritativeOrganizationIdOf = async (taskId: string): Promise<string | null> => {
+  const authoritativeScopeOf = async (
+    taskId: string,
+  ): Promise<{ organizationId: string; dedupeKey: string } | null> => {
     const task = await input.prisma.autonomyTask.findUnique({
       where: { id: taskId },
-      select: { incidentId: true },
+      select: { incidentId: true, dedupeKey: true },
     });
     if (task === null) return null;
     const incident = await input.prisma.autonomyIncident.findUnique({
@@ -165,9 +169,12 @@ export function createRecoveryVerdictSettlement(input: {
     if (incident === null) return null;
     const refs = incident.sourceRefs as unknown;
     const first = Array.isArray(refs) ? (refs[0] as Record<string, unknown> | undefined) : undefined;
-    return first !== undefined && typeof first.organizationId === 'string' && first.organizationId !== ''
-      ? first.organizationId
-      : null;
+    const organizationId =
+      first !== undefined && typeof first.organizationId === 'string' && first.organizationId !== ''
+        ? first.organizationId
+        : null;
+    if (organizationId === null) return null;
+    return { organizationId, dedupeKey: String(task.dedupeKey) };
   };
 
   const applyDecision = async (request: RecoverySettlementRequest): Promise<RecoverySettlementRecord> => {
@@ -175,11 +182,15 @@ export function createRecoveryVerdictSettlement(input: {
      * R7（跨租户 fail-closed）：收口只允许作用于**本任务权威租户**，请求里的 organizationId 必须与之一致；
      * 否则一律拒绝且**不写任何行**（既不写到请求租户，也不写回权威租户）。
      */
-    const authoritativeOrganizationId = await authoritativeOrganizationIdOf(request.taskId);
-    if (authoritativeOrganizationId === null) {
+    const authoritative = await authoritativeScopeOf(request.taskId);
+    if (authoritative === null) {
       return { applied: false, action: 'SAFE_WAIT', reason: RECOVERY_SETTLEMENT_REFUSAL.TASK_NOT_FOUND };
     }
-    if (authoritativeOrganizationId !== request.organizationId) {
+    // R9-7「错任务」：请求的去重键必须与该 durable 任务一致
+    if (authoritative.dedupeKey !== request.dedupeKey) {
+      return { applied: false, action: 'SAFE_WAIT', reason: RECOVERY_SETTLEMENT_REFUSAL.TASK_LINEAGE_MISMATCH };
+    }
+    if (authoritative.organizationId !== request.organizationId) {
       return { applied: false, action: 'SAFE_WAIT', reason: RECOVERY_SETTLEMENT_REFUSAL.TENANT_MISMATCH };
     }
     /**
@@ -317,15 +328,26 @@ export function createRecoveryVerdictSettlement(input: {
   return {
     async settleAfterVerdict(request) {
       // R7：先做权威租户核对（不一致 ⇒ 直接拒绝，连 INTENT 都不写）
-      const authoritative = await authoritativeOrganizationIdOf(request.taskId);
-      if (authoritative === null || authoritative !== request.organizationId) {
+      const authoritative = await authoritativeScopeOf(request.taskId);
+      if (authoritative === null) {
         return {
           applied: false,
           action: 'SAFE_WAIT',
-          reason:
-            authoritative === null
-              ? RECOVERY_SETTLEMENT_REFUSAL.TASK_NOT_FOUND
-              : RECOVERY_SETTLEMENT_REFUSAL.TENANT_MISMATCH,
+          reason: RECOVERY_SETTLEMENT_REFUSAL.TASK_NOT_FOUND,
+        };
+      }
+      if (authoritative.dedupeKey !== request.dedupeKey) {
+        return {
+          applied: false,
+          action: 'SAFE_WAIT',
+          reason: RECOVERY_SETTLEMENT_REFUSAL.TASK_LINEAGE_MISMATCH,
+        };
+      }
+      if (authoritative.organizationId !== request.organizationId) {
+        return {
+          applied: false,
+          action: 'SAFE_WAIT',
+          reason: RECOVERY_SETTLEMENT_REFUSAL.TENANT_MISMATCH,
         };
       }
       // P0-5 ①：先把「待收口决策」写成 durable INTENT（崩溃锚点），再去 settle
