@@ -167901,3 +167901,361 @@ PHASE 3 不需要再重复开发或重新审计。 下一阶段应优先完成�
 
 本次回复仅作审计裁决，没有修改 Git 仓库、Release 分支或 Tracker。
 ```
+
+### [MSG-20261009-06] SI-RSI 独立 FAILURE_RECOVERY 门禁审计（reviewed ref 73538175）= **FINAL VERDICT: PASS — LOCAL SCOPE**；FR-1 在飞中断 / FR-2 租约过期接管 / FR-3 进程恢复 / FR-4 DB 断连（模拟）/ FR-5 副作用防护（测试范围内）/ tsc 与回归 全部 **PASS**；`AT_LEAST_ONCE_READONLY_DOMAIN_STEP = ACCEPTED`（附 4 项接受条件 + 明确「APPLIED 恰好一次 ≠ domain step 物理执行恰好一次」+ 未来若升级为外部写须另验幂等/对账）；批准**双层登记**：`FAILURE_RECOVERY_LOCAL = PASS`、`FAILURE_RECOVERY_LINUX = NOT_VERIFIED`（整体门禁 `PENDING_LINUX_VERIFICATION`，须 L1–L6 通过方可 CLOSED）；**`RELEASE_INTEGRATION_AUDIT = AUTHORIZED`**（CHANGE 1 唯一合入目标且封板 RC 不变 / CHANGE 2 重新验证部署锚点并重跑 `deploy/verify-release.mjs`（旧锚点 04a93666 结果不得继承）/ CHANGE 3 用生产启动入口构建并在隔离环境验证包含已审计实现、不得以源码存在或单测通过替代构建验收）；生产红线与 `PRODUCTION_READY = NO` 不变（会话 https://chatgpt.com/c/6ac8115d-4af8-83ec-9d73-b36c15c82344）
+
+```text
+CrossClaim · SI-RSI FAILURE_RECOVERY 独立审计裁决
+本机门禁 PASS · Linux 实机待验证
+
+裁决编号：MSG-20261009-06
+
+审计对象： CODEX-SI-RSI-FAILURE-RECOVERY
+REVIEWED_HEAD： 73538175
+审计分支： feat/si-rsi-customer-autonomous-recovery-v1
+审计依据： MSG-20261009-05
+
+本轮裁决严格依据提交的测试步骤、断言及结果，不将未经独立复现的陈述视为额外证据。未直接读取仓库或原始测试日志，因此本结论属于基于提交证据的独立审计裁决。
+
+一、最终裁决
+
+FAILURE_RECOVERY 本机范围 = PASS。
+
+接受将门禁拆分登记为本机验证与 Linux 实机验证两部分，不因尚未实施 Linux 实机测试而否定已通过的本机恢复能力。
+
+审计项目
+
+	
+
+裁决
+
+	
+
+依据
+
+
+
+
+FR-1 在飞任务中断
+
+	
+
+PASS
+
+	
+
+停止运行时组合后，任务保持 IN_PROGRESS，租约保持 ACTIVE
+
+
+
+
+FR-2 租约过期接管
+
+	
+
+PASS
+
+	
+
+新 owner 经自然过期、reclaimExpired 与 claim 完成接管
+
+
+
+
+FR-3 进程恢复
+
+	
+
+PASS
+
+	
+
+3 个任务由新进程排空，租约无残留
+
+
+
+
+FR-4 数据库断连
+
+	
+
+PASS（模拟断连）
+
+	
+
+不可达数据库拒绝 claim，持久化状态不变，连接恢复后正常推进
+
+
+
+
+FR-5 重复副作用防护
+
+	
+
+PASS（测试范围内）
+
+	
+
+单次 APPLIED、旧 owner 被 fencing 拒绝、外部业务事实为零
+
+
+
+
+TypeScript / 回归
+
+	
+
+PASS
+
+	
+
+tsc = 0；19 文件、104 tests PASS
+
+
+
+
+真实宿主机强杀或断电
+
+	
+
+NOT VERIFIED
+
+	
+
+尚无 Linux 实机证据
+
+
+
+
+真实网络分区
+
+	
+
+NOT VERIFIED
+
+	
+
+尚无多实例网络隔离验证
+
+
+
+
+Linux systemd 恢复
+
+	
+
+NOT VERIFIED
+
+	
+
+尚未验证实际服务启停、自动重启与恢复
+
+需要明确：FR-1 的“停止运行时组合”有效验证了租约遗留及恢复逻辑，但并不等价于操作系统级强杀。FR-5 的零外部业务事实证明当前测试没有发生越权外写，不等于已经证明真实 Provider 写入的 exactly-once 语义。
+
+二、只读 domain step 执行两次的裁决
+
+AT_LEAST_ONCE_READONLY_DOMAIN_STEP = ACCEPTED
+
+本轮只读步骤运行两次可以接受，且符合具备崩溃恢复能力的 at-least-once 执行模型。
+
+原因是进程 A 执行步骤后、完成可信持久化裁决前中断，进程 B 无法仅根据任务处于 IN_PROGRESS 就推断步骤已经安全完成，因此允许重新执行。
+
+接受条件：
+
+重复执行步骤严格只读，不产生不可逆外部业务效果。
+
+所有状态写入必须经过当前有效租约、owner 与 fencing 校验。
+
+旧 owner 恢复后不能提交终态、结算或其他持久化副作用。
+
+不能将“RECOVERY_SETTLEMENT_APPLIED 恰好一次”解释为“domain step 物理执行恰好一次”。
+
+未来如将步骤升级为外部写入，必须另外验证幂等键、提交结果不确定时的对账恢复及重复请求防护。
+
+本轮观测口径：
+
+纯文本
+READONLY_DOMAIN_STEP_EXECUTIONS = 2
+EXECUTION_SEMANTICS = AT_LEAST_ONCE
+
+RECOVERY_SETTLEMENT_APPLIED = 1
+STALE_OWNER_SETTLEMENT_ACCEPTED = 0
+
+EXTERNAL_BUSINESS_FACTS = 0
+REAL_PROVIDER_EXACTLY_ONCE = NOT_VERIFIED
+
+无需为实现物理调用至多一次而修改现有只读运行时。 强制只读步骤物理至多一次会带来崩溃后无法确认执行结果的问题，不应以牺牲任务恢复能力为代价。
+
+三、未覆盖项目的正式登记方式
+
+批准采用双层登记。
+
+纯文本
+FAILURE_RECOVERY_LOCAL = PASS
+FAILURE_RECOVERY_LINUX = NOT_VERIFIED
+
+整体 FAILURE_RECOVERY 门禁采用阶段性裁决：
+
+本机开发与验证阶段：PASS。
+
+Linux 生产候选部署验收阶段：PENDING_LINUX_VERIFICATION。
+
+整体验证关闭：只有 Linux 实机必需项通过后，方可标记 CLOSED。
+
+不得将本机模拟断连升级表述为真实网络分区通过，也不得把本机恢复测试描述为断电恢复通过。
+
+Linux 实机剩余验收要求
+
+编号
+
+	
+
+必须验证的行为
+
+	
+
+通过标准
+
+
+
+
+L1
+
+	
+
+在飞任务进程级强杀
+
+	
+
+SIGKILL 后任务可按租约恢复；旧 owner 不得提交
+
+
+
+
+L2
+
+	
+
+PostgreSQL 连接中断与恢复
+
+	
+
+断连期间 fail-closed，恢复后无任务永久卡死
+
+
+
+
+L3
+
+	
+
+多实例网络分区
+
+	
+
+stale owner 写入被拒；不得产生重复已提交副作用
+
+
+
+
+L4
+
+	
+
+systemd 重启恢复
+
+	
+
+实际服务自动重启、重新装配既有 runtime 并恢复任务
+
+
+
+
+L5
+
+	
+
+宿主机重启或断电等效测试
+
+	
+
+启动后 durable reconcile 正常，无孤儿 ACTIVE 租约或不可恢复任务
+
+
+
+
+L6
+
+	
+
+写入边界核验
+
+	
+
+未授权外写保持零；具有测试替身的幂等写入不得重复提交
+
+L5 应优先使用可控的 staging 主机重启；如果无法安全进行真正断电，需明确登记为 reboot-equivalent，并将真实断电保持 NOT VERIFIED。
+
+测试不得在生产数据库或真实客户任务上制造故障。
+
+四、下一步裁决：进入发布集成审计
+
+RELEASE_INTEGRATION_AUDIT = AUTHORIZED
+
+按照 MSG-20261009-05 的 NEXT，下一阶段可以启动发布集成审计。
+
+但这不代表批准把功能分支直接部署到生产，也不代表允许覆盖已封板 RC。
+
+发布集成需验证三个核心事实：
+
+CHANGE 1 — 明确唯一合入目标
+
+保持 release/rc-20261008-linux-deploy-v1 原封板不变。
+
+从已审计的 73538175 明确需要合入的代码与迁移范围。
+
+在新的集成候选分支实施合入。
+
+不允许未经审计的其他功能变更搭车进入。
+
+CHANGE 2 — 重新验证部署锚点
+
+确定新的唯一 release commit。
+
+重新执行 deploy/verify-release.mjs。
+
+重新验证 fresh DB migrations、TypeScript、build、回归与部署清单。
+
+旧锚点 04a93666 的历史通过结果不得自动继承给新构建。
+
+CHANGE 3 — 验证生产构建包含已审计实现
+
+证明实际部署包包含已审核的 Recovery pack、lease fencing、verdictWatcher 与 fenced settle。
+
+用正式生产启动入口构建，并在隔离环境执行真实 runtime 路径验收。
+
+验证无第二 runtime、scheduler、controller 或状态机。
+
+不得以源码存在、单元测试通过或 commit 已合并，替代生产构建验收。
+
+发布集成代码门禁通过后，再执行 Linux/staging 故障恢复实机验收。
+
+整个过程保持外部 Provider 写入、关税正式申报、支付、自动扣佣及生产启用处于 HOLD。
+
+五、机器可读终局块
+
+FINAL VERDICT
+
+PASS — LOCAL SCOPE
+
+MSG-20261009-06 · HEAD 73538175
+
+一键复制完整裁决
+六、最终意见
+
+本轮无需重新实施 PHASE 3，也无需因只读步骤重复执行而返工。
+
+正式批准进入发布集成审计，但禁止跳过 Linux/staging 故障恢复门禁直接宣布生产就绪。
+
+本次裁决不修改任何 Git 分支、仓库文件或 tracker。
+```

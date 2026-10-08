@@ -1819,3 +1819,54 @@ NEXT = ARCHIVE_PHASE3_FINAL_R2_VERDICT; PRESERVE_EXISTING_RELEASE_GATES; EXECUTE
 
 **下一步**：把该门禁作为独立议题送审（审计方要求"在独立门禁下执行 FAILURE_RECOVERY 审计"），随后按 `MSG-20261009-05` 的
 `NEXT` 在部署前请求**发布集成审计**（合入目标 / 部署锚点 / 生产构建包含已审计代码）。
+
+### 3.40 FAILURE_RECOVERY 门禁独立审计（`MSG-20261009-06`）= **PASS — LOCAL SCOPE** ⇒ 批准进入发布集成审计
+
+- 会话：`https://chatgpt.com/c/6ac8115d-4af8-83ec-9d73-b36c15c82344`（本轮新开）；审查锚点 **`73538175`**
+- 投递校验：composer 粘贴后 3310 字符（= 文本长度）；进入生成态；等待至 `回答已完成`
+- **逐字归档**：`AI-ARCHITECT-INBOX.md` → `MSG-20261009-06`（`FNV1A_MATCH dce43923`；`FULL_COPY_OK` 126/126）
+
+**逐项裁决（审计方原文）**
+| 项 | 裁决 | 依据 |
+| --- | --- | --- |
+| FR-1 在飞任务中断 | **PASS** | 停止运行时组合后任务保持 `IN_PROGRESS`、租约保持 `ACTIVE` |
+| FR-2 租约过期接管 | **PASS** | 新 owner 经自然过期、`reclaimExpired` 与 `claim` 完成接管 |
+| FR-3 进程恢复 | **PASS** | 3 个任务由新进程排空，租约无残留 |
+| FR-4 数据库断连 | **PASS（模拟断连）** | 不可达数据库拒绝 claim，持久化状态不变，恢复后正常推进 |
+| FR-5 重复副作用防护 | **PASS（测试范围内）** | 单次 APPLIED、旧 owner 被 fencing 拒绝、外部业务事实为零 |
+| TypeScript / 回归 | **PASS** | tsc = 0；19 文件、104 tests PASS |
+| 真实宿主机强杀或断电 | **NOT VERIFIED** | 尚无 Linux 实机证据 |
+| 真实网络分区 | **NOT VERIFIED** | 尚无多实例网络隔离验证 |
+| Linux systemd 恢复 | **NOT VERIFIED** | 尚未验证实际服务启停、自动重启与恢复 |
+
+审计方明确两点不可外推：FR-1 的"停止运行时组合"**不等价于**操作系统级强杀；FR-5 的零外部业务事实**不等于**已证明真实 Provider 写入的 exactly-once。
+
+**只读 domain step 执行两次的裁决**：`AT_LEAST_ONCE_READONLY_DOMAIN_STEP = ACCEPTED`（符合具备崩溃恢复能力的 at-least-once 模型）。
+接受条件（审计方原文要点）：① 重复执行严格只读、不产生不可逆外部效果；② 所有状态写入必须经过当前有效租约/owner/fencing 校验；
+③ 旧 owner 恢复后不能提交终态、结算或其他持久化副作用；④ **不能把「RECOVERY_SETTLEMENT_APPLIED 恰好一次」解释为「domain step 物理执行恰好一次」**；
+⑤ 未来若把该步骤升级为外部写入，必须另外验证幂等键、提交结果不确定时的对账恢复与重复请求防护。
+审计方并明确：**无需**为实现物理调用至多一次而修改现有只读运行时（强制至多一次会带来崩溃后无法确认执行结果的问题）。
+
+**门禁登记方式（双层，审计方批准）**
+```
+FAILURE_RECOVERY_LOCAL = PASS
+FAILURE_RECOVERY_LINUX = NOT_VERIFIED
+整体门禁 = PENDING_LINUX_VERIFICATION（须 L1–L6 全部通过方可标记 CLOSED）
+```
+**Linux 实机剩余验收 L1–L6**：`L1` 在飞任务进程级强杀（SIGKILL 后可按租约恢复、旧 owner 不得提交）；`L2` PostgreSQL 连接中断与恢复；
+`L3` 多实例网络分区（stale owner 写入被拒、无重复已提交副作用）；`L4` systemd 重启恢复；`L5` 宿主机重启/断电等效（优先用可控 staging 重启；
+若无法安全断电须登记为 `reboot-equivalent`，真实断电保持 NOT VERIFIED）；`L6` 写入边界核验。
+审计方强调：**测试不得在生产数据库或真实客户任务上制造故障**；不得把本机模拟断连/进程停止升级表述为真实网络分区或断电恢复通过。
+
+**下一步裁决：`RELEASE_INTEGRATION_AUDIT = AUTHORIZED`**（不等于批准把功能分支直接上生产，也不允许覆盖封板 RC）
+- **CHANGE 1 明确唯一合入目标**：保持 `release/rc-20261008-linux-deploy-v1` 原封板不变；从已审计的 `73538175` 明确需合入的代码与迁移范围；
+  在**新的集成候选分支**实施合入；不允许未经审计的功能变更搭车进入；
+- **CHANGE 2 重新验证部署锚点**：确定新的唯一 release commit；**重新执行 `deploy/verify-release.mjs`**；
+  重新验证 fresh DB migrations / TypeScript / build / 回归 / 部署清单；**旧锚点 `04a93666` 的历史通过结果不得自动继承**；
+- **CHANGE 3 验证生产构建包含已审计实现**：证明实际部署包含已审计的 Recovery pack / lease fencing / verdictWatcher / fenced settle；
+  用**正式生产启动入口**构建并在隔离环境执行真实 runtime 路径验收；验证无第二 runtime/scheduler/controller/状态机；
+  **不得**以"源码存在 / 单测通过 / commit 已合并"替代生产构建验收。
+发布集成代码门禁通过后，再执行 **Linux/staging 故障恢复实机验收（L1–L6）**；全程保持外部写 / 报关 / 支付 / 扣佣 / 生产启用 HOLD。
+
+**本线程下一步**：进入**发布集成审计**准备（CHANGE 1/2/3），在**新集成候选分支**上完成合入与锚点重验，再送审。
+**注意**：`73538175` 是功能分支 HEAD，**不等于**部署 RC；封板分支保持不动。
