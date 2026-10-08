@@ -250,3 +250,16 @@ Drawback 的 1825 天（exportDate 锚点）被明确定位为**合格窗口**�
 * MSG-20261008-03：CUSTOMS_CLAIM_READY_FAIL_CLOSED = PASS、VERDICT = PASS、REVIEWED_HEAD = 658f8ea7；FNV-1a 6ad3eed / FULL_COPY_OK 88/88。
 * 评审确认三层负向保护成立（缺 jurisdiction → NEEDS_MANUAL_REVIEW + MISSING_JURISDICTION；blocksClaimReady=true → 降级且 gate reasons 保留；gate 整体缺失 → HISTORICAL_WINDOW_GATE_MISSING），正向路径未被误伤；**AUDIT-1 CHANGE 1 / AUDIT-1R / AUDIT-1R2 全部 CLOSED，无需 AUDIT-1R3**。
 * 下一个审计节点 = AUDIT-2（PHASE 10 合成 5 年 E2E 完成后）。
+
+## 13. PHASE 10 —— 合成 5 年 E2E（已实现，AUDIT-2 待送）
+
+新增 __tests__/historical-scan-5y-e2e.test.ts（真实 PostgreSQL + 真实模块链，1 用例）：
+Goal 文本 检查我过去 5 年的关税损失，能追回的全部处理 → 确定性编译 **60 个月**（modelCallCount = 0）→ server 校验 →
+esolveRecoveryWindow（数据源只覆盖最近 1 年 → effective 收窄 + SOURCE_LIMITED）→ durable RecoveryScanRun（requested 5 年 / effective 收窄）→
+claimRecoveryScanRun + loadScanScopeForClaimedTask（caller 自报范围被忽略；跨租户 BLOCK）→
+分片回填（maxPages=3 → PARTIAL 且检查点落库；续跑 → COMPLETED，分片无重复）→ 每片 3 条 synthetic 记录经 **既有** customs 链 →
+uildScanSummaryView（coverage=SOURCE_LIMITED、scanCoverageIsFull=false、disclaimerCodes 含 COVERAGE_NOT_FULL、claimsFiled=0、filing/externalWrite/payment=false）。
+
+证据：该用例 1/1；历史扫描 + 架构定向批次 **7 文件 / 217 tests PASS**；api tsc **0**。
+分片数据源为 **synthetic 端口**（test/acceptance only），不是 production adapter；所有判定仍走 server-owned 链。
+
