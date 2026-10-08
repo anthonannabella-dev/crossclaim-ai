@@ -235,7 +235,7 @@ NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
 | **C1** claim 与 lease **原子化**（P0） | **CLOSED** | `rsi-durable-task-source.claim()` 改为 `prisma.$transaction`：CAS(`READY→IN_PROGRESS`) 与 lease upsert 同事务，任一失败整体回滚 ⇒ 不会出现「IN_PROGRESS 但无有效租约」 |
 | **C2** 运行中租约恢复 + fencing（P0） | **CLOSED** | 新增 `reclaimExpired()`：对**已到期** ACTIVE 租约做 CAS(`ACTIVE+expiresAt<=now ⇒ EXPIRED`) 并把任务 CAS(`IN_PROGRESS ⇒ READY`)，**无需进程重启**；接入既有 tick（`adoptFromTaskSource` 先 reclaim 再 claim）。新增 `settle()`：只有「本 owner 且未过期 ACTIVE 租约」才允许落终态 ⇒ 旧 worker 迟到提交被 fence 拒绝 |
 | C3 完整生命周期/重试/死信（P0） | **CLOSED** | 见 §2.4（Schema Delta + 退避门禁 + fence 保护的 `fail()` + 死信终态 + DB 层不变量） |
-| C4 租户/账户/授权与撤销拦截（P0） | NOT CLOSED | 尚未实现（执行前从可信事实重解析 + 撤销拦截） |
+| C4 租户/账户/授权与撤销拦截（P0） | **CLOSED** | 见 §2.5（领取前授权重解析 + 撤销/过期 BLOCK + 持久化原因码） |
 | C6 多 worker 故障注入矩阵（P1） | PARTIAL | 已覆盖：并发领取、租约过期接管、旧 worker 迟到提交（fencing）、重复提交、事务失败（约束违反即整体失败）；未覆盖：跨租户/账户边界矩阵 |
 | C7 发布配置与 CI（P1） | PARTIAL | API 与 RSI 已共用同一 durable 源；JSON 仅显式 legacy 回退；CI 命中未验证（GitHub Actions = NOT_OBSERVED） |
 | C5 → PHASE 2 Recovery 装配（P0） | NOT STARTED | 见 PHASE 2 |
@@ -291,6 +291,39 @@ NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
 
 回归：C3 + PHASE1 全部 + 既有持久化契约 = **25/25**；Schema/架构/治理契约 = **256/256**；api tsc **0**；
 `prisma validate` valid；迁移已在开发库与**全新 schema（从零应用全部迁移）**成功。
+
+### 2.5 C4 —— 租户 / 账户 / 授权重解析与撤销拦截已关闭
+
+**实现**（`rsi-durable-task-source.ts`，仅在 `claim()` 内、**执行前**进行，fail-closed）
+
+对齐复审意见「不能仅凭 `incident.sourceRefs.organizationId` 就认定边界可信」：
+
+1. `incident` 必须存在且 `kind === 'CUSTOMER_GOAL_QUEUE'`（**只信服务端写入的容器**；伪造/错绑容器一律拒绝）；
+2. 从 `sourceRefs[0].organizationId` 解析租户，且该 `Organization` 必须在可信库中**真实存在**；
+3. 对 `ownerGateRequired = true`（需要自动执行授权）的任务，必须存在**未撤销且未过期**的
+   `StandingAuthorization`（`revocationState='ACTIVE'` ∧ `effectiveAt ≤ now < expiresAt`）—— 撤销/过期即拒绝；
+4. 拒绝**不是静默跳过**：任务被 CAS 标记 `BLOCKED` + `lastErrorCode = 原因码`，且不产生任何租约。
+
+原因码（只回码，不回显取值）：`CLAIM_DENY_UNTRUSTED_INCIDENT_KIND` /
+`CLAIM_DENY_ORGANIZATION_UNRESOLVABLE` / `CLAIM_DENY_ORGANIZATION_NOT_FOUND` /
+`CLAIM_DENY_STANDING_AUTHORIZATION_REVOKED`。
+
+**验收（`si-rsi-phase1-authorization.test.ts`，真实 PostgreSQL 6/6 PASS）**
+
+| 用例 | 断言 |
+| --- | --- |
+| C4-1 | 受控任务 + 有效 Standing Authorization ⇒ 允许领取（`IN_PROGRESS`） |
+| C4-2 | 授权已撤销 ⇒ 拒绝领取；任务持久化 `BLOCKED` + `STANDING_AUTHORIZATION_REVOKED`；**零租约** |
+| C4-3 | 授权已过期 ⇒ 拒绝领取并 BLOCK（与撤销同一 fail-closed 路径） |
+| C4-4 | 不可信容器（`kind='CI_RED'` 下挂 recovery 任务）⇒ 拒绝并 BLOCK（`UNTRUSTED_INCIDENT_KIND`） |
+| C4-5 | 租户不可解析 / 不存在（不信任自报 sourceRefs）⇒ 拒绝并 BLOCK（`ORGANIZATION_NOT_FOUND`） |
+| C4-6 | 非受控任务（无需自动执行授权）⇒ 仅要求租户真实存在，无需 Standing Authorization |
+
+回归：C4 + 全部 PHASE 1 = **23/23**；api tsc **0**。
+
+**既有测试夹具同步更新**：PHASE 1 的 C1/C2/C3 用例现在会 seed 真实 `Organization`（含 `slug`）与
+合规 `StandingAuthorization`（`allowedActionTypes` 非空、`scopeDigest` 64 位、撤销态带完整凭证）
+—— 这正是「执行前必须从可信库重解析」的必然要求，不是为通过测试而放宽逻辑。
 
 ---
 

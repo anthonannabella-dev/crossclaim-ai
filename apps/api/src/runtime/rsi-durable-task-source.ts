@@ -23,6 +23,29 @@ import type { RsiSafeTask } from '../services/autonomy/rsi-continuation-engine';
 /** 客户 Recovery 任务的既有保留命名空间（与 Goal 计划一致） */
 export const RECOVERY_QUEUE_TASK_PREFIX = 'task:recovery:';
 
+/** C4：客户任务必须挂在这个 kind 的 incident 下（服务端写入的可信容器） */
+export const CUSTOMER_GOAL_QUEUE_INCIDENT_KIND = 'CUSTOMER_GOAL_QUEUE';
+
+/**
+ * C4 授权门禁的拒绝原因码（只回原因码，不回显任何取值）。
+ * 拒绝的任务会被**持久化标记为 BLOCKED**，绝不进入执行链。
+ */
+export const CLAIM_AUTHORIZATION_DENY = {
+  UNTRUSTED_INCIDENT_KIND: 'CLAIM_DENY_UNTRUSTED_INCIDENT_KIND',
+  ORGANIZATION_UNRESOLVABLE: 'CLAIM_DENY_ORGANIZATION_UNRESOLVABLE',
+  ORGANIZATION_NOT_FOUND: 'CLAIM_DENY_ORGANIZATION_NOT_FOUND',
+  STANDING_AUTHORIZATION_REVOKED: 'CLAIM_DENY_STANDING_AUTHORIZATION_REVOKED',
+} as const;
+
+export type ClaimAuthorizationDeny =
+  (typeof CLAIM_AUTHORIZATION_DENY)[keyof typeof CLAIM_AUTHORIZATION_DENY];
+
+export interface ClaimAuthorizationDecision {
+  allowed: boolean;
+  reason: string;
+  organizationId?: string;
+}
+
 export interface RsiDurableTaskSource {
   /** 原子领取至多 limit 条已就绪任务；只有 CAS 成功者会被返回。 */
   claim(limit: number): Promise<readonly RsiSafeTask[]>;
@@ -62,6 +85,12 @@ export function createAutonomyTaskSource(input: {
   priority?: RsiSafeTask['priority'];
   /** C3：退避函数（毫秒）。缺省 = 指数退避（30s * 2^(n-1)，上限 30 分钟）+ 由 taskId 决定的有界抖动 */
   backoffMs?: (attempt: number, taskId: string) => number;
+  /**
+   * C4：领取前的**授权重解析**开关（默认开启）。
+   * 开启时，每个候选任务在执行前都会从**可信持久化事实**重新解析
+   * organizationId 与 Standing Authorization；任一项不满足即拒绝并持久化 BLOCK。
+   */
+  authorizeOnClaim?: boolean;
 }): RsiDurableTaskSource {
   const now = (): Date => (input.now ?? (() => new Date()))();
   const leaseMs = input.leaseMs ?? DEFAULT_LEASE_MS;
@@ -75,6 +104,52 @@ export function createAutonomyTaskSource(input: {
     return base + Math.floor((base * (h % 100)) / 1000);
   };
   const backoffMs = input.backoffMs ?? defaultBackoff;
+
+  /**
+   * C4（MSG-20261008-16 CHANGE 4）—— 执行前授权重解析（fail-closed）：
+   *   1. incident 必须是由服务端写入的 CUSTOMER_GOAL_QUEUE（不信任任何客户端自报容器）；
+   *   2. 从 incident.sourceRefs 解析 organizationId，且该 Organization 必须在可信库中真实存在；
+   *   3. 对**需要自动执行授权**的任务（ownerGateRequired），必须存在未撤销且未过期的 StandingAuthorization；
+   *      已撤销 / 已过期 ⇒ 拒绝（撤销后不得继续执行受控动作）。
+   */
+  const authorizeClaim = async (task: {
+    id: string;
+    incidentId: string;
+    ownerGateRequired: boolean;
+  }, at: Date): Promise<ClaimAuthorizationDecision> => {
+    const incident = await input.prisma.autonomyIncident.findUnique({ where: { id: task.incidentId } });
+    if (incident === null) {
+      return { allowed: false, reason: CLAIM_AUTHORIZATION_DENY.UNTRUSTED_INCIDENT_KIND };
+    }
+    if (incident.kind !== CUSTOMER_GOAL_QUEUE_INCIDENT_KIND) {
+      return { allowed: false, reason: CLAIM_AUTHORIZATION_DENY.UNTRUSTED_INCIDENT_KIND };
+    }
+    const refs = incident.sourceRefs as unknown;
+    const first = Array.isArray(refs) ? (refs[0] as Record<string, unknown> | undefined) : undefined;
+    const organizationId = first !== undefined && typeof first.organizationId === 'string' ? first.organizationId : '';
+    if (organizationId === '') {
+      return { allowed: false, reason: CLAIM_AUTHORIZATION_DENY.ORGANIZATION_UNRESOLVABLE };
+    }
+    const organization = await input.prisma.organization.findUnique({ where: { id: organizationId } });
+    if (organization === null) {
+      return { allowed: false, reason: CLAIM_AUTHORIZATION_DENY.ORGANIZATION_NOT_FOUND };
+    }
+    if (!task.ownerGateRequired) {
+      return { allowed: true, reason: 'AUTHORIZED_NO_STANDING_REQUIRED', organizationId };
+    }
+    const active = await input.prisma.standingAuthorization.count({
+      where: {
+        organizationId,
+        revocationState: 'ACTIVE',
+        expiresAt: { gt: at },
+        effectiveAt: { lte: at },
+      },
+    });
+    if (active < 1) {
+      return { allowed: false, reason: CLAIM_AUTHORIZATION_DENY.STANDING_AUTHORIZATION_REVOKED, organizationId };
+    }
+    return { allowed: true, reason: 'AUTHORIZED_STANDING_ACTIVE', organizationId };
+  };
 
   return {
     taskPrefix: () => taskPrefix,
@@ -90,11 +165,22 @@ export function createAutonomyTaskSource(input: {
         },
         orderBy: [{ createdAt: 'asc' }],
         take: limit,
-        select: { id: true, dedupeKey: true },
+        select: { id: true, dedupeKey: true, incidentId: true, ownerGateRequired: true },
       });
 
       const claimed: RsiSafeTask[] = [];
       for (const row of candidates) {
+        // C4：执行前授权重解析 —— 拒绝者持久化 BLOCK，且**不**进入本轮领取结果
+        if (input.authorizeOnClaim !== false) {
+          const decision = await authorizeClaim(row, at);
+          if (!decision.allowed) {
+            await input.prisma.autonomyTask.updateMany({
+              where: { id: row.id, status: 'READY' },
+              data: { status: 'BLOCKED', lastErrorCode: decision.reason },
+            });
+            continue;
+          }
+        }
         const expiresAt = new Date(at.getTime() + leaseMs);
         /**
          * C1（审计 CHANGE 1）—— claim 与 lease 创建在**同一事务**：

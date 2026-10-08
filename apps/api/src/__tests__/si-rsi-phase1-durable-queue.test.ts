@@ -42,6 +42,39 @@ const draft = (dedupeKey: string): GoalTaskDraft => ({
   requiresStandingAuthorizationForAutoExecution: true,
 });
 
+/**
+ * C4：领取前会从可信库重解析 organization + Standing Authorization。
+ * 因此测试必须先 seed 真实租户事实（否则正确行为是 BLOCK，而非「领取成功」）。
+ */
+async function seedTenant(organizationId: string): Promise<void> {
+  await prisma.organization.upsert({
+    where: { id: organizationId },
+    create: { id: organizationId, name: organizationId, slug: organizationId },
+    update: {},
+  });
+  await prisma.standingAuthorization.deleteMany({ where: { organizationId } });
+  await prisma.standingAuthorization.create({
+    data: {
+      organizationId,
+      platformAccountId: 'acct-1',
+      provider: 'AMAZON',
+      allowedActionTypes: ['recovery.read'],
+      monetaryLimitUsd: '0',
+      currency: 'USD',
+      domain: 'LOGISTICS',
+      jurisdiction: 'US',
+      effectiveAt: new Date('2026-10-08T00:00:00.000Z'),
+      expiresAt: new Date('2026-11-08T00:00:00.000Z'),
+      authorizationVersion: 1,
+      termsPolicyVersion: 'v1',
+      consentEvidenceRef: 'evidence://test-seed',
+      scopeDigest: 'a'.repeat(64),
+      revocationState: 'ACTIVE',
+      createdAt: NOW,
+    },
+  });
+}
+
 const probe = (): { seen: string[]; runner: RsiTaskRunner } => {
   const seen: string[] = [];
   return {
@@ -63,6 +96,8 @@ async function truncateAutonomy(): Promise<void> {
 
 beforeEach(async () => {
   await truncateAutonomy();
+  await seedTenant('org-A');
+  await seedTenant('org-B');
 });
 
 afterAll(async () => {
