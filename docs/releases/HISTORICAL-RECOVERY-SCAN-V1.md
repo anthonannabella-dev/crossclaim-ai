@@ -301,3 +301,16 @@ claimRecoveryScanRun + loadScanScopeForClaimedTask（caller 自报范围被忽�
   下一 tick 依此把 runtime leg 加回 historical-scan-5y-e2e.test.ts（productRecoveryPack: { appActionGuardDeps, readPorts, bind, scanScope }，scanScope = 真实 DB loader）。
 * 证据：api tsc 0；historical-scan-runtime-scope 8/8、historical-scan-5y-e2e 1/1、rsi-si-runtime-e2e 5/5、agent-goal-runtime-wiring 7/7。
 
+### 13.5 AUDIT-2 CHANGE 完成 —— PHASE 10 现在真实经过 ONE SI Runtime composition
+
+* `historical-scan-5y-e2e.test.ts` 新增 runtime leg：
+  `composeRsiRuntime({ tasksPath, productRecoveryPack: { appActionGuardDeps, readPorts, bind, scanScope } })`
+  → `controller.tick()` 认领 `task:recovery:CUSTOMS:scan:v1:...`；**由 runtime 自己**经 `scanScope` 端口装载
+  durable `RecoveryScanRun`（测试只断言端口被调用与结果 ok，不直接查库）。
+* 断言：① `claimed.dedupeKey === 该 scan task`（唯一 runtime 认领）；② `loadedRefs === [taskKey]`
+  （runtime 侧装载 durable scope，查询键由 `scanDedupeKeyFromTaskKey()` 确定性派生）；
+  ③ domain dispatch log 非空（走既有 pack 派发，未走 direct-runner）。
+* 证据：`historical-scan-5y-e2e` **2/2**（runtime leg + 完整 5 年链路）；api tsc **0**；
+  `productRecoveryPack.scanScope` 透传在 `1aede231`。
+* 送审：`AUDIT-2R`，REVIEWED_HEAD = `6dada7cf`。
+
