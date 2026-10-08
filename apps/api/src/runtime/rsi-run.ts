@@ -442,20 +442,30 @@ export async function composeRsiRuntime(input: {
     // C2：先接管**已到期**租约（运行中恢复，无需重启），再领取可用任务。
     if (source.reclaimExpired !== undefined) await source.reclaimExpired(5);
     const claimed = await source.claim(5);
-    if (claimed.length > 0) {
-      controller.adoptTasks(claimed);
-      // 记录「本 runtime 认领且尚未收口」的 recovery 任务（供裁决后自动收口使用）
-      const recoveryClaimed = claimed.find(
-        (task) => task.dedupeKey.startsWith('task:recovery:') && typeof task.organizationId === 'string' && task.organizationId !== '',
-      );
-      if (recoveryClaimed !== undefined) {
-        pendingRecoveryTask = {
-          taskId: recoveryClaimed.id,
-          dedupeKey: recoveryClaimed.dedupeKey,
-          organizationId: String(recoveryClaimed.organizationId),
-        };
-      }
-    }
+    if (claimed.length > 0) controller.adoptTasks(claimed);
+  };
+  /**
+   * PHASE 3：把「**本轮真正被引擎处理**、正在 park-for-judge 的 recovery 任务」记为待收口目标。
+   * 注意必须取 `outcome.claimed`（引擎处理的那一个），**不是** claim 批次 —— 一次 `claim(5)` 可能预领多条，
+   * 只有引擎实际处理的那条才会等待裁决（多 worker 场景下这条修正由 R9 测试实测暴露）。
+   */
+  const recordPendingRecoveryTask = (outcomeLike: unknown): void => {
+    /**
+     * 只在「该任务确实处于 park-for-judge」时登记 —— 这是「等待裁决的那个任务」的**定义**，
+     * 与「引擎刚租下但尚未执行」的任务区分开（后者 waitingForVerdict=false）。
+     */
+    if (controller.state().waitingForVerdict !== true) return;
+    const claimed = (outcomeLike as { claimed?: { id?: unknown; dedupeKey?: unknown; organizationId?: unknown } } | null | undefined)
+      ?.claimed;
+    if (claimed === null || claimed === undefined) return;
+    if (typeof claimed.dedupeKey !== 'string' || !claimed.dedupeKey.startsWith('task:recovery:')) return;
+    if (typeof claimed.id !== 'string') return;
+    if (typeof claimed.organizationId !== 'string' || claimed.organizationId === '') return;
+    pendingRecoveryTask = {
+      taskId: claimed.id,
+      dedupeKey: claimed.dedupeKey,
+      organizationId: claimed.organizationId,
+    };
   };
   const controllerWithAdoption =
     input.taskSource === undefined
@@ -464,7 +474,9 @@ export async function composeRsiRuntime(input: {
           ...controller,
           async tick() {
             await adoptFromTaskSource();
-            return controller.tick();
+            const outcome = await controller.tick();
+            recordPendingRecoveryTask(outcome);
+            return outcome;
           },
         };
   const controllerWithDomainSteps =
@@ -479,6 +491,7 @@ export async function composeRsiRuntime(input: {
             // 先结算本轮裁决（若有），再把本轮新认领的任务武装为下一次的待裁决任务
             await settleArmedScanTask(verdictBeforeConsume, outcome);
             armClaimedScanTask(outcome);
+            recordPendingRecoveryTask(outcome);
             return outcome;
           },
           // AUDIT-2R2 CHANGE 1（实测）：既有 event loop 的续跑路径调用的是 `controller.emit(event)`，
@@ -488,6 +501,13 @@ export async function composeRsiRuntime(input: {
             const outcome = await controller.emit(event);
             await settleArmedScanTask(verdictBeforeConsume, outcome);
             armClaimedScanTask(outcome);
+            /**
+             * R9 实测：`emit('JUDGE_VERDICT_RECEIVED')` 会消费裁决并**立刻租下下一个**任务。
+             * 若该任务在本轮确实被执行并停在等待裁决（`waitingForVerdict === true`），
+             * 它才是"下一个待收口目标"；`recordPendingRecoveryTask` 内部已按该条件判定，
+             * 不会把"刚租下但尚未执行"的任务误记为待收口。
+             */
+            recordPendingRecoveryTask(outcome);
             return outcome;
           },
         };
@@ -529,6 +549,11 @@ export async function composeRsiRuntime(input: {
             // 真实取值来自 artifact；无法识别则不设置（引擎会保持当前裁决，不会瞎猜）。
             const raw = await localSources.readVerdict?.();
             const parsed = normalizeRsiVerdict(raw);
+            /**
+             * R9：必须在 emit **之前**捕获「等待裁决的那个任务」——
+             * `emit('JUDGE_VERDICT_RECEIVED')` 会消费裁决并立刻租下下一个任务，之后 `pendingRecoveryTask` 可能已变。
+             */
+            const parkedTask = pendingRecoveryTask;
             if (parsed !== null) controllerWithDomainSteps.markWaitingForVerdict(parsed);
             await controllerWithDomainSteps.emit('JUDGE_VERDICT_RECEIVED');
             /**
@@ -536,7 +561,7 @@ export async function composeRsiRuntime(input: {
              * 缺省未接线 `recoveryVerdictSettlement` ⇒ 行为与既有版本完全一致（不擅自改语义）。
              */
             const settlement = input.recoveryVerdictSettlement;
-            const pending = pendingRecoveryTask;
+            const pending = parkedTask;
             if (settlement !== undefined && pending !== null) {
               let verdictRef = '';
               if (input.verdictPath !== undefined) {
@@ -556,7 +581,9 @@ export async function composeRsiRuntime(input: {
                 verdict: parsed,
                 verdictRef,
               });
-              pendingRecoveryTask = null;
+              if (pendingRecoveryTask !== null && pendingRecoveryTask.taskId === pending.taskId) {
+                pendingRecoveryTask = null;
+              }
             }
           },
           intervalMs: input.verdictWatch.intervalMs ?? 15_000,

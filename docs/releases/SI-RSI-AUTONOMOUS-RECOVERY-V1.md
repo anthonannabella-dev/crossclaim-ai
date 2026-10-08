@@ -1367,3 +1367,34 @@ NEXT_AUDIT = PHASE3_RECOVERY_DURABLE_CLOSURE_R1
 
 **仍未覆盖（下一增量）**：**R9** 多 worker 并发（需专用库 + 多 runtime 实例）、**R10** 全量回归 sweep；
 之后方可送 `PHASE3_RECOVERY_DURABLE_CLOSURE_R1` 复审。小时级 soak / 断连恢复 / Linux systemd / 真实 Provider 仍为 NOT VERIFIED / HOLD。
+
+### 3.28 R9 多 worker 并发 —— **未达成**；实测暴露引擎「裁决后预租下一条但不执行」的既有时序
+
+**我尝试的做法**：写一个 R9 测试，用 **3 个独立 runtime 实例**（各自 ownerRef + 各自裁决流，共享同一 durable 队列）
+并发推进 6 个任务，循环「所有 worker 同时 tick + 同时投递裁决」，然后断言：每任务只执行一次、只收口一次、无残留 ACTIVE 租约、零外写。
+
+**实测结果**：**失败**，并且失败原因不是我的收口修复，而是引擎既有行为：
+- 每轮只有**一个 worker 的第一次**（tick+verdict）生效；此后各 worker 的 `tick()` 持续返回 `claimed=none`；
+- 6 个任务里只有 1–2 个被真正执行并收口，其余停在 `IN_PROGRESS`；
+- `INTENT/APPLIED` 各只有 1 条。
+
+**根因（读引擎源码 + 诊断脚本对照）**：`rsi-continuation-engine.handleEvent('JUDGE_VERDICT_RECEIVED')` 在消费裁决后
+**立即** `claimNextSafeTask()` —— 也就是**预租下下一条任务**并把 `leased` 指向它；而本组合中，
+该预租任务**不会在同一次 emit 里被执行**，于是引擎进入 `ACTIVE_LEASE`（内部租约默认 5 分钟），
+后续 `tick()` 一直返回 `SILENT/ACTIVE_LEASE`，直到内部租约到期。⇒ **短窗口内一个 worker 无法连续排空多条任务**。
+
+**处置（诚实，不掩盖）**
+- R9 草稿测试**未提交并已删除**（它在当前引擎时序下无法成立，不能作为 R9 证据）；
+- 运行时的收口接线**保留**（R1/R2 已用真实 PG 验证：`si-rsi-phase3-closure-fix-r1.test.ts` 8/8），
+  但**不宣称** R9 达成；
+- 回归确认：SI-RSI 全套件 **16 文件 / 95 tests 全绿**；`api tsc --noEmit` = 0。
+
+**R9 仍为 NOT VERIFIED**，并新增一个**待审计确认的问题**（我会在下一轮的复审包中一并提出）：
+1. `handleEvent('JUDGE_VERDICT_RECEIVED')` 里 `claimNextSafeTask()` 的**预租**是否为有意设计？若是，应由谁在何时执行该预租任务？
+2. 若预租任务要等内部租约（5 分钟）到期才执行，那么「多 worker 持续吞吐」的量级就是**每 worker 每 5 分钟一条** ——
+   这与 soak / 生产吞吐预期是否一致？（这直接决定 hour-level soak 的正确参数与预期。）
+3. 该预租是否存在**未执行却占用 durable 租约**的窗口（即"预租但未执行"的任务在 DB 里表现为 `IN_PROGRESS` + ACTIVE 租约）——
+   若是，是否需要在 R1 的实现里补一条「预租任务的执行/收口」路径？
+
+**下一步**：先就上述三点送独立审计确认口径，再据此实现 R9 与 soak；
+`PHASE3_RECOVERY_DURABLE_CLOSURE_R1` 复审**暂不提交**（R9 未达成、R10 未做）。
