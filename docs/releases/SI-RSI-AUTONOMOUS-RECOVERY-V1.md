@@ -414,6 +414,42 @@ AUDIT_BASIS=CODEX_REPORTED_EVIDENCE_NOT_INDEPENDENTLY_EXECUTED
 
 ---
 
+## 3. PHASE 2 / C5 —— Recovery pack 生产装配（设计已定稿，实现待执行）
+
+### 3.1 侦察结论（本 tick 实测，只读）
+
+| 事实 | 证据 |
+| --- | --- |
+| 生产启动入口**未传** `productRecoveryPack` | `rsi-run.ts` 直跑块（P0-B 复现，`MSG-20261008-16`） |
+| `productRecoveryPack` 目前**只出现在测试中** | 全仓 grep：`__tests__/*` 5 个文件；`runtime/rsi-run.ts` 仅声明入参 |
+| **生产不存在 `RecoveryReadPorts` 实现** | 全仓非测试代码 grep `opportunityRead:\|evidenceRead:\|customsAuthorizationReadinessRead:` = **0 命中** |
+| 组合点唯一且强制共享 guard | `createProductRecoverySiPack()` 只接受 `AppActionGuardDeps`（内部唯一 `createAppActionGuard`），禁止自定义 guard port |
+| guard 依赖可由 Prisma 直接构造 | `AppActionGuardDeps = { prisma, config?, killSwitchResolver?, audit? }`；缺省 `audit` 走 `createPrismaActionGuardAuditPort(prisma)` |
+| `bind` 配方（测试蓝本） | 解析 `^task:recovery:([A-Z_]+):(.+)$` ⇒ `{ organizationId, domain, actionKind, opportunityRef }` |
+| `scanScope` 配方 | `loadScanScopeForClaimedTask(prisma, { organizationId, dedupeKey })` ⇒ `{ ok, reasonCodes }` |
+
+### 3.2 实现计划（下一单元执行）
+
+1. 新增 `apps/api/src/runtime/recovery-si-production-composition.ts`：
+   - `readPorts`：**新建 Prisma 支撑的只读端口实现**（`opportunityRead` / `evidenceRead` / `customsAuthorizationReadinessRead`），
+     只读、按租户过滤、输出经 `scanRecoveryReadOutput` 二次扫描；
+   - `bind`：从 `task.dedupeKey` 解析 domain/ref，`organizationId` **从可信持久化事实**（task→incident.sourceRefs）解析，
+     不硬编码、不信任客户端自报；
+   - `scanScope`：复用 `loadScanScopeForClaimedTask`；
+   - `appActionGuardDeps`：`{ prisma }`（共享 guard，不注入自定义实现）。
+2. `rsi-run.ts` 直跑入口装配该 pack（**唯一**组装点，不新增 runtime/scheduler/controller）。
+3. 真实 PG 验收：`task:recovery:*` 被认领后进入 **recovery-si** domain dispatch（`domainDispatchLog()` 非空）、
+   no-op runner 调用数为 0、跨租户与撤销授权仍 fail-closed、重启/接管后仍可续跑。
+4. 送独立审计（AUDIT-P2）→ 关闭 C5 / P0-B → 进入 PHASE 3。
+
+### 3.3 本 tick 的诚实说明
+
+本 tick **只完成侦察与设计定稿**，**未提交任何 C5 代码**：因为生产读端口实现不存在，
+一次性把「读端口 + 组合 + 接线 + 真实 PG 验收」做完并验证超出本 tick 预算；
+按「不得提交未验证代码」的边界，本轮以 durable 设计记录收口，工作树保持 clean。
+
+---
+
 ## 4. 连续执行机制（真实建立并已实测，非设计方案）
 
 ### 4.1 架构（两段式，成本有界）
