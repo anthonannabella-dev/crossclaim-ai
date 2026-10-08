@@ -167640,3 +167640,264 @@ NEXT =
 
 终局意见： 本次不要求重做 PHASE 3，也不允许因最后一个回归失败而推翻已通过的 R1–R9 安全验收。CODEX 应只处理最后的回归阻断项，通过后申请 FINAL-R2。外部 API、生产授权及真实资金操作继续保持 HOLD。
 ```
+
+### [MSG-20261009-05] SI-RSI PHASE 3 FINAL-R2 独立终审（送审 HEAD bee10a14）= **PASS**；**`P3_FINAL_REGRESSION_GATE = CLOSED`**（484 文件 / 4818 用例 100% 通过）、`TEST_SIDE_REVISIONS = ACCEPTED`（枚举 schema 约束 / 3 个引擎单测按 prelease 口径 / operations-dashboard 钩子加固）、`PHASE3_RECOVERY_CLOSURE = PASS/CLOSED`、**`PHASE3_CLOSED = YES`**；`ONE_SI_RUNTIME = PASS`、R9-11 soak **沿用原证据**（`SOAK_RERUN_REQUIRED = NO`）；仅 `P3_FINAL_REGRESSION` 由 BLOCKED→CLOSED，**其余六项门禁状态不变**（`FAILURE_RECOVERY = NOT_VERIFIED` 等）；`PRODUCTION_READY = NO`、封板 `release/rc-20261008-linux-deploy-v1` 未变（bee10a14 为功能分支送审 HEAD，不自动等于部署 RC）；NEXT = 归档裁决 → 保留门禁 → **在独立门禁下执行 FAILURE_RECOVERY 审计**（隔离 PG + 真实运行时路径，不得以人工改终态替代恢复）→ 部署前请求发布集成审计（会话 https://chatgpt.com/c/6ac80f9d-ff30-83ec-a835-8c3dcb575e5f）
+
+```text
+CrossClaim · SI-RSI PHASE 3 FINAL-R2 独立终审裁决
+FINAL-R2 · PASS
+
+裁决编号：MSG-20261009-05
+送审 HEAD：bee10a14
+审计范围：仅 P3_FINAL_REGRESSION_GATE 及相关测试侧修订
+
+根据本轮提交的测试证据、前次 MSG-20261009-04 裁决及已确认的 PHASE 3 Recovery 功能闭环，作出以下终审裁决。
+
+本裁决属于基于送审证据的独立审计，不代表已直接检出仓库 HEAD 或重新执行 PostgreSQL 测试。
+
+一、最终裁决
+
+审计项目
+
+	
+
+裁决
+
+
+
+
+PHASE3_FINAL_R2_VERDICT
+
+	
+
+PASS
+
+
+
+
+P3_FINAL_REGRESSION_GATE
+
+	
+
+CLOSED
+
+
+
+
+TEST_SIDE_REVISIONS
+
+	
+
+ACCEPTED
+
+
+
+
+PHASE3_RECOVERY_CLOSURE
+
+	
+
+PASS / CLOSED
+
+
+
+
+PHASE3_CLOSED
+
+	
+
+YES
+
+
+
+
+ONE_SI_RUNTIME
+
+	
+
+PASS，维持原裁决
+
+
+
+
+R9-11_60MIN_SOAK
+
+	
+
+PASS，沿用原证据
+
+
+
+
+FAILURE_RECOVERY
+
+	
+
+NOT VERIFIED
+
+
+
+
+PRODUCTION_READY
+
+	
+
+NO
+
+正式结论：PHASE 3 的已批准范围可以封板。
+
+此前唯一阻断项为全量回归门禁。本轮提供的最终结果为：
+
+通过测试文件
+
+484/484
+
+通过测试用例
+
+4818/4818
+
+失败用例
+
+0
+
+该结果足以关闭前次裁决定义的最后一个回归阻断项，无须重新开启已通过的 PHASE 3 功能审计。
+
+二、测试侧修订逐项裁决
+
+修订内容
+
+	
+
+裁决
+
+	
+
+理由
+
+
+
+
+PostgreSQL 枚举 schema 约束
+
+	
+
+ACCEPTED
+
+	
+
+消除跨 schema 重名干扰，未放宽断言
+
+
+
+
+三个引擎测试文件的旧预租断言
+
+	
+
+ACCEPTED
+
+	
+
+与已批准的 PRELEASE_FIX_B 一致
+
+
+
+
+Operations Dashboard TRUNCATE 钩子加固
+
+	
+
+ACCEPTED
+
+	
+
+改善共享库锁竞争下的等待机制，不改变业务判据
+
+本轮最重要的语义约束仍为：
+
+裁决事件仅收口当前任务，不得在同一次调用中预租下一条任务；下一条任务必须由后续正常 tick 领取。
+
+三组相关测试的修订与这一约束一致。
+
+对于数据库钩子加固，接受的范围仅为本轮描述的测试清理流程和等待策略，不授权修改业务数据库的锁策略或生产超时设置。
+
+三、60 分钟 Soak 与恢复能力边界
+
+同意不重复 R9-11 60 分钟 soak。
+
+原因是本轮声明的修改全部位于测试文件，没有触及生产 runtime、lease、settlement 或任务推进语义。因此，在该变更范围属实的前提下，既有 soak 证据继续有效。
+
+同时明确以下事实：
+
+747 次 APPLIED 收口记录不等于 747 次独立业务执行。
+
+696 个任务终态与收口记录数量不要求相等。
+
+DB 唯一约束验证的是指定业务键的重复记录控制，不能单凭这一项证明所有外部副作用恰好一次。
+
+F2 空闲 worker 重启不能替代真实在飞任务 kill、数据库断连或断电恢复测试。
+
+因此，PHASE3_CLOSED=YES 不等于 FAILURE_RECOVERY=PASS。
+
+四、发布门禁登记裁决
+
+批准仅修改以下状态：
+
+P3_FINAL_REGRESSION: BLOCKED → CLOSED
+
+其余六项门禁保持前次登记状态，不因 PHASE 3 封板自动升级为 PASS。尤其是生产故障恢复、真实 Provider 验证及生产支付相关边界，不得借用内部回归结果关闭。
+
+release/rc-20261008-linux-deploy-v1 仍保持原封板状态。bee10a14 属于功能分支送审 HEAD，不能据此自动认定已进入最终部署 RC。
+
+后续发布集成必须明确合入目标、重新验证部署锚点，并确认实际生产构建包含已通过审计的代码。
+
+五、机器可读终局裁决
+
+MSG-20261009-05
+
+一键复制
+INI
+AUDIT_ID = MSG-20261009-05
+REVIEWED_HEAD = bee10a14
+
+PHASE3_FINAL_R2_VERDICT = PASS
+P3_FINAL_REGRESSION_GATE = CLOSED
+TEST_SIDE_REVISIONS = ACCEPTED
+
+PHASE3_RECOVERY_CLOSURE = PASS/CLOSED
+PHASE3_CLOSED = YES
+
+ONE_SI_RUNTIME = PASS
+R9_11_SOAK = PASS_RETAINED
+SOAK_RERUN_REQUIRED = NO
+
+FAILURE_RECOVERY = NOT_VERIFIED
+
+P3_FINAL_REGRESSION = CLOSED
+OTHER_SIX_GATES = UNCHANGED
+
+REAL_PROVIDER_WRITE = HOLD
+CUSTOMS_FILING = HOLD
+PAYMENT = HOLD
+AUTO_COMMISSION_CHARGE = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+PRODUCTION_READY = NO
+RELEASE_RC_UNCHANGED = YES
+
+NEXT = ARCHIVE_PHASE3_FINAL_R2_VERDICT;
+       PRESERVE_EXISTING_RELEASE_GATES;
+       EXECUTE_FAILURE_RECOVERY_AUDIT_UNDER_SEPARATE_GATE;
+       REQUEST_RELEASE_INTEGRATION_AUDIT_BEFORE_DEPLOYMENT
+六、下一阶段授权范围
+
+PHASE 3 不需要再重复开发或重新审计。 下一阶段应优先完成独立的 FAILURE_RECOVERY 门禁，重点验证真实在飞任务中断、租约过期接管、进程恢复、数据库断连及重复外部副作用防护。
+
+这一验证可以在隔离 PostgreSQL 环境中执行，必须使用真实运行时路径，不能以人工直接修改任务终态替代恢复流程。
+
+继续保留当前生产红线：未经明确授权，不得执行真实 Provider 写入、关税正式申报、支付扣款、自动佣金扣取或生产部署。
+
+最终裁决：PHASE3_FINAL_R2_VERDICT = PASS，PHASE3_CLOSED = YES，PRODUCTION_READY = NO。
+
+本次回复仅作审计裁决，没有修改 Git 仓库、Release 分支或 Tracker。
+```

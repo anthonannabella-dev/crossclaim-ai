@@ -1736,3 +1736,60 @@ node tools/dev/run-si-rsi-suite.mjs --rounds 1 --all --label p3-final-full-3   #
 
 **下一步**：提交 **`PHASE3_FINAL_R2`** 最小范围复审（附本次修复清单：① 枚举查询 schema 约束；② 3 个引擎单测按 prelease 口径调整；③ `operations-dashboard-db` 钩子加固；④ 全量回归 ALL_GREEN 证据）。
 按审计口径，本次**未触及** runtime / lease / settlement / 任务推进语义（只改测试与其查询），故**不重复** 60 分钟 soak。
+
+### 3.38 PHASE 3 FINAL-R2 终审（`MSG-20261009-05`）= **PASS** ⇒ **PHASE 3 = CLOSED**
+
+- 会话：`https://chatgpt.com/c/6ac80f9d-ff30-83ec-a835-8c3dcb575e5f`（本轮新开）；送审 HEAD **`bee10a14`**
+- 投递校验：composer 清空、进入生成态、等待至 `回答已完成`；**逐字归档** `AI-ARCHITECT-INBOX.md` → `MSG-20261009-05`
+  （`FNV1A_MATCH 23f926f9`；`FULL_COPY_OK` 103/103）
+
+**终审裁决（审计方原文要点）**
+| 项 | 裁决 |
+| --- | --- |
+| PHASE3_FINAL_R2_VERDICT | **PASS** |
+| P3_FINAL_REGRESSION_GATE | **CLOSED**（484/484 文件、4818/4818 用例、0 失败） |
+| TEST_SIDE_REVISIONS | **ACCEPTED**（枚举 schema 约束 / 3 个引擎单测按 prelease 口径 / operations-dashboard 钩子加固） |
+| PHASE3_RECOVERY_CLOSURE | **PASS / CLOSED** |
+| **PHASE3_CLOSED** | **YES** |
+| ONE_SI_RUNTIME | PASS（维持原裁决） |
+| R9-11 60 分钟 soak | **PASS，沿用原证据**（`SOAK_RERUN_REQUIRED = NO`） |
+| FAILURE_RECOVERY | **NOT VERIFIED** |
+| PRODUCTION_READY | **NO** |
+
+**审计方明确保留的语义与边界（逐条登记）**
+1. 核心语义不变：**裁决事件只收口当前任务，不得在同一次调用中预租下一条；下一条必须由后续正常 tick 领取**；
+2. 钩子加固的接受范围**仅限测试清理流程与等待策略**，**不授权**修改业务数据库锁策略或生产超时设置；
+3. **747 次 APPLIED ≠ 747 次独立业务执行**；696 个任务终态与收口记录数不要求相等；
+   DB 唯一约束只证明**指定业务键**的重复记录控制，**不能**单凭它证明所有外部副作用恰好一次；
+4. **F2 空闲 worker 重启不能替代**真实在飞任务 kill / 数据库断连 / 断电恢复测试 ⇒ **`PHASE3_CLOSED=YES` ≠ `FAILURE_RECOVERY=PASS`**；
+5. 仅 `P3_FINAL_REGRESSION` 由 **BLOCKED → CLOSED**；**其余六项门禁保持原状态**，不因 PHASE 3 封板自动升级；
+6. `release/rc-20261008-linux-deploy-v1` 仍保持原封板状态；**`bee10a14` 是功能分支送审 HEAD，不能据此自动认定已进入最终部署 RC** ——
+   后续发布集成必须**明确合入目标、重新验证部署锚点、确认生产构建包含已通过审计的代码**。
+
+**机器可读终局块（审计方原文）**
+```
+AUDIT_ID = MSG-20261009-05
+REVIEWED_HEAD = bee10a14
+PHASE3_FINAL_R2_VERDICT = PASS
+P3_FINAL_REGRESSION_GATE = CLOSED
+TEST_SIDE_REVISIONS = ACCEPTED
+PHASE3_RECOVERY_CLOSURE = PASS/CLOSED
+PHASE3_CLOSED = YES
+ONE_SI_RUNTIME = PASS
+R9_11_SOAK = PASS_RETAINED
+SOAK_RERUN_REQUIRED = NO
+FAILURE_RECOVERY = NOT_VERIFIED
+P3_FINAL_REGRESSION = CLOSED
+OTHER_SIX_GATES = UNCHANGED
+REAL_PROVIDER_WRITE = HOLD / CUSTOMS_FILING = HOLD / PAYMENT = HOLD / AUTO_COMMISSION_CHARGE = HOLD / PRODUCTION_ENABLEMENT = HOLD
+PRODUCTION_READY = NO
+RELEASE_RC_UNCHANGED = YES
+NEXT = ARCHIVE_PHASE3_FINAL_R2_VERDICT; PRESERVE_EXISTING_RELEASE_GATES; EXECUTE_FAILURE_RECOVERY_AUDIT_UNDER_SEPARATE_GATE; REQUEST_RELEASE_INTEGRATION_AUDIT_BEFORE_DEPLOYMENT
+```
+
+**下一阶段授权范围（审计方指定）**：PHASE 3 **不需要**再重复开发或重新审计；
+下一步优先完成**独立的 `FAILURE_RECOVERY` 门禁**，重点验证：真实在飞任务中断 / 租约过期接管 / 进程恢复 / 数据库断连 /
+**重复外部副作用防护**；该验证**可以在隔离 PostgreSQL 环境执行**，但**必须使用真实运行时路径**，
+**不得以人工直接修改任务终态替代恢复流程**。生产红线继续：未经明确授权不得真实 Provider 写入、关税正式申报、支付扣款、自动佣金扣取或生产部署。
+
+**下一步（本线程）**：进入 `FAILURE_RECOVERY` 门禁实现与取证（隔离 PG + 真实运行时路径、故障注入但不伪造恢复），通过后按审计要求**在部署前请求发布集成审计**。
