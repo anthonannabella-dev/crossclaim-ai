@@ -1677,3 +1677,34 @@ NEXT = ISOLATE_TEST_DATABASE; RESOLVE_RECONCILIATION_SCHEMA_S1_DB; RUN_FULL_API_
 ③ 重跑失败用例 + 受影响测试 + **全量 API 回归**并冻结 PASS 证据；
 ④ 申请 `PHASE3_FINAL_R2` 复审。
 **不**删除共享 schema、**不**终止后台进程（均需 HOST 授权）。
+
+### 3.36 `P3_FINAL_REGRESSION_GATE` 第 1–3 步 —— 隔离复现已确认 + 已按授权修订（全量回归待下一单元）
+
+**① 隔离复现（审计批准的第一步，先不动代码）**
+- 本机 dev 用户具备 `CREATEDB`；按其"**首选**隔离的 fresh PostgreSQL 数据库"要求，
+  新建并迁移了**全新隔离库** `crossclaim_p3r2_iso`（本任务自建资产；**未触碰共享库、未删除任何既有 schema**）。
+- 在隔离库上运行原失败用例 `reconciliation-schema-s1-db.test.ts`：**Test Files 1 passed / Tests 27 passed**。
+  ⇒ **CONFIRMED：原失败由共享开发库中的残留 schema（`rc_c3_fresh_check` 与 `public` 各持同一套 73 个枚举）干扰导致，非代码缺陷。**
+
+**② 按审计授权修订（不改判据）**
+该文件内两条结构用例（"七张表全部存在" / "触发器覆盖"）**本就**使用 `current_schema()` 约束，唯独"七个枚举全部存在"漏了 schema 限定 ⇒ 补齐：
+```sql
+SELECT t.typname
+  FROM pg_type t
+  JOIN pg_namespace n ON n.oid = t.typnamespace AND n.nspname = current_schema()
+ WHERE t.typtype = 'e' AND t.typname = ANY($1::text[])
+```
+**断言未放宽**：查询同时约束「类型名 + schema」，比原来**更严格**，且与同文件其它结构用例口径一致（审计明确"不得通过放宽断言掩盖问题"）。
+
+**③ 复验结果**
+| 环境 | 结果 |
+| --- | --- |
+| `api tsc --noEmit` | **0** |
+| 共享开发库（含残留 schema） | **27/27 PASS** |
+| 隔离 fresh 库 `crossclaim_p3r2_iso` | **27/27 PASS** |
+
+**边界（严格遵守审计红线）**：未删除共享库中的 `rc_c3_fresh_check`（需 HOST 授权）；未终止 3 个后台 `rsi-run` 进程（需 HOST 授权）；
+隔离库为本任务自建，保留供复验。证据：`tools/verification/si-rsi-suite-runs/p3-final-regression-gate.json`。
+
+**④ 下一步（本门禁的最后一项）**：重跑失败用例 + 受影响测试 + **全量 API 回归**（480 文件 / 4800 用例），
+冻结 **100% PASS** 证据后提交 `PHASE3_FINAL_R2` 复审（审计明确：不要求重复 60 分钟 soak，除非改动触及 runtime/lease/settlement/推进语义 —— 本次仅改测试查询）。

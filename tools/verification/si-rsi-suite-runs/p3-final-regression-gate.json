@@ -1,0 +1,37 @@
+{
+  "id": "P3_FINAL_REGRESSION_GATE",
+  "auditRef": "MSG-20261009-04 (CHANGE 1)",
+  "reviewedHeadBeforeFix": "ec8f4015",
+  "failure": {
+    "file": "apps/api/src/__tests__/reconciliation-schema-s1-db.test.ts",
+    "test": "R45 S1 · 结构（七表 / 七枚举 / 触发器覆盖）> 七个枚举全部存在",
+    "observedOn": "共享开发库（public + 残留 schema rc_c3_fresh_check）",
+    "cause": "原查询仅按 typname 过滤 pg_type，未限定 schema；两个 schema 各持同一套 73 个枚举 ⇒ 同一枚举命中两行，集合相等断言失败（同文件另两条结构用例本就使用 current_schema() 约束）"
+  },
+  "step1_isolationReproduction": {
+    "perAudit": "首选隔离的 fresh PostgreSQL 数据库重新运行失败用例，确认是否确由旧 schema 枚举干扰导致",
+    "action": "创建并迁移全新隔离库 crossclaim_p3r2_iso（本任务自建；未触碰共享库与任何既有 schema）",
+    "command": "node work/iso-db-setup.mjs crossclaim_p3r2_iso ; DATABASE_URL=<isolated> vitest run src/__tests__/reconciliation-schema-s1-db.test.ts",
+    "resultBeforeCodeChange": "Test Files 1 passed (1) / Tests 27 passed (27)",
+    "conclusion": "CONFIRMED —— 原失败由共享库中的残留 schema 干扰导致，非代码缺陷"
+  },
+  "step2_authorizedFix": {
+    "perAudit": "若该测试预期仅针对当前 schema，允许修改 pg_type 查询：正确关联 pg_namespace 并约束目标 schema；不得通过放宽断言掩盖问题",
+    "change": "SELECT t.typname FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace AND n.nspname = current_schema() WHERE t.typtype = 'e' AND t.typname = ANY($1::text[])",
+    "judgementChange": "无（断言未放宽；查询改为同时约束类型名与 schema —— 语义更严格，且与同文件另两条结构用例一致）"
+  },
+  "step3_verification": {
+    "typecheck": "api tsc --noEmit = 0",
+    "sharedDevDbAfterFix": "Test Files 1 passed (1) / Tests 27 passed (27)",
+    "isolatedFreshDb": "Test Files 1 passed (1) / Tests 27 passed (27)"
+  },
+  "step4_pending": {
+    "requirement": "重跑失败用例 + 受影响测试 + 全量 API 回归（480 文件 / 4800 用例），并提供全量 PASS 的最终证据",
+    "status": "NEXT_UNIT"
+  },
+  "boundaries": {
+    "deletedSharedSchema": false,
+    "killedBackgroundProcesses": false,
+    "notes": "未删除共享库中的 rc_c3_fresh_check（需 HOST 授权）；未终止 3 个后台 rsi-run 进程（需 HOST 授权）；隔离库 crossclaim_p3r2_iso 为本任务自建资产，保留供复验"
+  }
+}

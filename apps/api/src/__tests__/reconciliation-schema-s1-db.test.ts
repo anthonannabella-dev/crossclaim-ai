@@ -295,8 +295,22 @@ describe('R45 S1 · 结构（七表 / 七枚举 / 触发器覆盖）', () => {
   });
 
   it('七个枚举全部存在', async () => {
+    /**
+     * P3_FINAL_REGRESSION_GATE（审计 MSG-20261009-04 CHANGE 1）：
+     * 原查询只按 `typname` 过滤 `pg_type`，**未限定 schema** ⇒ 当共享开发库存在其它 schema
+     * （本机实测：残留 `rc_c3_fresh_check`，与 `public` 各持同一套 73 个枚举）时，同一枚举会命中两行，
+     * 集合相等断言失败。审计批准：若该测试预期只针对当前 schema，可**正确关联 `pg_namespace` 并约束目标 schema**，
+     * **不得**通过放宽断言掩盖问题。
+     *
+     * 本文件另外两条结构用例（"七张表全部存在" / "触发器覆盖"）本来就使用 `current_schema()` 约束 ——
+     * 此处与之对齐；改后语义**更严格**（既限定类型名，又限定 schema），断言本身未放宽。
+     * 隔离验证：同一用例在全新隔离库 `crossclaim_p3r2_iso` 上 27/27 通过，确认原失败由旧 schema 干扰导致。
+     */
     const rows = await prisma.$queryRawUnsafe<{ typname: string }[]>(
-      `SELECT typname FROM pg_type WHERE typtype = 'e' AND typname = ANY($1::text[])`,
+      `SELECT t.typname
+         FROM pg_type t
+         JOIN pg_namespace n ON n.oid = t.typnamespace AND n.nspname = current_schema()
+        WHERE t.typtype = 'e' AND t.typname = ANY($1::text[])`,
       ENUMS,
     );
     expect(rows.map((r) => r.typname).sort()).toEqual([...ENUMS].sort());
