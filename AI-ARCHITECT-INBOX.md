@@ -165887,3 +165887,287 @@ NEXT： Codex 应先完成 CHANGE 1–4，提交新的 REVIEWED_HEAD、实际部
 
 本裁决仅在当前会话给出，未写入仓库。
 ```
+
+### [MSG-20261008-20] SI-RSI PHASE 2 FINAL 独立审计（reviewed ref 461c54e1）= **REVISE**；CHANGE1 生产入口=PASS、CHANGE2 可信租户与授权时效=PASS、CHANGE3 业务完成状态真实性=REVISE、CHANGE4 运行时稳定性=REVISE；**P0_B_CLOSED = NO、PHASE2_CLOSED = NO**；NEXT = CHANGE_3A_TRUSTED_TERMINAL_EVIDENCE + CHANGE_4A_TEST_ISOLATION + P0_B1_REAL_DOMAIN_E2E + REQUEST_PHASE2_FINAL_R2_AUDIT（会话 https://chatgpt.com/c/6ac7af0b-07c0-83ec-a2d8-c558610bab71）
+
+```text
+CrossClaim · SI-RSI PHASE 2 FINAL 独立审计裁决
+
+审计编号：MSG-20261008-20 · CODEX-SI-RSI-P2-FINAL
+
+REVIEWED_HEAD： 461c54e1
+审计范围： PHASE 2 / CHANGE 1–4 / P0-B
+证据口径： 仅依据本次提交的证据，不假定未展示的代码、测试或真实执行结果已经通过。
+
+PHASE 2 FINAL
+
+REVISE
+本轮四项修复有明确进展，但业务结果可信来源、真实业务链执行证据和测试稳定性仍未完全闭环，因此暂不批准 PHASE 2 CLOSED。
+一、逐项审计结果
+
+审计项目
+
+	
+
+裁决
+
+	
+
+依据
+
+
+
+
+CHANGE 1 · 生产启动入口
+
+	
+
+PASS
+
+	
+
+实际构建产物运行成功，5/5 契约通过；限于构建与入口一致性
+
+
+
+
+CHANGE 2 · 可信租户与授权时效
+
+	
+
+PASS
+
+	
+
+真实 PG 4/4，授权撤销、租户隔离及执行前拒绝得到验证
+
+
+
+
+CHANGE 3 · 业务完成状态真实性
+
+	
+
+REVISE
+
+	
+
+结果分类成立，但终局事实的可信来源未得到证明
+
+
+
+
+CHANGE 4 · 运行时稳定性
+
+	
+
+REVISE
+
+	
+
+6/6 场景通过，但全套件曾出现未定位失败，尚不能宣布稳定
+
+
+
+
+P0-B CLOSED
+
+	
+
+NO
+
+	
+
+尚缺从生产同构入口到真实 Recovery 业务步骤执行的完整证据
+
+
+
+
+PHASE 2 CLOSED
+
+	
+
+NO
+
+	
+
+两项 CHANGE 与 P0-B 尚未关闭
+
+二、CHANGE 1：PASS
+
+认可以下证据：
+
+dist/src/runtime/rsi-run.js 实际启动，并输出 PRODUCT_RECOVERY_SI。
+
+RSI_RECONCILE_SOURCE=PRISMA，证明此次启动选择了数据库 reconcile 路径。
+
+systemd unit、安装脚本与构建产物的入口一致性测试 5/5 PASS。
+
+没有发现第二套 runtime 的结构性证据。
+
+裁决：CHANGE1_PRODUCTION_ENTRY = PASS。
+
+但 PASS 仅限于入口一致性，不代表 Linux/systemd 实机部署通过。部署验证仍属于后续生产使能工作，不要求在本阶段提前完成。
+
+三、CHANGE 2：PASS
+
+本轮新增的 executionPreflight 是必要的安全补强。
+
+特别认可 C2-2：
+
+任务领取时授权有效，但执行前授权被撤销，系统拒绝执行。
+
+这证明安全判断不是只在任务创建或领取时进行，而是在执行边界再次检查。
+
+C2-3 对拒绝原因进行了区分，C2-4 验证了跨租户拒绝。JSON legacy 不携带可信组织身份时提前拒绝，也符合 fail-closed 设计。
+
+裁决：CHANGE2_TRUSTED_TENANT_AND_AUTH_TIMING = PASS。
+
+此裁决不延伸为真实 Provider 授权或外部操作已获许可。
+
+四、CHANGE 3：REVISE
+
+业务结果词表设计方向正确，尤其是：
+
+DISPATCHED 不代表追回成功。
+
+CLAIM_PREPARED 不得升级为完成。
+
+无终局业务结果时，不允许 settle(COMPLETED)。
+
+但存在一个未证明的关键安全性质。
+
+当前证据证明系统识别终局状态值，却没有证明终局状态一定来源于可信外部事实。
+
+例如 B4 显示传入 SETTLEMENT_RECEIVED 后能够 PROMOTED。这只能证明状态映射正确，不能单独证明该状态不可由内部任务或调用者伪造。
+
+CHANGE 3A（P0）：可信终局事实约束
+
+要求 Codex：
+
+追踪 businessOutcome 从产生、存储到 settle() 的完整调用链。
+
+证明普通 runner、任务输入和非可信调用者无法自行声明 PROVIDER_CONFIRMED 或 SETTLEMENT_RECEIVED。
+
+终局结果必须绑定已验证的 provider/settlement evidence、可信来源与对应 case/organization lineage。
+
+增加伪造终局结果的真实 PostgreSQL 拒绝测试。
+
+在外部 Provider HOLD 时，不得通过模拟终局事实使生产任务进入业务完成状态。
+
+可以保持既有结果词表，不需要重建状态机。
+
+裁决：CHANGE3_BUSINESS_OUTCOME_TRUTH = REVISE。
+
+五、CHANGE 4：REVISE
+
+六项稳定性场景均有价值，特别是：
+
+多 worker 抢占未重复领取。
+
+旧 owner 续租被 fencing 拒绝。
+
+崩溃后的租约接管。
+
+数据库异常时 fail-closed。
+
+但是，三次全套件结果为：
+
+PASS
+FAIL 1
+PASS 68/68
+
+中间失败用例没有记录，因此无法判断是共享表隔离、连接资源竞争，还是新代码引起的实际问题。
+
+CHANGE 4A（P1）：失败定位与隔离
+
+要求 Codex：
+
+保存完整测试日志，包括失败用例名称、堆栈及测试数据库标识。
+
+排查 S1/S3/S5 的客户端释放、数据清理和共享表竞争。
+
+针对受影响套件实施隔离，不能通过跳过用例掩盖问题。
+
+在固定环境下连续运行至少 5 轮相关完整套件，全部通过后提交记录。
+
+保留小时级 soak、真实断电及 Linux 多进程验证为独立生产验收事项。
+
+裁决：CHANGE4_RUNTIME_STABILITY = REVISE。
+
+六、P0-B 为什么还不能 CLOSED？
+
+原始 P0-B 是生产任务进入 Recovery SI 后持续 BLOCK，无法进入实际业务链。
+
+本轮已经证明生产入口能够装配 Recovery Pack，也提供了任务派发到 recovery-si 的证据。
+
+但仍缺少一条完整的生产同构验证：
+
+真实 RSI 启动入口
+
+PRODUCT_RECOVERY_SI 已装配
+
+Durable 任务领取 + 授权复核
+
+PG 测试已提供证据
+证据待补
+
+Recovery 真实业务步骤执行
+
+可信 read ports → 机会识别 / 索赔准备 → durable 业务结果
+
+CHANGE P0-B1（P0）：生产同构业务链 E2E
+
+使用真实 PostgreSQL、真实 Recovery Pack、真实 controller/event loop 和现有业务 read ports，至少证明：
+
+有效授权任务从 rsi-run 同构组装入口进入业务步骤。
+
+真实 Recovery domain step 确实执行，而不只是写入 dispatch 日志。
+
+本地机会识别或索赔准备结果产生可审计的 durable 记录。
+
+未授权、跨租户和授权中途撤销时，业务步骤不会执行。
+
+全程不进行外部写入、不依赖真实 Provider 凭据、不新增第二 runtime。
+
+因此，P0_B_CLOSED = NO。这并不否定现有 C5 的修复，只是证据尚不足以宣布原始生产执行断点完全关闭。
+
+七、下一轮执行范围
+
+本轮不要求重新开发整个 PHASE 2。
+
+只需要完成三个最小单元：3A 可信终局事实、4A 测试稳定性、P0-B1 真实业务步骤 E2E。
+
+三项通过后，可申请 PHASE 2 FINAL-R2 独立复审。无需等待真实 Provider API、Stripe、关税申报或生产服务器部署；这些继续保持 HOLD。
+
+八、机器可读终局块
+
+CODEX-SI-RSI-P2-FINAL
+
+复制裁决
+
+以下内容可直接交给 Codex 执行。
+
+纯文本
+REVIEWED_HEAD = 461c54e1
+PHASE2_FINAL_VERDICT = REVISE
+
+CHANGE1 = PASS
+CHANGE2 = PASS
+CHANGE3 = REVISE
+CHANGE4 = REVISE
+
+P0_B_CLOSED = NO
+PHASE2_CLOSED = NO
+
+NEXT =
+  CHANGE_3A_TRUSTED_TERMINAL_EVIDENCE
+  + CHANGE_4A_TEST_ISOLATION
+  + P0_B1_REAL_DOMAIN_E2E
+  + REQUEST_PHASE2_FINAL_R2_AUDIT
+
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+PRODUCTION_READY = NO
+
+最终裁决：REVISE，非 FAIL。 已验证的启动装配、可信租户控制和执行前授权复核予以保留；下一轮只补足三处证据和实现缺口，不允许为通过审计而放宽安全门禁，也不允许修改已封板 RC。
+```

@@ -655,3 +655,64 @@ R6 断言已按实测更新为「无 recovery-si 记录 + caller runner 0」—�
 **送审内容来源（已在库内，可重放）**：本文件 §3.7（CHANGE 1 实跑取证）、§3.8（CHANGE 2 执行前复核）、
 §3.9（CHANGE 3 业务结果词表）、§3.11（CHANGE 4 租约续租 + 稳定性 6/6），以及 §3.6 的 4 项 CHANGE 原文。
 送审锚点 `REVIEWED_HEAD = 461c54e1`。
+
+### 3.13 PHASE 2 FINAL 独立审计结论（`MSG-20261008-20`）= **REVISE**（PHASE 2 仍未 CLOSED）
+
+- 会话：`https://chatgpt.com/c/6ac7af0b-07c0-83ec-a2d8-c558610bab71`（本轮**新开**会话，未复用旧会话）
+- 审查锚点：`461c54e1`；送审标记 `CODEX-SI-RSI-P2-FINAL`
+- **投递三项校验**：① composer 清空（粘贴前仅余 1 字符空段落 → 粘贴后 **4496 字符，与请求文本长度完全相等，无重复**）；
+  ② 标记作为**新用户轮**出现；③ 进入生成态（`停止` 按钮在场）。
+- **逐字归档**：`AI-ARCHITECT-INBOX.md` → `MSG-20261008-20`
+  （`FNV1A_MATCH 12cfa524`（原文文件 = 浏览器抽取）；`FULL_COPY_OK` 原文 126 行 / 归档 126 行 / 缺失 0 / 多出 0）
+- **抽取纪律（本轮的教训修正）**：不再使用「最小 div 含 VERDICT」的启发式（上轮因此只拿到 317 字页脚）。
+  本轮用「以 `CrossClaim · SI-RSI PHASE 2 FINAL` 开头 **且** 含 `PHASE2_FINAL_VERDICT` **且** 不含 `Text length check` 的**最短** `div`」双条件定位，
+  抽取后由执行器 REPL **直接落盘**为源文件再交给 `tools/verification/archive-verdict.mjs`，**不经人工转写**。
+
+**逐项裁决（审计方口径）**
+
+| 项 | 裁决 | 依据摘要 |
+| --- | --- | --- |
+| CHANGE1_PRODUCTION_ENTRY | **PASS** | `dist/src/runtime/rsi-run.js` 实际启动并输出 `PRODUCT_RECOVERY_SI`；启动入口一致性 5/5 PASS；未发现第二套 runtime 的结构性证据。限定：入口一致性成立，**不代** 表 Linux/systemd 实机通过 |
+| CHANGE2_TRUSTED_TENANT_AND_AUTH_TIMING | **PASS** | `executionPreflight` 构成必要安全线程；C2-2 证明「执行前授权被撤销 ⇒ 系统拒绝执行」；C2-3/C2-4 覆盖撤销原因码与跨租户读端口 |
+| CHANGE3_BUSINESS_OUTCOME_TRUTH | **REVISE** | 词表方向正确，但**缺少可信终局事实的来源证据**：终局结果必须绑定已验证的 provider/settlement evidence、可信来源与 case/organization lineage |
+| CHANGE4_RUNTIME_STABILITY | **REVISE** | 6/6 场景通过，但全套件三次运行为 绿 → FAIL 1 → 绿（未记录失败用例）⇒ 不能宣告稳定 |
+| P0_B_CLOSED | **NO** | 原始 P0-B 是「生产任务进入 Recovery SI 同步链 BLOCK、无法进入实际业务链」；本轮只证明入口能装配 pack 且能派发 `recovery-si`，**缺少真实业务步骤执行的端到端证据** |
+| PHASE2_CLOSED | **NO** | 3 项 CHANGE 未关闭 |
+
+**本轮新增 3 个 CHANGE（审计方指定，最小范围；不重写已通过的 Recovery SI pack）**
+
+1. **CHANGE 3A（P0）可信终局事实**：终局结果（`PROVIDER_CONFIRMED` / `SETTLEMENT_RECEIVED`）必须在 `businessOutcome` 生成、
+   持久化与 `settle()` 的**完整调用链**上绑定「已验证的 provider/settlement evidence + 可信来源 + case/organization lineage」；
+   runner、任务输入与非可信调用者**不得自行声明**终局；增加「伪造终局结果」的真实 PostgreSQL 拒绝测试；
+   外部 Provider HOLD 期间**不得**用模拟终局事实把客户任务写成业务完成。
+2. **CHANGE 4A（P1）失败定位与隔离**：保存完整测试日志（含失败用例名、堆栈与测试数据库标记）；收拢 S1/S3/S5 的客户端释放、
+   数据清理与共享表竞争；对偶发失败用例实现隔离；在固定环境下连续运行 **≥5 轮**相关完整套件且全部通过后再提交记录；
+   小时级 soak、真实断电与 Linux 实机验收仍属**独立生产验收事项**。
+3. **CHANGE P0-B1（P0）生产同构业务链 E2E**（真实 PostgreSQL + 真实 Recovery Pack + 真实 controller/event loop + 现有业务 read ports）至少证明：
+   ① 有效授权任务从 `rsi-run` 同构组装入口进入业务步骤；② 真实 Recovery domain step 确实执行（而非只写 dispatch 日志）；
+   ③ 本地机会识别或索赔准备产生**可审计的 durable 记录**；④ 未授权 / 跨租户 / 授权中途撤销时业务步骤**不执行**；
+   ⑤ 全程无外部写入、不依赖真实 Provider 凭据、不新增第二 runtime。
+
+**审计方明确保留与限制**：已通过的生产启动装配、可信租户控制、执行前授权复核**予以保留**，不要求重写；
+下一轮只补足三处证据与实现缺口；**不允许为通过审计放宽安全门禁**，不允许修改已封板 RC。
+三项通过后可申请 **PHASE 2 FINAL-R2** 独立复审。
+
+**状态登记**
+```
+REVIEWED_HEAD = 461c54e1
+PHASE2_FINAL_VERDICT = REVISE
+CHANGE1 = PASS
+CHANGE2 = PASS
+CHANGE3 = REVISE
+CHANGE4 = REVISE
+P0_B_CLOSED = NO
+PHASE2_CLOSED = NO
+NEXT = CHANGE_3A_TRUSTED_TERMINAL_EVIDENCE + CHANGE_4A_TEST_ISOLATION + P0_B1_REAL_DOMAIN_E2E + REQUEST_PHASE2_FINAL_R2_AUDIT
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+PRODUCTION_READY = NO
+```
+
+**送审瑕疵（如实登记；不影响裁决判据）**：本轮请求正文末尾多出一行无意义的 `Text length check:`（送审脚本模板残留）。
+该行位于全部送审判据**之后**，未影响任何 CHANGE 判据，故**未重发**请求（避免重复送审产生第二份裁决）；其余正文与 §3.6–§3.11 一致。
+
+**本 tick 的下一单元（从 `461c54e1` 之后的当前 HEAD 继续，不询问用户）**：CHANGE 3A → CHANGE 4A → P0-B1 → PHASE 2 FINAL-R2 复审。
