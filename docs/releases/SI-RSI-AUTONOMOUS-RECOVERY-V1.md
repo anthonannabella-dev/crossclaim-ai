@@ -236,7 +236,7 @@ NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
 | **C2** 运行中租约恢复 + fencing（P0） | **CLOSED** | 新增 `reclaimExpired()`：对**已到期** ACTIVE 租约做 CAS(`ACTIVE+expiresAt<=now ⇒ EXPIRED`) 并把任务 CAS(`IN_PROGRESS ⇒ READY`)，**无需进程重启**；接入既有 tick（`adoptFromTaskSource` 先 reclaim 再 claim）。新增 `settle()`：只有「本 owner 且未过期 ACTIVE 租约」才允许落终态 ⇒ 旧 worker 迟到提交被 fence 拒绝 |
 | C3 完整生命周期/重试/死信（P0） | **CLOSED** | 见 §2.4（Schema Delta + 退避门禁 + fence 保护的 `fail()` + 死信终态 + DB 层不变量） |
 | C4 租户/账户/授权与撤销拦截（P0） | **CLOSED** | 见 §2.5（领取前授权重解析 + 撤销/过期 BLOCK + 持久化原因码） |
-| C6 多 worker 故障注入矩阵（P1） | PARTIAL | 已覆盖：并发领取、租约过期接管、旧 worker 迟到提交（fencing）、重复提交、事务失败（约束违反即整体失败）；未覆盖：跨租户/账户边界矩阵 |
+| C6 多 worker 故障注入矩阵（P1） | **CLOSED** | 见 §2.6（8 类场景矩阵，含数据库事务失败注入与跨租户边界） |
 | C7 发布配置与 CI（P1） | PARTIAL | API 与 RSI 已共用同一 durable 源；JSON 仅显式 legacy 回退；CI 命中未验证（GitHub Actions = NOT_OBSERVED） |
 | C5 → PHASE 2 Recovery 装配（P0） | NOT STARTED | 见 PHASE 2 |
 
@@ -324,6 +324,23 @@ NEXT                         = PHASE1_FINALIZATION → PHASE 2 → PHASE 3–6
 **既有测试夹具同步更新**：PHASE 1 的 C1/C2/C3 用例现在会 seed 真实 `Organization`（含 `slug`）与
 合规 `StandingAuthorization`（`allowedActionTypes` 非空、`scopeDigest` 64 位、撤销态带完整凭证）
 —— 这正是「执行前必须从可信库重解析」的必然要求，不是为通过测试而放宽逻辑。
+
+### 2.6 C6 —— 多 worker 故障注入矩阵已关闭
+
+`apps/api/src/__tests__/si-rsi-phase1-fault-matrix.test.ts`（真实 PostgreSQL **8/8 PASS**）
+
+| 用例 | 场景 | 断言 |
+| --- | --- | --- |
+| M1 | 并发领取（3 任务 × 5 worker） | 每个任务**恰好一个赢家**，总数 = 3，租约 = 3 |
+| M2 | 租约过期与重新领取 | `reclaimExpired` 接管后新 worker 领取成功（进程未重启） |
+| M3 | 旧 worker 迟到提交 | `settle` 与 `fail` **双双被 fence 拒绝**，`status`/`attempts` 不被覆盖；新 owner 提交成功 ⇒ `PROMOTED` |
+| **M4** | **数据库事务失败注入**（`leaseMs=-1000` ⇒ 违反 `AutonomyLease_time_order_chk`） | claim **整体回滚**：任务仍 `READY`、**零租约**；健康 worker 随后仍可正常领取 ⇒ 直接证明 C1 原子性 |
+| M5 | 重启恢复 | 中断在 `IN_PROGRESS` 的任务经既有 reconcile 回到 `READY` 并可重新领取 |
+| M6 | 重复任务提交 | 同 `dedupeKey` 幂等（单行 + `alreadyPresent`）；已被领取后不再重复执行 |
+| M7 | 跨租户 / 账户边界 | 撤销 org-A 授权后：仅 org-A 任务被 `BLOCKED`，**org-B 任务照常执行** |
+| M8 | 幂等与重复副作用控制 | 重复 `settle` ⇒ `LEASE_NOT_ACTIVE`（不二次生效）；迟到 `fail` 不改动 `attempts`；终态保持 `PROMOTED` |
+
+回归：PHASE 1 全量（5 个 SI-RSI 套件 + P0 复现 + 既有持久化/reconcile 契约）= **54/54**；api tsc **0**。
 
 ---
 

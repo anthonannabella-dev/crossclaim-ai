@@ -47,11 +47,10 @@ const DEFAULT_STATE = {
   lastResult: null,
   lastExitCode: null,
   openChanges: [
-    { id: 'C6', phase: 1, title: '多 worker 故障注入矩阵', priority: 'P1', status: 'OPEN' },
     { id: 'C7', phase: 1, title: '发布配置与 CI 核验', priority: 'P1', status: 'OPEN' },
     { id: 'C5', phase: 2, title: 'PHASE 2：Recovery pack 生产装配', priority: 'P0', status: 'OPEN' },
   ],
-  closedChanges: ['C1', 'C2', 'C3', 'C4'],
+  closedChanges: ['C1', 'C2', 'C3', 'C4', 'C6'],
   phases: { '1': 'IN_PROGRESS', '2': 'NOT_STARTED', '3': 'NOT_STARTED', '4': 'NOT_STARTED', '5': 'NOT_STARTED', '6': 'NOT_STARTED' },
   lastAudit: { id: 'MSG-20261008-16', verdict: 'PASS WITH REVISE', reviewedHead: '51c1f18e' },
 };
