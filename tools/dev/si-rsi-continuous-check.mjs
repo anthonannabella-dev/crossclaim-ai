@@ -47,7 +47,7 @@ const DEFAULT_STATE = {
   lastResult: null,
   lastExitCode: null,
   openChanges: [
-    { id: 'AUDIT-P2', phase: 2, title: 'PHASE 2 独立审计（C5 生产装配 + E2E）→ 关闭 P0-B', priority: 'P0', status: 'OPEN' },
+    { id: 'AUDIT-P2-CHANGES', phase: 2, title: '向审计方索取 PHASE 2 的 4 项 CHANGE 明细（裁决正文未列出）并实施', priority: 'P0', status: 'OPEN' },
     { id: 'C5', phase: 2, title: 'PHASE 2：Recovery pack 生产装配', priority: 'P0', status: 'CODE_DONE_PENDING_AUDIT' },
   ],
   closedChanges: ['C1', 'C2', 'C3', 'C4', 'C6', 'C7', 'AUDIT-P1'],

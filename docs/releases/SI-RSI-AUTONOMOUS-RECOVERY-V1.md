@@ -494,3 +494,31 @@ AUDIT_BASIS=CODEX_REPORTED_EVIDENCE_NOT_INDEPENDENTLY_EXECUTED
 
 **仍未完成（下一单元）**：完整 PHASE 2 端到端（真实 PG 全链路 + 故障注入 + 授权复核 + durable 恢复 + 跨租户）
 与 **AUDIT-P2**；P0_B_CLOSED 需该端到端验收通过后才可声明。
+
+### 3.5 PHASE 2 审计结论（`MSG-20261008-18`）= PASS_WITH_REVISE（**未 CLOSED**）
+
+审查锚点 `56074920`；会话 `https://chatgpt.com/c/6ac7a850-bf48-83ec-bf2f-3ccc7b1569a1`；
+逐字归档 `AI-ARCHITECT-INBOX.md`（FULL_COPY_OK 12/12；sha256 `3ba75b5b…`）。
+
+```
+REVIEWED_HEAD = 56074920
+C5_IMPLEMENTATION = PASS
+C5_REAL_PG_E2E = PASS
+C5_SECURITY_BOUNDARY = PASS
+PHASE2_VERDICT = PASS_WITH_REVISE
+PHASE2_CLOSED = NO
+P0_B_CLOSED = NO
+CHANGES_REQUIRED = 4
+PHASE2_SAFE_REVISIONS_AUTHORIZED = YES
+PHASE3_AUTHORIZED = NO
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+PRODUCTION_READY = NO
+```
+
+**如实登记的口径缺口**：该裁决**只给出数量 `CHANGES_REQUIRED = 4`，未列出四项明细**。
+按「禁止虚构裁决」的边界，本轮**不推断、不臆造**这四项内容；下一单元的显式动作是
+**向审计方索取 4 项 CHANGE 的逐条明细**，再据此实施并按需复审，直至 PHASE 2 = CLOSED。
+
+**注意**：`C5_SECURITY_BOUNDARY = PASS` 但 `P0_B_CLOSED = NO` —— 说明接线本身被认可，
+关闭 P0-B 还依赖那 4 项修订；**不得**在实施与复审前声明 P0-B 关闭或进入 PHASE 3
+（`PHASE3_AUTHORIZED = NO`）。
