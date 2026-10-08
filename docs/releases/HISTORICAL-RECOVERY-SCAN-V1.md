@@ -690,3 +690,33 @@ durable 行 `RUNNING / nextShardIndex=2`；第二次同一域步骤调用（新�
 **对 §13.15 的更正**：该节记录的「AUDIT-2R5 已投递」在本会话侧当时确实通过了三项投递校验，但**服务端未持久化**该消息
 （会话恢复后可见最后一条用户轮为单个「在」，无 2R5 标记）——已按协议重发并在本会话重新校验（composer 清空 + 标记出现在新用户轮 + 生成中），
 随后收到上表裁决。审计通道在该时段对**该会话**不可用（重试 / 重载 / 新标签均失败），现已恢复。
+
+### 18. PHASE 14 完成 —— 浏览器验收发现并修复一个**真实缺陷**（`GET /recovery-scans/:id` 405）
+
+**发现（由桌面 + 移动端真实旅程捕获；静态检查与 api-contract 均未发现）**
+
+* 结果页 `/recoveries/scans/:id` 在旅程中**恒为空态**（「还没有可显示的历史扫描结果。」），
+  `scan.result.coverage.notice` / `scan.result.boundary.note` 失败。
+* 定位：`apps/api/src/services/workflow/http-routes.ts` 的方法阶梯**未把 `recoveryScan` 列入 GET 白名单**，
+  于是落到默认 `['POST']` → `GET /recovery-scans/:id` 返回 **405 METHOD_NOT_ALLOWED**（Node 侧探针实测 `status=405`）。
+  ⇒ 只读结果页属于「纸面端点、实际不可达」；服务层单测与 `ui-render-check`（fixture 渲染）都不会暴露该缺口。
+
+**修复**
+
+* `http-routes.ts`：把 `recoveryScan !== null` 加入 GET 白名单分支（写入方法仍拒绝：`POST` → 405 保持）。
+* 新增 `apps/api/src/__tests__/historical-scan-http.test.ts`（真实 HTTP + PostgreSQL，3/3）：
+  ① 认证 `GET /recovery-scans/:id` → 200 只读投影（coverage=SOURCE_LIMITED、requestedMonths=60、claimsFiled=0、
+  filing/payment/externalWrite=false）；② 缺会话 → 401、跨租户 → 404（不泄漏存在性）；③ `POST` → 405（只读端点不接受写入方法）。
+* 验收旅程扩展：`apps/web/acceptance/customer-e2e/journey.mjs`（desktop 1440×900 + mobile 390×844 访问结果页，断言标题 /
+  覆盖不完整提示 / 边界说明「尚未向任何平台、报关行或支付渠道提交」/ 无原始枚举 / 无申报声称 / 移动端无横向溢出；
+  并含 Node 侧 API 探针以避开 CORS 干扰）＋ `apps/api/acceptance/seed-recovery-scan.ts`（acceptance-only 种子，
+  只调用既有 server-owned 链路：Goal 编译 → durable scan → 既有回填；每次运行生成唯一 Goal 身份，避免跨运行串组织）。
+
+**证据（修复后）**
+
+* 浏览器验收：**CHECKS_PASSED=123 / CHECKS_FAILED=0**（`reports/acceptance/2026-10-08T04-47-20-994Z`），含
+  `scan.result.api.probe / coverage.notice / boundary.note`、`mobile.scan.result.*`、`browser.console.no.errors`、
+  `browser.no.uncaught.exceptions` 全部 PASS。
+* `historical-scan-http` 3/3；api tsc 0；`historical-scan-*` 全量批次保持全绿；全量回归仍为 4657/4658（唯一失败 = 既有 P2E-DB5 flake，隔离 20/20）。
+* **诚实记录**：该缺陷存在于 §10 的 UI_RESULT_VIEW 交付中，AUDIT-1（PHASE 8 + UI_RESULT_VIEW）当时**未发现**
+  （其证据为视图渲染 + api-contract，未覆盖 HTTP 方法白名单）；本节为 PHASE 14 的补强，并将随 AUDIT-4 送审。
