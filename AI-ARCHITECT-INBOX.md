@@ -164770,3 +164770,438 @@ RC-20261008-LINUX-DEPLOY-PREP 的本轮修复可接受；Linux 部署准备仍�
 
 本裁决仅在当前会话返回，未写入仓库。
 ```
+
+### [MSG-20261008-15] RC-LINUX-DEPLOY FINALIZATION 独立复审（CHANGE 1 + CHANGE 3，reviewed ref 40ea2b4d）= PASS WITH REVISE；CHANGE_1_SYSTEMD / CHANGE_3_RECONCILE / INCOMPLETE_ITEMS_HONESTY / FULL_REGRESSION_HONESTY 全 PASS；RC_LINUX_DEPLOY_FINALIZATION = CLOSED_NO；9 项 RC-C CHANGE（5 项 P0）与 5 项 RISK；PRODUCTION_READY = NO
+
+```text
+CROSSCLAIM · RC-LINUX-DEPLOY FINALIZATION 独立复审裁决
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 40ea2b4d
+BRANCH: release/rc-20261008-linux-deploy
+TIP: 8924fa2a（据提交报告，仅文档回填）
+AUDIT: CODEX-RC-AUDIT-2
+审查范围: CHANGE 1 + CHANGE 3
+
+审查依据： 本次提交的实现说明、测试矩阵及运行证据。未独立检出 Git commit、检查源码或复跑测试，因此以下属于基于送审证据的架构复审，不构成 Git 实测认证。
+
+一、逐项裁决
+
+审计项目
+
+	
+
+裁决
+
+	
+
+说明
+
+
+
+
+CHANGE_1_SYSTEMD
+
+	
+
+PASS
+
+	
+
+三服务 unit、入口路径、账户权限、环境文件、重启停止策略、日志及安装脚本已提供完整实现与合同测试证据
+
+
+
+
+CHANGE_3_RECONCILE
+
+	
+
+PASS
+
+	
+
+接入现有 Prisma Reconcile，三态启动策略明确，无第二运行时及内存兜底
+
+
+
+
+INCOMPLETE_ITEMS_HONESTY
+
+	
+
+PASS
+
+	
+
+Linux 实机、生产队列、fencing、TLS、真实模型等未完成事项均明确披露
+
+
+
+
+FULL_REGRESSION_HONESTY
+
+	
+
+PASS
+
+	
+
+两次全量回归失败数量如实报告，未把定向测试全绿等同于全量通过
+
+二、CHANGE 1 · Systemd 审查
+
+结论：PASS（静态配置与本机合同测试范围）。
+
+已满足的设计要求：
+
+API、Web、RSI 分别使用独立 systemd 服务。
+
+三个 ExecStart 均指向明确的构建产物或 Next.js 启动入口。
+
+RSI 保持唯一运行入口，不引入第二调度器。
+
+使用独立系统账户及环境文件，不在 unit 内写入生产凭据。
+
+采用受限可写目录、失败重启、启动限速、SIGTERM 优雅停止及 journald 日志。
+
+安装器和 19 项合同测试已有通过证据。
+
+重要限定： crossclaim-rsi.service 只有一个 unit，不等于已经证明跨机器、跨进程仅有一个有效执行者。后者依赖数据库租约、续租、失效检测及 fencing 的实际正确性。
+
+此外，StateDirectory、ReadWritePaths、.next 缓存权限及 systemd 服务启动顺序，仍需在阿里云 Linux 实机验证。
+
+不因此推翻 CHANGE 1 的静态实现 PASS，但不得宣称 Linux 部署验收已经 CLOSED。
+
+三、CHANGE 3 · Durable Reconcile 审查
+
+结论：PASS（启动接线及 Reconcile 语义范围）。
+
+认可以下实现：
+
+DATABASE_URL 存在时接入既有 Prisma Reconcile Store。
+
+显式要求持久化、但缺少数据库地址时，以非零退出码拒绝启动。
+
+未要求持久化且缺少数据库时，明确标注 NOT_CONFIGURED。
+
+不建立第二套 Store、Scheduler、Controller 或 Runner。
+
+PostgreSQL 证据覆盖过期租约恢复、重复运行幂等性及有效租约保持。
+
+但仍有三个必须明确的边界：
+
+CHANGE 3-A：DATABASE_URL 来源
+
+Prisma 隐式加载 .env 可能掩盖配置缺失。后续应保证生产环境变量来源明确可审计，不能依赖开发目录中的隐式 dotenv 行为。
+
+CHANGE 3-B：PRODUCTION_DURABLE_QUEUE_REQUIRED
+
+Reconcile Store 持久化不等于任务队列已经强制持久化。
+
+生产运行必须禁止静默降级到内存队列，并验证重启后任务仍可恢复。
+
+CHANGE 3-C：租约 fencing
+
+过期租约恢复正确，不代表旧执行者恢复运行后无法写入。
+
+缺少独立 leaseEpoch 或 fencingVersion，仍可能出现过期执行者提交陈旧结果的风险。
+
+以上不否定本次 Reconcile 接线的 PASS，但生产运行安全性不得据此判定 PASS。
+
+四、全量回归裁决
+
+FULL_REGRESSION_HONESTY = PASS
+
+验证项
+
+	
+
+报告结果
+
+
+
+
+API TypeScript
+
+	
+
+PASS
+
+
+
+
+API Build
+
+	
+
+PASS
+
+
+
+
+Prisma Validate
+
+	
+
+PASS
+
+
+
+
+定向回归
+
+	
+
+601/601 PASS
+
+
+
+
+第一次全量回归
+
+	
+
+4697/4702 PASS
+
+
+
+
+第二次全量回归
+
+	
+
+4701/4702 PASS
+
+
+
+
+P2E-DB5 单独运行
+
+	
+
+20/20 PASS
+
+
+
+
+GitHub Actions
+
+	
+
+NOT_OBSERVED
+
+认可对测试隔离问题的分析，但目前只能将其判定为疑似既有隔离或顺序依赖问题，不能仅凭失败未复现以及改动文件范围就证明与本单元完全无关。
+
+FULL_REGRESSION_100_PERCENT_GREEN = NO
+
+不得写为全部测试通过，也不得据此宣布最终发布门禁通过。
+
+五、CHANGES · 后续必须收敛的事项
+
+编号
+
+	
+
+要求
+
+	
+
+优先级
+
+
+
+
+RC-C1
+
+	
+
+阿里云 Linux 实机 systemd A–F，包括 kill -9、reboot 和 reconcile
+
+	
+
+P0
+
+
+
+
+RC-C2
+
+	
+
+完成 TLS / 反向代理 CHANGE 2，需 HOST 确认方案
+
+	
+
+P0
+
+
+
+
+RC-C3
+
+	
+
+明确生产 Durable Queue 强制条件，缺失时 fail-closed
+
+	
+
+P0
+
+
+
+
+RC-C4
+
+	
+
+对历史扫描写入增加 fencing 或等价的严格并发防护
+
+	
+
+P0
+
+
+
+
+RC-C5
+
+	
+
+消除或证明单页 fetchPage 超 leaseMs 不会产生重复/陈旧写入
+
+	
+
+P0
+
+
+
+
+RC-C6
+
+	
+
+清理 P2E-DB5 与共享测试数据隔离债，并取得稳定全量回归结果
+
+	
+
+P1
+
+
+
+
+RC-C7
+
+	
+
+执行 deploy-smoke、backup-verify、数据库触发器及一致性 SQL
+
+	
+
+P0
+
+
+
+
+RC-C8
+
+	
+
+显式化 Prisma 环境变量来源，并核验生产环境文件权限
+
+	
+
+P1
+
+
+
+
+RC-C9
+
+	
+
+完成真实模型/Provider 沙箱验证及 GitHub Actions 取证
+
+	
+
+P0（对应功能开放前）
+
+这些事项不必全部归入本次 CHANGE 1/3 的代码修复范围，但必须进入发布阻断项清单。
+
+六、RISKS · 风险判定
+
+R1 · 生产队列未强制持久化
+
+HIGH
+
+进程重启后存在任务状态无法完整恢复的风险，需通过生产启动门禁与恢复测试证明。
+
+R2 · Historical Scan 缺少独立 fencing
+
+HIGH
+
+可能允许失效执行者提交陈旧结果。特别关注租约过期、旧进程恢复及长时间 fetchPage 场景。
+
+R3 · Linux 实机未验收
+
+MEDIUM–HIGH
+
+静态合同测试不能替代真实 systemd、文件权限、服务依赖、重启及数据库断连测试。
+
+R4 · 全量测试仍存在非绿色结果
+
+MEDIUM
+
+目前证据倾向于测试隔离债，但缺少完全稳定的全量回归证明。
+
+R5 · 外部 Provider 与生产配置未启用
+
+MEDIUM–HIGH
+
+无法据此验证真实业务端到端追回及收费能力。
+
+七、最终机器可读裁决
+纯文本
+AUDIT_ID=CODEX-RC-AUDIT-2
+REVIEWED_HEAD=40ea2b4d
+BRANCH=release/rc-20261008-linux-deploy
+
+CHANGE_1_SYSTEMD=PASS
+CHANGE_3_RECONCILE=PASS
+INCOMPLETE_ITEMS_HONESTY=PASS
+FULL_REGRESSION_HONESTY=PASS
+
+VERDICT=PASS WITH REVISE
+
+CHANGE_1_STATIC_CONTRACT=PASS
+CHANGE_3_RECONCILE_WIRING=PASS
+TARGETED_REGRESSION=PASS
+FULL_REGRESSION_100_PERCENT_GREEN=NO
+LINUX_SYSTEMD_REAL_HOST_VERIFIED=NO
+PRODUCTION_DURABLE_QUEUE_VERIFIED=NO
+HISTORICAL_SCAN_FENCING_VERIFIED=NO
+TLS_REVERSE_PROXY_READY=NO
+DEPLOY_SMOKE_VERIFIED=NO
+BACKUP_RESTORE_VERIFIED=NO
+GITHUB_ACTIONS_VERIFIED=NO
+REAL_PROVIDER_VALIDATION_COMPLETE=NO
+
+RC_CHANGE_1_3_CODE_SCOPE=ACCEPTED_WITH_HOST_VALIDATION_PENDING
+RC_LINUX_DEPLOY_FINALIZATION=CLOSED_NO
+PRODUCTION_READY=NO
+PRODUCTION_EXTERNAL_WRITE=HOLD
+PRODUCTION_PAYMENT=HOLD
+
+NEXT_ACTION=COMPLETE_RC_RELEASE_BLOCKERS_AND_REAL_LINUX_ACCEPTANCE
+最终意见
+
+批准 CHANGE 1 与 CHANGE 3 的本次实现范围通过复审，不要求推翻或重写已有实现。
+
+下一阶段应继续完成生产部署阻断项，优先验证 Durable Queue、Historical Scan fencing 及阿里云 Linux 实机服务恢复。TLS 方案仍需宿主明确授权。
+
+本次裁决只证明提交材料中的部署接线及恢复设计达到阶段性验收要求，不代表 CrossClaim 已具备生产部署、真实追回、自动提交或自动扣佣的开放条件。
+
+最终裁决：PASS WITH REVISE。
+
+本回复仅作为独立复审意见，未写入或修改任何仓库文件。
+```

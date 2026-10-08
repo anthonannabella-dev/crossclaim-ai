@@ -174,3 +174,40 @@ DATABASE_URL 缺失 + 未要求                        ⇒ RSI_RECONCILE=NOT_CON
   **未触碰** Payment / Recovery-SI / Organization 领域实现或 Schema。
 
 > 该债已作为 AUDIT-RC-1 CHANGE 5 的要求继续跟踪；本单元未关闭它。
+
+---
+
+## 6. 投递与裁决记录（AUDIT-RC-2）
+
+| 项 | 值 |
+| --- | --- |
+| 通道 | 右侧**新会话** `https://chatgpt.com/c/6ac76ddc-5924-83ec-8c28-a73ad667e425`（标题「独立复审部署变更」） |
+| 标记 | `[CODEX-RC-AUDIT-2]` |
+| 投递校验 1 · 新用户轮出现 | **PASS**（含标记，正文与送审文本逐字一致） |
+| 投递校验 2 · composer 清空 | **PASS**（`contenteditable` 长度 = 1，仅换行） |
+| 投递校验 3 · 生成指示 | **PASS**（出现「停止」；随后「回答已完成」） |
+| 提取方式 | 直接读取 DOM 渲染文本（非 accessibility tree），并校验为 `document.body.innerText` **连续子串** |
+| 原文 | 430 行 / 4367 字符；sha256 `0413ea8f10d6b29f44e03e3918f5a41d5bee661597cfc003298dde4a360cb0ea` |
+| 归档 | `AI-ARCHITECT-INBOX.md` → **`MSG-20261008-15`** |
+| 逐字校验 | `tools/verification/archive-verdict.mjs` + `tools/verdict-diff/compare.mjs` → **`RESULT: FULL_COPY_OK`**（原文 159 行 / 归档 159 行 / 缺失 0 / 多出 0） |
+
+**裁决**：`VERDICT = PASS WITH REVISE`
+
+| 审计项 | 裁决 |
+| --- | --- |
+| CHANGE_1_SYSTEMD | PASS |
+| CHANGE_3_RECONCILE | PASS |
+| INCOMPLETE_ITEMS_HONESTY | PASS |
+| FULL_REGRESSION_HONESTY | PASS |
+
+**复审提出的 9 项后续事项**：RC-C1（Linux 实机 systemd A–F，P0）、RC-C2（TLS/反代，P0）、
+RC-C3（生产 Durable Queue 强制条件，P0）、RC-C4（历史扫描 fencing，P0）、RC-C5（`fetchPage` 超 `leaseMs`，P0）、
+RC-C6（P2E-DB5 与共享测试隔离债，P1）、RC-C7（deploy-smoke / backup-verify / 触发器与一致性 SQL，P0）、
+RC-C8（显式化 Prisma 环境变量来源，P1）、RC-C9（真实 Provider 沙箱 + GitHub Actions，P0）。
+
+**机器可读结论**：`RC_CHANGE_1_3_CODE_SCOPE=ACCEPTED_WITH_HOST_VALIDATION_PENDING`、
+`RC_LINUX_DEPLOY_FINALIZATION=CLOSED_NO`、`PRODUCTION_READY=NO`、
+`NEXT_ACTION=COMPLETE_RC_RELEASE_BLOCKERS_AND_REAL_LINUX_ACCEPTANCE`。
+
+> 复审明确声明：其结论基于送审材料，**未独立检出 commit / 未复跑测试**，不构成 Git 实测认证。
+> 因此本 RC 的定位仍是「代码与静态/本机证据已就绪」，**不是**「已通过实机部署验收」。

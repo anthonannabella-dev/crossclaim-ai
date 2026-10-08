@@ -130,3 +130,78 @@ DATABASE_URL 缺失 + 未要求                        ⇒ RSI_RECONCILE=NOT_CON
 修改：`deploy/systemd/crossclaim-rsi.service`、`deploy/install-rsi-service.sh`、`apps/api/src/runtime/rsi-run.ts`。
 
 **未改动**：`main`、`release/integration-20261008`、任何 Prisma schema / migration、`SECOND_*` 相关实现。
+
+---
+
+## 6. 独立复审结果（AUDIT-RC-2 = `MSG-20261008-15`）
+
+**VERDICT = PASS WITH REVISE**（reviewed ref `40ea2b4d`）
+
+| 审计项 | 裁决 |
+| --- | --- |
+| CHANGE_1_SYSTEMD | **PASS** |
+| CHANGE_3_RECONCILE | **PASS** |
+| INCOMPLETE_ITEMS_HONESTY | **PASS** |
+| FULL_REGRESSION_HONESTY | **PASS** |
+
+机器可读口径（原文节选）：
+
+```
+CHANGE_1_STATIC_CONTRACT=PASS
+CHANGE_3_RECONCILE_WIRING=PASS
+TARGETED_REGRESSION=PASS
+FULL_REGRESSION_100_PERCENT_GREEN=NO
+LINUX_SYSTEMD_REAL_HOST_VERIFIED=NO
+PRODUCTION_DURABLE_QUEUE_VERIFIED=NO
+HISTORICAL_SCAN_FENCING_VERIFIED=NO
+TLS_REVERSE_PROXY_READY=NO
+DEPLOY_SMOKE_VERIFIED=NO
+BACKUP_RESTORE_VERIFIED=NO
+GITHUB_ACTIONS_VERIFIED=NO
+REAL_PROVIDER_VALIDATION_COMPLETE=NO
+RC_CHANGE_1_3_CODE_SCOPE=ACCEPTED_WITH_HOST_VALIDATION_PENDING
+RC_LINUX_DEPLOY_FINALIZATION=CLOSED_NO
+PRODUCTION_READY=NO
+NEXT_ACTION=COMPLETE_RC_RELEASE_BLOCKERS_AND_REAL_LINUX_ACCEPTANCE
+```
+
+**复审给出的 9 项后续必须收敛事项**
+
+| 编号 | 要求 | 优先级 |
+| --- | --- | --- |
+| RC-C1 | 阿里云 Linux 实机 systemd A–F（`kill -9`、reboot、reconcile） | P0 |
+| RC-C2 | 完成 TLS / 反向代理（AUDIT-RC-1 CHANGE 2），需 HOST 确认方案 | P0 |
+| RC-C3 | 明确生产 Durable Queue 强制条件，缺失时 fail-closed | P0 |
+| RC-C4 | 历史扫描写入增加 fencing 或等价严格并发防护 | P0 |
+| RC-C5 | 消除或证明单页 `fetchPage` 超 `leaseMs` 不会产生重复/陈旧写入 | P0 |
+| RC-C6 | 清理 P2E-DB5 与共享测试数据隔离债，取得稳定全量回归 | P1 |
+| RC-C7 | 执行 deploy-smoke / backup-verify / 触发器与一致性 SQL | P0 |
+| RC-C8 | 显式化 Prisma 环境变量来源，核验生产环境文件权限 | P1 |
+| RC-C9 | 真实模型 / Provider 沙箱验证 + GitHub Actions 取证 | P0（功能开放前） |
+
+**复审风险**：R1 生产队列未强制持久化（HIGH）；R2 Historical Scan 缺独立 fencing（HIGH）；
+R3 Linux 实机未验收（MEDIUM–HIGH）；R4 全量测试仍非绿色（MEDIUM）；R5 外部 Provider 未启用（MEDIUM–HIGH）。
+
+**复审明确的两点保留意见（本轮不豁免）**：
+1. 「只有一个 unit」≠「跨机器只有一个有效执行者」——后者依赖 DB 租约与 fencing 的真实正确性；
+2. 过期租约恢复正确 ≠ 旧执行者复活后无法写入——缺 `leaseEpoch` / `fencingVersion` 仍有陈旧写入风险。
+
+> 归档：`AI-ARCHITECT-INBOX.md` → **`MSG-20261008-15`**，逐字比对 **`FULL_COPY_OK`**（159 行，缺失 0 / 多出 0）。
+
+---
+
+## 7. 状态登记（本单元收口）
+
+```
+RC_BRANCH                        = release/rc-20261008-linux-deploy
+CHANGE_1_SYSTEMD                 = PASS（静态实现 + 合同测试；实机待验证）
+CHANGE_3_RECONCILE               = PASS（接线 / 三态 / fail-closed；实机待验证）
+AUDIT_RC_2                       = PASS WITH REVISE（MSG-20261008-15）
+RSI_RECONCILE_STATUS             = 已接线；有 DB ⇒ PRISMA；无 DB+REQUIRED ⇒ 拒绝启动；无 DB+未要求 ⇒ NOT_CONFIGURED
+LINUX_SYSTEMD_REAL_HOST_VERIFIED = NO
+RC_LINUX_DEPLOY_FINALIZATION     = CLOSED_NO
+FULL_REGRESSION_100_PERCENT_GREEN= NO（两次 4697/4702、4701/4702）
+SECOND_RUNTIME / SCHEDULER / GUARD = 0
+PRODUCTION_READY                 = NO
+HOST_APPROVAL_REQUIRED           = Linux 实机 / TLS 方案 / 生产迁移 / 生产密钥 / 公开流量 / 外部写 / 支付
+```
