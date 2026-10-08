@@ -161573,3 +161573,135 @@ SECOND_*                 = 0
 
 结论：上一轮“缺 jurisdiction 默认 US”的具体漏洞已经 CLOSED；但 historicalWindow 仍可省略，因此完整的 CUSTOMS_CLAIM_READY_FAIL_CLOSED 还差最后一个极窄修订。
 ```
+
+### [MSG-20261008-03] HISTORICAL_RECOVERY_SCAN_V1 AUDIT-1R2 窄复审（REVIEWED_HEAD 658f8ea7）= PASS（CUSTOMS_CLAIM_READY_FAIL_CLOSED = PASS；AUDIT-1 CLOSED；不需 AUDIT-1R3）
+
+```text
+CUSTOMS_CLAIM_READY_FAIL_CLOSED = PASS
+
+VERDICT: PASS
+
+REVIEWED_HEAD: 658f8ea79326602af5d8ec4160801835eb3442f6
+
+这次最后一个旁路已经真正封住。
+
+纯文本
+historicalWindow 类型层 = 必填
++
+historicalWindow 运行时缺失/null = fail-closed
++
+blocksClaimReady=true = fail-closed
++
+缺 jurisdiction = fail-closed
+
+实际代码确认：
+
+TypeScript
+readonly historicalWindow: CustomsHistoricalWindowGate;
+
+同时没有只依赖 TypeScript。即使 JS / 反序列化绕过类型系统：
+
+纯文本
+gateInput === null || gateInput === undefined
+→ gateMissing = true
+→ HISTORICAL_WINDOW_GATE_MISSING
+
+而当底层 evaluateDrawbackCandidateRoute() 原本会返回 CLAIM_READY 时：
+
+纯文本
+gate missing
+OR jurisdiction missing
+OR blocksClaimReady=true
+→ NEEDS_MANUAL_REVIEW
+→ never CLAIM_READY
+
+因此上一轮指出的：
+
+纯文本
+省略 historicalWindow
+→ 回退到 only drawback route
+→ 可能 CLAIM_READY
+
+路径已经不存在。
+
+三层负向保护都成立
+纯文本
+① jurisdiction 缺失
+   → NEEDS_MANUAL_REVIEW
+   → MISSING_JURISDICTION
+
+② historicalWindow.blocksClaimReady = true
+   → NEEDS_MANUAL_REVIEW
+   → HISTORICAL_WINDOW_BLOCKS_CLAIM_READY
+   → PHASE 4 reason codes preserved
+
+③ historicalWindow 整体缺失
+   → NEEDS_MANUAL_REVIEW（对 otherwise-perfect CLAIM_READY candidate）
+   → HISTORICAL_WINDOW_GATE_MISSING
+
+正向路径也没有被误伤：
+
+纯文本
+explicit jurisdiction=US
++ blocksClaimReady=false
++ COMPLETE evidence
++ EXACT counterpart
++ LEGAL_VERIFIED deadline
+→ CLAIM_READY
+
+所以可以正式裁定：
+
+纯文本
+CUSTOMS_CLAIM_READY_FAIL_CLOSED = PASS
+
+AUDIT-1 CHANGE 1               = CLOSED
+AUDIT-1R                       = CLOSED
+AUDIT-1R2                      = PASS
+CHANGES
+
+无阻断性 CHANGE。
+
+不需要 AUDIT-1R3。
+
+上一轮要求的 mandatory Historical Window gate 已完成，可以停止继续修改这一个审计点。
+
+RISKS
+
+有两个非阻断提醒。
+
+第一，代码注释/送审描述里的“缺 gate 一律降级为 NEEDS_MANUAL_REVIEW”比实际实现稍强。实际代码只有当底层本来是 CLAIM_READY 时才改成 NEEDS_MANUAL_REVIEW；如果底层本来就是 NEEDS_EVIDENCE 或 NOT_CANDIDATE，会保持更低的 disposition，同时附加 gate-missing reason。
+
+这不影响 CUSTOMS_CLAIM_READY_FAIL_CLOSED，因为任何情况下都无法因缺 gate 达到 CLAIM_READY，反而属于更保守的结果。
+
+第二，目前 CustomsHistoricalWindowGate 本身只是输入结构；到了后续 PHASE 10 ONE SI Runtime E2E 时，仍必须证明它确实来自 server-owned PHASE 4 resolver，而不是 caller 自造：
+
+纯文本
+caller fabricated:
+{ blocksClaimReady: false }
+
+这个应在 runtime wiring/E2E 中验证，不是本次纯 PHASE 8 fail-closed 审计的 blocker。
+
+GitHub Actions 对该 exact HEAD 仍为：
+
+NOT_OBSERVED
+
+因此：
+
+纯文本
+customs-historical-pipeline = 12/12
+api tsc = 0
+web tsc = 0
+
+仍应称 local/Codex evidence，不要写成 GitHub CI green。
+
+最终边界继续不变：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+SECOND_*                 = 0
+全部 HOLD                = unchanged
+
+最终结论：CUSTOMS_CLAIM_READY_FAIL_CLOSED = PASS，AUDIT-1 这一条可以封板。
+```

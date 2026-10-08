@@ -244,3 +244,9 @@ Drawback 的 1825 天（exportDate 锚点）被明确定位为**合格窗口**�
 * `createJsonTaskQueuePort()` 仍为 JSON read-modify-write：**已登记 `PRODUCTION_DURABLE_QUEUE_REQUIRED`**，
   本单元的 scan durability 走数据库（PostgreSQL 原子状态 + 唯一约束 + 触发器），未使用该 JSON 端口承载扫描检查点。
 * `REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`；`REAL_VALIDATION_COMPLETE = NO`；`PRODUCTION_READY = NO`。
+
+### 12.4 AUDIT-1R2 裁决（已归档，AUDIT-1 CLOSED）
+
+* MSG-20261008-03：CUSTOMS_CLAIM_READY_FAIL_CLOSED = PASS、VERDICT = PASS、REVIEWED_HEAD = 658f8ea7；FNV-1a 6ad3eed / FULL_COPY_OK 88/88。
+* 评审确认三层负向保护成立（缺 jurisdiction → NEEDS_MANUAL_REVIEW + MISSING_JURISDICTION；blocksClaimReady=true → 降级且 gate reasons 保留；gate 整体缺失 → HISTORICAL_WINDOW_GATE_MISSING），正向路径未被误伤；**AUDIT-1 CHANGE 1 / AUDIT-1R / AUDIT-1R2 全部 CLOSED，无需 AUDIT-1R3**。
+* 下一个审计节点 = AUDIT-2（PHASE 10 合成 5 年 E2E 完成后）。
