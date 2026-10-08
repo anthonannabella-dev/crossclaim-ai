@@ -1,0 +1,311 @@
+{
+  "label": "r9-11-smoke",
+  "minutes": 2,
+  "roundSeconds": 3,
+  "workers": 3,
+  "batchSize": 2,
+  "databaseMarker": "127.0.0.1:55432/crossclaim",
+  "soakOrganizationId": "soak-org-1dabb8f9",
+  "startedAt": "2026-10-08T18:08:58.446Z",
+  "finishedAt": "2026-10-08T18:10:58.702Z",
+  "durationSec": 120,
+  "rounds": 39,
+  "tasksAdmitted": 60,
+  "settlementsApplied": 65,
+  "settlementIntents": 65,
+  "tasksTerminal": 60,
+  "nonTerminalTasks": [],
+  "activeLeases": 0,
+  "externalWriteRows": 0,
+  "domainStepDoubleExecutions": 0,
+  "faultsInjected": [
+    "F1_INTENT_RESUME round=7 resumed=1",
+    "F2_WORKER_RESTART round=13 owner=soak-w2",
+    "F1_INTENT_RESUME round=14 resumed=1",
+    "F1_INTENT_RESUME round=21 resumed=1",
+    "F2_WORKER_RESTART round=26 owner=soak-w3",
+    "F1_INTENT_RESUME round=28 resumed=1",
+    "F1_INTENT_RESUME round=35 resumed=1",
+    "F2_WORKER_RESTART round=39 owner=soak-w1"
+  ],
+  "invariantViolations": [],
+  "result": "SOAK_PASS",
+  "roundDetail": [
+    {
+      "round": 1,
+      "admitted": 2,
+      "settledTotal": 1,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 2,
+      "admitted": 2,
+      "settledTotal": 3,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 3,
+      "admitted": 2,
+      "settledTotal": 4,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 4,
+      "admitted": 2,
+      "settledTotal": 6,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 5,
+      "admitted": 2,
+      "settledTotal": 8,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 6,
+      "admitted": 2,
+      "settledTotal": 10,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 7,
+      "admitted": 2,
+      "settledTotal": 13,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 8,
+      "admitted": 2,
+      "settledTotal": 15,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 9,
+      "admitted": 2,
+      "settledTotal": 18,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 10,
+      "admitted": 2,
+      "settledTotal": 19,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 11,
+      "admitted": 2,
+      "settledTotal": 21,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 12,
+      "admitted": 2,
+      "settledTotal": 24,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 13,
+      "admitted": 2,
+      "settledTotal": 26,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 14,
+      "admitted": 2,
+      "settledTotal": 29,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 15,
+      "admitted": 2,
+      "settledTotal": 31,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 16,
+      "admitted": 2,
+      "settledTotal": 33,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 17,
+      "admitted": 2,
+      "settledTotal": 34,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 18,
+      "admitted": 2,
+      "settledTotal": 36,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 19,
+      "admitted": 2,
+      "settledTotal": 38,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 20,
+      "admitted": 2,
+      "settledTotal": 40,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 21,
+      "admitted": 2,
+      "settledTotal": 44,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 22,
+      "admitted": 2,
+      "settledTotal": 45,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 23,
+      "admitted": 2,
+      "settledTotal": 47,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 24,
+      "admitted": 2,
+      "settledTotal": 49,
+      "active": 2,
+      "pending": 2
+    },
+    {
+      "round": 25,
+      "admitted": 2,
+      "settledTotal": 50,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 26,
+      "admitted": 2,
+      "settledTotal": 52,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 27,
+      "admitted": 2,
+      "settledTotal": 54,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 28,
+      "admitted": 2,
+      "settledTotal": 57,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 29,
+      "admitted": 2,
+      "settledTotal": 59,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 30,
+      "admitted": 2,
+      "settledTotal": 61,
+      "active": 3,
+      "pending": 3
+    },
+    {
+      "round": 31,
+      "admitted": 0,
+      "settledTotal": 63,
+      "active": 1,
+      "pending": 1
+    },
+    {
+      "round": 32,
+      "admitted": 0,
+      "settledTotal": 64,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 33,
+      "admitted": 0,
+      "settledTotal": 64,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 34,
+      "admitted": 0,
+      "settledTotal": 64,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 35,
+      "admitted": 0,
+      "settledTotal": 65,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 36,
+      "admitted": 0,
+      "settledTotal": 65,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 37,
+      "admitted": 0,
+      "settledTotal": 65,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 38,
+      "admitted": 0,
+      "settledTotal": 65,
+      "active": 0,
+      "pending": 0
+    },
+    {
+      "round": 39,
+      "admitted": 0,
+      "settledTotal": 65,
+      "active": 0,
+      "pending": 0
+    }
+  ],
+  "note": "R9-11 连续运行取证：全部走既有 composeRsiRuntime()/durable 源/生产 pack/既有 verdictWatcher；未替换被测路径（R9-12）；未缩短租约 TTL；无第二套 runtime/scheduler/controller",
+  "purpose": "R9-11 soak 取证器冒烟（2 分钟）：验证 prelease 修复后可连续排空、收尾 drain 有效、不变量成立",
+  "rawLogsLocation": "tools/dev/logs/si-rsi-soak/（运行时产物，已 gitignore）"
+}

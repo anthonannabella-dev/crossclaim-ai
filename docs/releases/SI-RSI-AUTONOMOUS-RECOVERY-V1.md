@@ -1514,3 +1514,37 @@ NEXT_AUDIT = PHASE3_RECOVERY_DURABLE_CLOSURE_R1
 
 **剩余**：R9-11（真实 PG 连续 60 分钟）→ 完成后即可整理 **PHASE 3 最终审计包**
 （含：PRELEASE_FIX_B、AUDIT-2R4 用例调整说明、R1–R8、R9-1…R9-11、全量回归口径与未验证项清单）。
+
+### 3.32 R9-11 soak 取证器 —— 已实现并冒烟通过（60 分钟正式运行另计）
+
+**新增** `tools/dev/si-rsi-soak.ts`（**一次性**脚本：跑满 `--minutes` 即退出、写证据、返回退出码；
+无定时器守护、无服务端进程；只操作独立 `soak-org-*` 租户；结束后按 **lease → task → incident** 顺序清理自己的数据——
+上一轮 FK 教训已修正）。
+
+**设计要点（对齐审计口径）**
+- **R9-12 不替换被测路径**：全部走既有 `composeRsiRuntime()` + durable 任务源 + 生产 Recovery pack + 既有 verdictWatcher；
+  仅对只读端口做计数观测，不注入替代实现。
+- **不使用缩短租约 TTL**（审计明确禁止用它掩盖问题）：使用默认租约。
+- **故障注入**：每 7 轮「INTENT 已写、APPLIED 未写 ⇒ 崩溃恢复」（走 `resumePendingSettlements`）；
+  每 13 轮「worker 重启」（停止该实例并按同一 ownerRef 重新组装，**不新增实例**）。
+- **停滞检测（R9-11「无任务永久卡死」的可判定化）**：仍有 READY/IN_PROGRESS 任务但连续
+  `max(6, 120s/roundSeconds)` 轮零收口 ⇒ 记 `STALL` 并立即失败。
+- **收尾 drain**：最后 30 秒不再 admit 新任务；主循环结束后再有界推进，直到 pending/active 归零
+  或到达上限（避免把"刚 admit 的在飞任务"误判为卡死）。
+- **结束态不变量**：全部任务终态、无残留 ACTIVE 租约、零外部业务事实、domain step 无重复执行、APPLIED 无重复。
+
+**冒烟结果（2 分钟，`--round-seconds 3 --batch 2 --workers 3`）**
+| 指标 | 值 |
+| --- | --- |
+| 轮数 / 时长 | 39 轮 / 120 s |
+| admit 任务 | **60** |
+| 已收口（APPLIED） | **65**（>60 的部分来自故障注入的独立 verdictRef 收口，属预期） |
+| 停滞 | **无** |
+| 不变量违规 | **0** |
+| 结果 | **`SOAK_PASS`** |
+| 证据 | `tools/verification/si-rsi-soak/r9-11-smoke.json` |
+
+首次冒烟（未加 drain）曾在收尾出现 6 条 `NON_TERMINAL_TASKS` / `LEFTOVER_ACTIVE_LEASES` —— 经定位为
+「主循环在 admit 后立刻结束」的**取证器缺陷**（非产品缺陷），加入收尾 drain 后归零；该过程如实保留在提交历史中。
+
+**下一步**：以 `--minutes 60` 运行正式 R9-11 取证（真实 PG 连续 60 分钟），冻结证据后整理 PHASE 3 最终审计包。
