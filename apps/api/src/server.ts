@@ -69,6 +69,7 @@ import { handleWorkflowRequest } from './services/workflow';
 import { AGENT_GOAL_PATH, handleAgentGoalRequest } from './services/agent-goal/http-request';
 // CUSTOMER-UX FINAL2：目标准入（Goal → 既有任务队列 → ONE SI Runtime；准入 ≠ 执行）
 import { createJsonTaskQueuePort } from './services/agent-goal/goal-admission';
+import { createPrismaTaskQueuePort } from './services/agent-goal/prisma-task-queue-port';
 import {
   AGENT_GOAL_ADMISSION_PATH,
   handleAgentGoalAdmissionRequest,
@@ -224,8 +225,18 @@ export function createServer(deps: ServerDeps): http.Server {
    * 与既有 durable Standing Authorization；不新建 runtime / 队列 / guard。
    * 未配置队列路径时 queue=null → 准入 fail-closed（409/403），绝不假装已入队。
    */
+  const hasDatabaseUrl = (process.env.DATABASE_URL ?? '').trim() !== '';
   const goalAdmissionDeps = {
-    queue: (process.env.RSI_TASKS_PATH ?? '') === '' ? null : createJsonTaskQueuePort({ tasksPath: String(process.env.RSI_TASKS_PATH) }),
+    /**
+     * PHASE 1（SI/RSI 客户自治执行）：默认使用 **durable**（PostgreSQL）任务队列端口，
+     * 消除 JSON 读-改-写的并发丢任务；并让运行中的 ONE SI Runtime 能从**同一**持久化源领取。
+     * JSON 端口仅作为显式 legacy 回退（仅当未配置 DATABASE_URL 且显式给出 RSI_TASKS_PATH）。
+     */
+    queue: hasDatabaseUrl
+      ? createPrismaTaskQueuePort({ prisma })
+      : (process.env.RSI_TASKS_PATH ?? '') === ''
+        ? null
+        : createJsonTaskQueuePort({ tasksPath: String(process.env.RSI_TASKS_PATH) }),
     loadAuthorization: createPrismaStandingAuthorizationResolverDeps(prisma).loadAuthorization,
     log: (event: string, fields: Record<string, unknown>) => log.warn(event, fields),
   };

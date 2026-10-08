@@ -35,6 +35,8 @@ export interface RsiContinuationState {
   queueLength: number;
   /** RSI-RT-05：被判 BLOCK 的任务数（既不完成、也不重试），用于区分「失败」与「完成」。 */
   blockedCount: number;
+  /** PHASE 1：运行时动态采纳（durable 队列 → 本引擎）的累计任务数（只增，用于可观测性）。 */
+  adoptedCount: number;
 }
 
 export interface RsiContinuationOutcome {
@@ -64,6 +66,34 @@ export function createRsiContinuationEngine(options: {
 
   /** BLOCK 过的任务：既不标记完成，也不重复领取（等待宿主/裁决处理）。 */
   const blockedKeys = new Set<string>();
+  /** PHASE 1：动态采纳累计计数（可观测性；仅统计真正进入队列的次数）。 */
+  let adoptedTotal = 0;
+
+  /**
+   * PHASE 1（SI/RSI 客户自治执行）—— 动态采纳：
+   * 把**运行时新出现**的 durable 任务并入本引擎的队列，使运行中的实例无需重启即可消费。
+   *
+   * 去重口径（与 claimNextSafeTask 完全一致，避免重复执行）：
+   *   · 已完成（completedKeys）→ 忽略；
+   *   · 已 BLOCK（blockedKeys）→ 忽略（等宿主/裁决处理，不重复领取）；
+   *   · 已在队列中 → 忽略；
+   *   · 正被当前租约持有 → 忽略。
+   * 本方法不创建任何新的 worker / loop / scheduler：只是把任务放进**同一个**队列，
+   * 仍由既有的 claimNextSafeTask() 依据 priority + lease 领取。
+   */
+  const adoptTasks = (incoming: readonly RsiSafeTask[]): readonly string[] => {
+    const adopted: string[] = [];
+    for (const task of incoming) {
+      if (completedKeys.has(task.dedupeKey)) continue;
+      if (blockedKeys.has(task.dedupeKey)) continue;
+      if (queue.some((existing) => existing.dedupeKey === task.dedupeKey)) continue;
+      if (leased !== null && leased.dedupeKey === task.dedupeKey) continue;
+      queue = [...queue, task];
+      adoptedTotal += 1;
+      adopted.push(task.dedupeKey);
+    }
+    return adopted;
+  };
 
   const claimNextSafeTask = (): RsiContinuationOutcome => {
     const at = now();
@@ -166,8 +196,10 @@ export function createRsiContinuationEngine(options: {
         verdict,
         queueLength: queue.length,
         blockedCount: blockedKeys.size,
+        adoptedCount: adoptedTotal,
       };
     },
+    adoptTasks,
   };
   return engine;
 }

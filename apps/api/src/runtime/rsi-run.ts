@@ -196,6 +196,13 @@ export async function composeRsiRuntime(input: {
   runtimeOwnerRef?: string;
   domainPacks?: readonly RsiDomainCapabilityPack[];
   /**
+   * PHASE 1（SI/RSI 客户自治执行）—— 权威 durable 任务源：
+   * 每次 watchdog tick 前向它领取「已就绪且本 worker 已原子领取」的任务，并采纳进**同一**引擎队列。
+   * 不新建 scheduler / loop：复用既有事件循环的 60s tick（事件驱动 + 兜底）。
+   * 缺省 = 不接线（行为与旧版完全一致）。
+   */
+  taskSource?: { claim(limit: number): Promise<readonly RsiSafeTask[]> };
+  /**
    * STEP 3 FINAL-4：**唯一 product 组装点** —— Recovery SI 固定接 shared guard adapter；
    * 只接受 shared guard 类型（RuntimeActionGuard / AppActionGuardDeps），不接受自定义 guard port。
    */
@@ -340,12 +347,33 @@ export async function composeRsiRuntime(input: {
       await domainStep({ dedupeKey: armed, ownerRef: runtimeOwnerRef });
     }
   };
-  const controllerWithDomainSteps =
-    domainStep === undefined
+  /**
+   * PHASE 1：从 durable 任务源领取并采纳 —— 复用既有 60s 兜底 tick，不新增调度器。
+   * 只有真正被本 worker 原子领取（CAS）的任务才会进入队列，多 worker 下不会重复执行。
+   */
+  const adoptFromTaskSource = async (): Promise<void> => {
+    const source = input.taskSource;
+    if (source === undefined) return;
+    const claimed = await source.claim(5);
+    if (claimed.length > 0) controller.adoptTasks(claimed);
+  };
+  const controllerWithAdoption =
+    input.taskSource === undefined
       ? controller
       : {
           ...controller,
           async tick() {
+            await adoptFromTaskSource();
+            return controller.tick();
+          },
+        };
+  const controllerWithDomainSteps =
+    domainStep === undefined
+      ? controllerWithAdoption
+      : {
+          ...controller,
+          async tick() {
+            await adoptFromTaskSource();
             const verdictBeforeConsume = controller.state().verdict;
             const outcome = await controller.tick();
             // 先结算本轮裁决（若有），再把本轮新认领的任务武装为下一次的待裁决任务
@@ -417,12 +445,18 @@ export async function composeRsiRuntime(input: {
     runtimeMembers: () => describeRsiRuntimeMembers(domainPackList),
     domainDispatchLog: () => domainRunner?.dispatchLog() ?? [],
     async reconcileNow(): Promise<RsiReconcilePlan | null> {
-      if (reconcileSpec === undefined) return null;
-      return runRsiRestartReconcile({
-        store: reconcileSpec.store,
-        ownerRef: reconcileSpec.ownerRef,
-        trigger: reconcileSpec.trigger ?? 'BOOT',
-      });
+      // 先做 restart/接管收敛（把中断的 IN_PROGRESS 任务放回 READY），再采纳 durable 任务。
+      // PHASE 1：启动即采纳 ⇒ 运行中的实例无需重启即可消费新任务（tick 路径持续采纳）。
+      const plan =
+        reconcileSpec === undefined
+          ? null
+          : await runRsiRestartReconcile({
+              store: reconcileSpec.store,
+              ownerRef: reconcileSpec.ownerRef,
+              trigger: reconcileSpec.trigger ?? 'BOOT',
+            });
+      await adoptFromTaskSource();
+      return plan;
     },
     start: () => {
       loop.start();
@@ -519,6 +553,8 @@ if (isDirectRun) {
       runner: await resolveRunnerFromEnv(),
       intervalMs: Number(process.env.RSI_WATCHDOG_INTERVAL_MS ?? 60_000),
       ...(openedReconcile === null ? {} : { reconcile: openedReconcile.spec }),
+      // PHASE 1：与 API 使用同一 durable 任务源 ⇒ 运行中无需重启即可发现并领取新任务
+      ...(openedReconcile === null ? {} : { taskSource: openedReconcile.taskSource }),
     });
     const reconcile = await composition.reconcileNow();
     console.log(

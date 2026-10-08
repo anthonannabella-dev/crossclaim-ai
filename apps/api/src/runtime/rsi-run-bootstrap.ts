@@ -14,6 +14,7 @@
  */
 
 import type { RsiReconcileStore } from './rsi-restart-reconcile';
+import type { RsiDurableTaskSource } from './rsi-durable-task-source';
 
 export type RsiReconcileBootstrapKind = 'PRISMA' | 'NOT_CONFIGURED' | 'REQUIRED_BUT_MISSING_DATABASE_URL';
 
@@ -56,6 +57,11 @@ export function planReconcileBootstrap(
 
 export interface OpenedRsiReconcile {
   spec: { store: RsiReconcileStore; ownerRef: string; trigger: 'BOOT' };
+  /**
+   * PHASE 1：与 reconcile 共用**同一个** PrismaClient 的 durable 任务源。
+   * 运行中的实例靠它领取新任务（无需重启），且与 API 使用**同一**持久化源。
+   */
+  taskSource: RsiDurableTaskSource;
   disconnect: () => Promise<void>;
 }
 
@@ -64,13 +70,15 @@ export interface OpenedRsiReconcile {
  * 动态 import：只有确实要接线时才加载 @prisma/client，骨架运行不会被牵连。
  */
 export async function openPrismaReconcile(ownerRef: string): Promise<OpenedRsiReconcile> {
-  const [{ PrismaClient }, { createPrismaRsiReconcileStore }] = await Promise.all([
+  const [{ PrismaClient }, { createPrismaRsiReconcileStore }, { createAutonomyTaskSource }] = await Promise.all([
     import('@prisma/client'),
     import('./rsi-reconcile-prisma-store'),
+    import('./rsi-durable-task-source'),
   ]);
   const prisma = new PrismaClient();
   return {
     spec: { store: createPrismaRsiReconcileStore(prisma), ownerRef, trigger: 'BOOT' },
+    taskSource: createAutonomyTaskSource({ prisma, ownerRef }),
     disconnect: async () => {
       await prisma.$disconnect();
     },

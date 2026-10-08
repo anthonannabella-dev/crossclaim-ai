@@ -124,7 +124,7 @@ PHASE0_API_TSC                 = 0
 
 | PHASE | 目标 | 状态 |
 | --- | --- | --- |
-| 1 | 客户任务自动执行闭环（动态消费 + durable 队列 + 租约/幂等/恢复） | NOT STARTED |
+| 1 | 客户任务自动执行闭环（动态消费 + durable 队列 + 租约/幂等/恢复） | **代码已实现 + 真实 PG 测试通过（见 §2.1）** |
 | 2 | API 故障自动诊断与恢复（11 类错误 + 有界重试/退避/升级） | NOT STARTED |
 | 3 | 业务错误自动重新规划（真实替代计划 + 独立验证 + 上限与留痕） | NOT STARTED |
 | 4 | 持续学习与策略优化（复用 Experience/Meta/Outcome/Canary） | NOT STARTED |
@@ -134,3 +134,44 @@ PHASE0_API_TSC                 = 0
 **边界（全程）**：不新增第二套 runtime/scheduler/controller/guard/policy engine；
 `REAL_PROVIDER_WRITE / CUSTOMS_FILING / PAYMENT / AUTO_COMMISSION_CHARGE / PRODUCTION_CREDENTIALS /
 PRODUCTION_ENABLEMENT / EXTERNAL_WRITE / TRANSPORT = HOLD`；不执行生产部署 / 生产迁移。
+
+---
+
+## 2.1 PHASE 1 —— 客户任务自动执行闭环（已实现，真实 PG 验收通过）
+
+### 变更（全部复用既有结构，未新增第二套 runtime / scheduler / 队列 / guard）
+
+| 文件 | 变更 |
+| --- | --- |
+| `apps/api/src/services/autonomy/rsi-continuation-engine.ts` | 新增 `adoptTasks()`：运行时把 durable 新任务并入**同一**队列（去重口径与 claim 一致）；`state()` 新增 `adoptedCount` |
+| `apps/api/src/runtime/rsi-controller-continuation.ts` | controller 暴露 `adoptTasks` |
+| `apps/api/src/runtime/rsi-run.ts` | 组合根新增 `taskSource`；**复用既有 60s 兜底 tick** 与 boot 时 `reconcileNow()` 采纳（无新调度器） |
+| `apps/api/src/runtime/rsi-durable-task-source.ts`（新增） | durable 任务源：CAS 领取（`updateMany where status=READY`）+ 写 `AutonomyLease`（ownerRef/expiresAt） |
+| `apps/api/src/services/agent-goal/prisma-task-queue-port.ts`（新增） | durable 队列端口：`AutonomyIncident(kind=CUSTOMER_GOAL_QUEUE)` + `AutonomyTask`（dedupeKey 全局唯一、`skipDuplicates`） |
+| `apps/api/src/runtime/rsi-run-bootstrap.ts` | Prisma 打开时**同时**提供 reconcile store 与 durable 任务源（共用同一 client） |
+| `apps/api/src/server.ts` | API 默认改用 **durable** 端口（有 DATABASE_URL 时）；JSON 端口降级为显式 legacy 回退 |
+
+### 验收证据（`apps/api/src/__tests__/si-rsi-phase1-durable-queue.test.ts`，**7/7 PASS**，真实 PostgreSQL）
+
+| 用例 | 断言 | 对应 PHASE 1 要求 |
+| --- | --- | --- |
+| 01 | 同 dedupeKey 重复入队只落 1 行，第二次报 `alreadyPresent` | 幂等 |
+| 02 | 并发两次入队**都**落库（对比 PHASE 0-A3 的丢任务） | durable、无丢任务 |
+| 03 | `organizationId` 固化在 incident `sourceRefs`；org-A/org-B 各挂自己的 incident 与任务 | 租户可信绑定 |
+| 04 | 两 worker 并发 claim 只有**一个赢家**；任务 `IN_PROGRESS` + `AutonomyLease(status=ACTIVE, ownerRef)` | claim / lease / 多 worker 不重复 |
+| 05 | crashed worker 领取后另一 worker 领不到；经**既有 reconcile** 把 `IN_PROGRESS` 放回 `READY` 后可被重新领取 | 崩溃恢复 / restart |
+| 06 | runtime **已运行**后再入队，下一次既有 tick 即发现并**真实执行**（`adoptedCount=1`，探针收到该任务）—— 对照 PHASE 0-A1 | 动态消费、无需重启 |
+| 07 | 生产前缀 `task:recovery:*` 同样被动态采纳并 claim；在 PHASE 2 装配前仍**不回退 caller runner**（fail-closed） | 未绕过安全闸门 |
+
+定向回归：`545/545 PASS`（RSI 全量 + P0 复现 + PHASE 1 + 架构/部署/治理契约）；api tsc **0**。
+
+### 已知限制（如实登记，需后续 Schema Delta；不得当作已解决）
+
+1. `AutonomyTask` **无 priority / attempts / nextAttemptAt / lastError 列** ⇒ 本轮优先级固定 `P2`，重试与**死信状态**尚未实现（PHASE 1 要求 7 的「可观测」只部分满足）；
+2. 租约到期后的**重新领取**目前依赖既有 reconcile（重启/接管时）而非运行中主动 reclaim；
+3. 客户**授权撤销后的阻断**尚未接线（要求 6 未完成）：需要把 Standing Authorization 撤销状态带入 claim 判定；
+4. `PENDING_TENANT_ACCOUNT_LINEAGE`：任务行本身不含 accountId / 授权范围（仅 incident `sourceRefs` 有 organizationId）；
+5. 仍属 `REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`：执行器为本地探针/既有模块链，未接真实 Provider。
+
+> 结论口径：PHASE 1 = **CODE_IMPLEMENTED + TEST_VERIFIED（本地真实 PG）**；
+> **不是** PRODUCTION_WIRED / REAL_PROVIDER_VERIFIED / PRODUCTION_ENABLED。要求 6/7 的缺口已列在上方，不得声称为已完成。

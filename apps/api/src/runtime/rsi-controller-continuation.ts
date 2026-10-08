@@ -28,6 +28,8 @@ export interface RsiControllerContinuation {
   state(): ReturnType<ReturnType<typeof createRsiContinuationEngine>['state']>;
   /** 标记进入「等待裁决」状态（裁决轮询器据此决定是否短轮询）。 */
   markWaitingForVerdict(verdict: 'PASS' | 'REVISE' | 'BLOCK' | null): void;
+  /** PHASE 1：运行时动态采纳 durable 任务（去重后进入同一队列；返回被采纳的 dedupeKey）。 */
+  adoptTasks(tasks: readonly RsiSafeTask[]): readonly string[];
   /** CHANGE A：runner proposal（非裁决）；未跑过为 null */
   proposal(): { at: number; status: 'PASS' | 'REVISE' | 'BLOCK' } | null;
   /** 已记录的事件→领取延迟（毫秒），用于验证「秒级而非 5 分钟」。 */
@@ -100,6 +102,11 @@ export function attachContinuationToController(options: {
     markWaitingForVerdict: (verdict) => engine.markWaitingForVerdict(verdict),
     proposal: () => (proposals.length === 0 ? null : proposals[proposals.length - 1]),
     latencies: () => observed,
+    /**
+     * PHASE 1：把 durable 队列中新出现的任务并入**同一个**引擎队列（不新建 worker/loop/scheduler）。
+     * 去重口径与 claim 完全一致；返回真正被采纳的 dedupeKey。
+     */
+    adoptTasks: (tasks: readonly RsiSafeTask[]): readonly string[] => engine.adoptTasks(tasks),
   };
 }
 
