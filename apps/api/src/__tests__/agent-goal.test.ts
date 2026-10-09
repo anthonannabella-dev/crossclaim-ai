@@ -82,6 +82,34 @@ describe('P1 · Goal Compiler（确定性解析）', () => {
     expect(result.reason).toBe('GOAL_UNSUPPORTED_INTENT');
   });
 
+  it('UNIFIED-ONE-CLICK PHASE 1：显式全域意图 → 四域候选（含 INDEPENDENT_SITE）', () => {
+    for (const text of [
+      '帮我检查所有可以追回的钱',
+      '帮我找回所有能追回的钱',
+      '自动找回我过去三年的资金损失',
+      '帮我扫描所有已连接账户',
+      'Find all recoverable money',
+      'Audit all my connected accounts',
+    ]) {
+      const result = compileAgentGoal({ text });
+      expect(result.ok, text).toBe(true);
+      if (!result.ok) continue;
+      expect(result.draft.goalType, text).toBe('DISCOVER_AND_RECOVER');
+      expect(result.draft.domains, text).toEqual(['PLATFORM', 'LOGISTICS', 'CUSTOMS', 'INDEPENDENT_SITE']);
+    }
+  });
+
+  it('UNIFIED-ONE-CLICK PHASE 1：显式点名领域不得被扩展为全域', () => {
+    const single = compileAgentGoal({ text: '检查物流' });
+    expect(single.ok).toBe(true);
+    if (single.ok) expect(single.draft.domains).toEqual(['LOGISTICS']);
+
+    const enumerated = compileAgentGoal({ text: '检查所有可追回的关税、物流、平台费用' });
+    expect(enumerated.ok).toBe(true);
+    // 显式枚举三个域 ⇒ 保持三域，不因出现「所有」而擅自加入 INDEPENDENT_SITE
+    if (enumerated.ok) expect(enumerated.draft.domains).toEqual(['PLATFORM', 'LOGISTICS', 'CUSTOMS']);
+  });
+
   it('空输入 / 超长输入 → 拒绝', () => {
     expect(compileAgentGoal({ text: '   ' })).toMatchObject({ ok: false, reason: 'GOAL_EMPTY_INTENT' });
     expect(compileAgentGoal({ text: 'x'.repeat(700) })).toMatchObject({ ok: false, reason: 'GOAL_INTENT_TOO_LONG' });

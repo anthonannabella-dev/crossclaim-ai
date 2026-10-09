@@ -88,6 +88,21 @@ const RECOVER_SIGNAL = /(追回|找回|索赔|recover|recovery|reimburs|refund|�
 const FIND_SIGNAL = /(找|发现|扫描|检查|盘点|看看|find|scan|discover|check|audit|review|look)/i;
 const ATTENTION_SIGNAL = /(需要我|要我|待办|我的待办|需要批准|需要审批|needs?\s*my\s*attention|action\s*items?|to[- ]?do)/i;
 const DISCOVER_ONLY_SIGNAL = /(只看|只检查|先看|先检查|别动|不要执行|只发现|仅发现|don'?t\s*act|do\s*not\s*act|discover\s*only|only\s*(find|check|show))/i;
+/**
+ * UNIFIED ONE-CLICK（PHASE 1 最小修复）——**显式全域意图**信号。
+ *
+ * 背景（已复现的真实缺口）：「帮我找回所有能追回的钱」这类**没有点名任何具体领域**的全域目标，
+ * 因 `DOMAIN_SIGNALS` 命不中任何域而落到 `GOAL_UNSUPPORTED_INTENT`（fail-safe，但无法形成四域候选计划）。
+ *
+ * 生效条件（三条同时满足，避免凭猜测扩大客户授权）：
+ *   ① 文本出现明确的「全域」措辞（所有/全部/已连接账户/资金损失/all/every/connected accounts…）；
+ *   ② 同时出现追回或查找动作（recoverish / findish）；
+ *   ③ 文本**没有显式点名任何具体领域**（`domains.length === 0`）—— 显式单域或显式枚举多域一律以显式为准，不扩展。
+ */
+const ALL_DOMAIN_SIGNAL =
+  /(所有|全部|全都|一切|每个领域|各个领域|所有账户|全部账户|已连接账户|连接的账户|资金损失|money|funds|\ball\b|\bevery\b|everything|linked\s+accounts?|connected\s+accounts?)/i;
+/** 全域候选顺序（与既有 `RecoveryDomain` 口径一致；未连接的域由能力解析决定是否进入待接入，不伪造结果） */
+const ALL_GOAL_DOMAINS: readonly GoalDomain[] = ['PLATFORM', 'LOGISTICS', 'CUSTOMS', 'INDEPENDENT_SITE'];
 const AUTO_SIGNAL = /(自动|直接处理|直接执行|无需确认|不用问我|auto(matically)?|just\s*(do|process)\s*it)/i;
 const APPROVAL_EACH_SIGNAL = /(每个都(要|需要)?(批准|审批)|每次(都)?(要|需要)?(批准|审批)|approve\s*each|always\s*ask)/i;
 
@@ -268,6 +283,12 @@ export function compileAgentGoal(input: { text: string }): GoalCompileResult {
   const readOnly = DISCOVER_ONLY_SIGNAL.test(text);
   const recoverish = RECOVER_SIGNAL.test(text);
   const findish = FIND_SIGNAL.test(text);
+
+  // UNIFIED ONE-CLICK（PHASE 1）：显式全域意图 ⇒ 四域候选（仅在未显式点名任何域时生效）
+  if (domains.length === 0 && ALL_DOMAIN_SIGNAL.test(text) && (recoverish || findish)) {
+    domains.push(...ALL_GOAL_DOMAINS);
+    signals.push('DOMAIN:ALL');
+  }
 
   let goalType: GoalType;
   let executionMode: GoalExecutionMode;
