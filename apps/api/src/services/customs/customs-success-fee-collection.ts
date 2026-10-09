@@ -42,6 +42,10 @@ export type CustomsFeeCollectionReason =
   | 'SETTLEMENT_AMOUNT_INVALID'
   | 'FEE_POLICY_MISSING'
   | 'FEE_POLICY_RATE_MISSING'
+  | 'FEE_POLICY_VERSION_REQUIRED'
+  | 'FEE_POLICY_NOT_EFFECTIVE'
+  | 'FEE_POLICY_RATE_OUT_OF_RANGE'
+  | 'HISTORY_SOURCE_UNTRUSTED'
   | 'CURRENCY_MISMATCH'
   | 'DUPLICATE_FEE_SUPPRESSED'
   | 'RECEIVABLE_ESTABLISHED'
@@ -264,10 +268,22 @@ export interface CustomsFeeCollectionInput {
   /** CHANGE 03：只接受经核验的收款事实（品牌类型，无法自行构造）。 */
   collectionFact?: VerifiedFeeCollectionFact;
   /** 已入账的历史收款/退款合计（来自台账，不受当前授权状态影响）。 */
-  history?: { collectedAmount: string; refundedAmount: string };
+  /** V2-R2 / CHANGE 13：历史金额必须来自**可信台账**，不接受任意传入汇总数。 */
+  ledger?: {
+    source: 'LEDGER' | 'PROVIDER_RECONCILIATION_LEDGER';
+    collectedAmount: string;
+    refundedAmount: string;
+  };
   /** CHANGE 07：费率只能来自服务端版本化费率策略（`CUSTOMS_SUCCESS_15`），不接受任意输入值。 */
   feePolicy: FeePolicy | null;
+  /** V2-R2 / CHANGE 13：判定日（YYYY-MM-DD），用于校验费率策略有效期。 */
+  asOfDate: string;
 }
+
+export const CUSTOMS_TRUSTED_LEDGER_SOURCES = [
+  'LEDGER',
+  'PROVIDER_RECONCILIATION_LEDGER',
+] as const;
 
 export interface CustomsFeeCollectionResult {
   kind: 'CUSTOMS_SUCCESS_FEE_COLLECTION';
@@ -328,9 +344,10 @@ export function evaluateCustomsSuccessFeeCollection(
     currency: input.settlement.currency,
     basisSettlementId: input.settlement.settlementId,
     historicalCollectedAmount:
-      input.history === undefined
+      input.ledger === undefined ||
+      !(CUSTOMS_TRUSTED_LEDGER_SOURCES as readonly string[]).includes(input.ledger.source)
         ? '0.00'
-        : formatAtLeastTwoDecimals(input.history.collectedAmount),
+        : formatAtLeastTwoDecimals(input.ledger.collectedAmount),
     collectionAuthorizedForFuture: false,
     collectionInitiated: false as const,
     chargedAmount: null,
@@ -353,12 +370,35 @@ export function evaluateCustomsSuccessFeeCollection(
 
   if (feePolicy === null) return calculated(['FEE_POLICY_MISSING'], null);
   if (feePolicy.rateBps === null) return calculated(['FEE_POLICY_RATE_MISSING'], null);
+  if (feePolicy.policyId.trim().length === 0 || feePolicy.version.trim().length === 0) {
+    return calculated(['FEE_POLICY_VERSION_REQUIRED'], null);
+  }
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(input.asOfDate) ||
+    feePolicy.effectiveFrom > input.asOfDate ||
+    (feePolicy.effectiveTo !== null && input.asOfDate > feePolicy.effectiveTo)
+  ) {
+    return calculated(['FEE_POLICY_NOT_EFFECTIVE'], null);
+  }
+  if (
+    !Number.isInteger(feePolicy.rateBps) ||
+    feePolicy.rateBps <= 0 ||
+    feePolicy.rateBps > 10000
+  ) {
+    return calculated(['FEE_POLICY_RATE_OUT_OF_RANGE'], null);
+  }
   if (
     feePolicy.currency !== null &&
     input.settlement.currency !== null &&
     feePolicy.currency !== input.settlement.currency
   ) {
     return calculated(['CURRENCY_MISMATCH'], null);
+  }
+  if (
+    input.ledger !== undefined &&
+    !(CUSTOMS_TRUSTED_LEDGER_SOURCES as readonly string[]).includes(input.ledger.source)
+  ) {
+    return calculated(['HISTORY_SOURCE_UNTRUSTED'], null);
   }
 
   // 1) 计费基础必须可信

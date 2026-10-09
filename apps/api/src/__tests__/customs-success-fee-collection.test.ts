@@ -84,6 +84,7 @@ function input(overrides: Partial<CustomsFeeCollectionInput> = {}): CustomsFeeCo
     killSwitch: { engaged: false },
     billedSettlementIds: new Set<string>(),
     feePolicy: FEE_POLICY,
+    asOfDate: '2026-10-10',
   };
   return { ...base, ...overrides };
 }
@@ -118,6 +119,67 @@ describe('V2-08 费率来源 — CHANGE 07', () => {
     );
     expect(customPolicy.rateBps).toBe(2000);
     expect(customPolicy.feeAmount).toBe('2000.00');
+  });
+});
+
+describe('V2-08 策略有效性与历史台账 — CHANGE 13', () => {
+  it('缺少策略版本 / 策略在判定日未生效 → 不产生应收', () => {
+    expect(
+      evaluateCustomsSuccessFeeCollection(
+        input({ feePolicy: { ...FEE_POLICY, version: '  ' } }),
+      ).reasonCodes,
+    ).toContain('FEE_POLICY_VERSION_REQUIRED');
+
+    expect(
+      evaluateCustomsSuccessFeeCollection(
+        input({ feePolicy: { ...FEE_POLICY, effectiveTo: '2026-09-30' } }),
+      ).reasonCodes,
+    ).toContain('FEE_POLICY_NOT_EFFECTIVE');
+
+    expect(
+      evaluateCustomsSuccessFeeCollection(
+        input({ feePolicy: { ...FEE_POLICY, effectiveFrom: '2026-11-01' } }),
+      ).reasonCodes,
+    ).toContain('FEE_POLICY_NOT_EFFECTIVE');
+
+    expect(
+      evaluateCustomsSuccessFeeCollection(input({ asOfDate: 'not-a-date' })).reasonCodes,
+    ).toContain('FEE_POLICY_NOT_EFFECTIVE');
+  });
+
+  it('费率越界（0 / 负数 / 超 10000 bps / 非整数）→ 不产生应收', () => {
+    for (const rateBps of [0, -100, 10001, 1500.5]) {
+      const result = evaluateCustomsSuccessFeeCollection(
+        input({ feePolicy: { ...FEE_POLICY, rateBps } }),
+      );
+      expect(result.reasonCodes).toContain('FEE_POLICY_RATE_OUT_OF_RANGE');
+      expect(result.feeAmount).toBeNull();
+    }
+  });
+
+  it('历史金额来源不可信 → 不采信汇总数（HISTORY_SOURCE_UNTRUSTED）', () => {
+    const result = evaluateCustomsSuccessFeeCollection(
+      input({
+        ledger: {
+          source: 'CLIENT_REPORTED' as unknown as 'LEDGER',
+          collectedAmount: '9999.00',
+          refundedAmount: '0.00',
+        },
+      }),
+    );
+    expect(result.state).toBe('SUCCESS_FEE_CALCULATED');
+    expect(result.reasonCodes).toContain('HISTORY_SOURCE_UNTRUSTED');
+    expect(result.historicalCollectedAmount).toBe('0.00');
+  });
+
+  it('可信台账来源才被采信为历史已收', () => {
+    const result = evaluateCustomsSuccessFeeCollection(
+      input({
+        ledger: { source: 'LEDGER', collectedAmount: '300.00', refundedAmount: '0.00' },
+      }),
+    );
+    expect(result.state).toBe('PAYMENT_COLLECTION_AUTHORIZED');
+    expect(result.historicalCollectedAmount).toBe('300.00');
   });
 });
 
@@ -345,7 +407,7 @@ describe('V2-08 收款结果 — 到账 / 失败 / 部分 / 退款 / 争议', ()
   it('已核验收款事实：历史已收写入结果，撤销授权只影响未来扣款', () => {
     const collected = evaluateCustomsSuccessFeeCollection(
       input({
-        history: { collectedAmount: '300.00', refundedAmount: '0.00' },
+        ledger: { source: 'LEDGER', collectedAmount: '300.00', refundedAmount: '0.00' },
         collectionFact: collectionFact({ collectedAmount: '1500.00' }),
       }),
     );
@@ -355,7 +417,7 @@ describe('V2-08 收款结果 — 到账 / 失败 / 部分 / 退款 / 争议', ()
 
     const revoked = evaluateCustomsSuccessFeeCollection(
       input({
-        history: { collectedAmount: '300.00', refundedAmount: '0.00' },
+        ledger: { source: 'LEDGER', collectedAmount: '300.00', refundedAmount: '0.00' },
         authorization: {
           active: true,
           revoked: true,
