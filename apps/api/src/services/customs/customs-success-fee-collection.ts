@@ -20,11 +20,9 @@
  *  7. 本模块不持卡、不发起扣款、不调用支付通道、不写库。
  */
 
-import {
-  CUSTOMS_SUCCESS_FEE_RATE_BPS,
-} from './customs-unlock-payment';
 import { applyBpsFloorToCent, addDecimalAmounts, subtractDecimalAmounts } from './customs-profit-gate';
 import { compareDecimalAmounts, normalizeDecimalAmount } from './customs-paid-api-gate';
+import type { FeePolicy } from '../commercial/fee-policy';
 
 export const CUSTOMS_FEE_COLLECTION_VERSION = 'customs-success-fee-collection-v2.0.0';
 
@@ -41,6 +39,8 @@ export type CustomsFeeCollectionReason =
   | 'SETTLEMENT_NOT_VERIFIED'
   | 'SETTLEMENT_REFERENCE_MISSING'
   | 'SETTLEMENT_AMOUNT_INVALID'
+  | 'FEE_POLICY_MISSING'
+  | 'FEE_POLICY_RATE_MISSING'
   | 'CURRENCY_MISMATCH'
   | 'DUPLICATE_FEE_SUPPRESSED'
   | 'RECEIVABLE_ESTABLISHED'
@@ -161,7 +161,8 @@ export interface CustomsFeeCollectionInput {
   collectionFact?: VerifiedFeeCollectionFact;
   /** 已入账的历史收款/退款合计（来自台账，不受当前授权状态影响）。 */
   history?: { collectedAmount: string; refundedAmount: string };
-  rateBps?: number;
+  /** CHANGE 07：费率只能来自服务端版本化费率策略（`CUSTOMS_SUCCESS_15`），不接受任意输入值。 */
+  feePolicy: FeePolicy | null;
 }
 
 export interface CustomsFeeCollectionResult {
@@ -210,7 +211,12 @@ function formatAtLeastTwoDecimals(amount: string | null): string {
 export function evaluateCustomsSuccessFeeCollection(
   input: CustomsFeeCollectionInput,
 ): CustomsFeeCollectionResult {
-  const rateBps = input.rateBps ?? CUSTOMS_SUCCESS_FEE_RATE_BPS;
+  // CHANGE 07：费率解析必须先于任何金额计算；策略缺失/无费率一律不得计费。
+  const feePolicy = input.feePolicy;
+  const rateBps =
+    feePolicy === null || feePolicy.rateBps === null
+      ? 0
+      : feePolicy.rateBps;
   const base = {
     kind: 'CUSTOMS_SUCCESS_FEE_COLLECTION' as const,
     version: CUSTOMS_FEE_COLLECTION_VERSION,
@@ -240,6 +246,16 @@ export function evaluateCustomsSuccessFeeCollection(
     adjustments: [],
     autoCollection: 'HOLD',
   });
+
+  if (feePolicy === null) return calculated(['FEE_POLICY_MISSING'], null);
+  if (feePolicy.rateBps === null) return calculated(['FEE_POLICY_RATE_MISSING'], null);
+  if (
+    feePolicy.currency !== null &&
+    input.settlement.currency !== null &&
+    feePolicy.currency !== input.settlement.currency
+  ) {
+    return calculated(['CURRENCY_MISMATCH'], null);
+  }
 
   // 1) 计费基础必须可信
   const reasons: CustomsFeeCollectionReason[] = [];

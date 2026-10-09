@@ -16,6 +16,20 @@ import {
   type CustomsFeeCollectionInput,
   type VerifiedFeeCollectionFact,
 } from '../services/customs/customs-success-fee-collection';
+import type { FeePolicy } from '../services/commercial/fee-policy';
+
+const FEE_POLICY: FeePolicy = {
+  policyId: 'CUSTOMS_SUCCESS_15',
+  policyRef: 'CUSTOMS_SUCCESS',
+  policyKind: 'CUSTOMS_SUCCESS',
+  version: 'v1',
+  rateBps: 1500,
+  effectiveFrom: '2026-01-01',
+  effectiveTo: null,
+  waiverCapAmount: null,
+  currency: null,
+  description: 'test fixture',
+};
 
 /** CHANGE 03：收款事实必须经核验（品牌类型），测试走同一条核验路径。 */
 function collectionFact(
@@ -56,9 +70,43 @@ function input(overrides: Partial<CustomsFeeCollectionInput> = {}): CustomsFeeCo
     },
     killSwitch: { engaged: false },
     billedSettlementIds: new Set<string>(),
+    feePolicy: FEE_POLICY,
   };
   return { ...base, ...overrides };
 }
+
+describe('V2-08 费率来源 — CHANGE 07', () => {
+  it('缺少版本化费率策略 → 不产生应收（FEE_POLICY_MISSING）', () => {
+    const result = evaluateCustomsSuccessFeeCollection(input({ feePolicy: null }));
+    expect(result.state).toBe('SUCCESS_FEE_CALCULATED');
+    expect(result.reasonCodes).toContain('FEE_POLICY_MISSING');
+    expect(result.feeAmount).toBeNull();
+  });
+
+  it('策略无费率（waiver / micro）→ 不产生应收（FEE_POLICY_RATE_MISSING）', () => {
+    const result = evaluateCustomsSuccessFeeCollection(
+      input({ feePolicy: { ...FEE_POLICY, rateBps: null } }),
+    );
+    expect(result.reasonCodes).toContain('FEE_POLICY_RATE_MISSING');
+  });
+
+  it('策略币种与结算币种不一致 → 不产生应收（CURRENCY_MISMATCH）', () => {
+    const result = evaluateCustomsSuccessFeeCollection(
+      input({ feePolicy: { ...FEE_POLICY, currency: 'EUR' } }),
+    );
+    expect(result.reasonCodes).toContain('CURRENCY_MISMATCH');
+  });
+
+  it('费率只能来自策略：结果中的 rateBps 等于策略费率', () => {
+    const fromPolicy = evaluateCustomsSuccessFeeCollection(input());
+    expect(fromPolicy.rateBps).toBe(1500);
+    const customPolicy = evaluateCustomsSuccessFeeCollection(
+      input({ feePolicy: { ...FEE_POLICY, rateBps: 2000 } }),
+    );
+    expect(customPolicy.rateBps).toBe(2000);
+    expect(customPolicy.feeAmount).toBe('2000.00');
+  });
+});
 
 describe('V2-08 计费基础 — 无真实回款不计费', () => {
   it('结算未获证实 → SUCCESS_FEE_CALCULATED，不构成应收', () => {
