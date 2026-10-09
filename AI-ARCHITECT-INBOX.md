@@ -173405,3 +173405,186 @@ PRODUCT_CODE_CHANGE_AUTHORIZED=NO
 
 最终裁决： CHANGE 34–36 不再要求技术修改；CHANGE 37 保持 REVISE，登记 CHANGE 38 作为唯一后续证据核验事项。U1 暂不正式关闭，U2–U5 继续禁止实施。本次审计未对仓库进行任何写入。
 ```
+
+### [MSG-20261009-23] U1 FINAL-R8（CHANGE 38）= **PASS WITH REVISE**（内联证据审查层面通过，但独立核验 NO）—— CHANGE38_INLINE_EVIDENCE_ACCEPTED=YES：双 HEAD 绑定（产品/测试 → 9ee36837、原始输出/负对照 → aa730476）合理、R7 自我更正被接受（**CHANGE38_SELF_CORRECTION_R7_LABELLING=PASS**）、SCOPE_HONESTY=PASS，其余六项 = PASS_SCOPED（未独立读取 Git 对象/未复算哈希/未复核完整代码树/未取得完整原始输出）；CHANGE38_INDEPENDENT_REPOSITORY_VERIFIED=NO、PHASE3_U1_IMPLEMENTATION_CLOSED=NO、PHASE3_A_U2_TO_U5_AUTHORIZED=NO，且**本轮不要求修改产品代码**；登记唯一门禁 **CHANGE 39（P1）独立复核证据闭环**（提供审计方可读取的 Git 仓库地址+固定提交访问权限，或包含 Git 对象的可核验离线归档；独立确认三个 HEAD 存在、九个文件的提交归属/字节长度/SHA-256、9ee36837..23584224 与 23604dcb..9ee36837 的差异、运行记录完整命令与退出码与恢复后指纹；全部通过则下一轮可直接申请 U1 FINAL CLOSURE，无需重复 CHANGE 34–38）；评审方并指出送审 A 节用「6 个新证据文件」概括文件列表不是完整逐字原始输出；NEXT_AUTHORIZED=PHASE3_A_U1_CHANGE39_EVIDENCE_VERIFICATION_ONLY / NEXT_AUDIT=MSG-20261009-24；reviewed ref 9ee36837 / evidence ref aa730476
+
+```text
+MSG-20261009-23｜SI/RSI INTERNAL CODE REPAIR V1 独立审计裁决
+FINAL VERDICT：PASS WITH REVISE
+
+审计范围： PHASE 3-A · U1 FINAL-R8 · CHANGE 38
+
+审计锚点：
+
+REVIEWED_HEAD = 9ee3683725ad694123092e5bafce9a32b75d3fd2
+
+EVIDENCE_HEAD = aa7304764db30821d2c7c7d53d186f97f13decc5
+
+HEAD_AFTER_EVIDENCE = 23584224b3617befff28ecd12a3df1a815c9e06a
+
+一、最终裁决
+
+本轮 CHANGE 38 的双 HEAD 绑定、自我更正和原始输出追溯方案，在内联证据审查层面通过。
+
+但本轮没有独立取得 Git 对象字节、完整执行记录或实际运行测试，因此不能将送审方提供的 MATCH=true、退出码和测试统计视为审计方已经独立复现的结果。
+
+正式裁决：
+
+CHANGE38_INLINE_EVIDENCE_ACCEPTED = YES
+
+CHANGE38_INDEPENDENT_REPOSITORY_VERIFIED = NO
+
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+
+本轮不要求修改产品代码。
+
+二、八项逐项审计
+
+审计项
+
+裁决
+
+说明
+
+1. CHANGE38_HEAD_BINDING_RAW_OUTPUTS
+
+PASS_SCOPED
+
+REVIEWED/EVIDENCE 双 HEAD 绑定关系清晰，但未独立读取 Git 对象
+
+2. CHANGE38_FILE_SHA256_MATCH_ALL
+
+PASS_SCOPED
+
+9 项哈希声明完整，尚未由审计方复算
+
+3. CHANGE38_PRODUCT_CODE_UNCHANGED_DIFF
+
+PASS_SCOPED
+
+提供了零差异记录，尚未独立复核完整代码树
+
+4. CHANGE38_RUN_COMMANDS_EXITCODES
+
+PASS_SCOPED
+
+命令、退出码及统计互相一致，但未取得完整原始输出
+
+5. CHANGE38_SELF_CORRECTION_R7_LABELLING
+
+PASS
+
+明确承认并纠正 R7 证据文件错误绑定的问题
+
+6. U1_READ_ONLY_BOUNDARY_PRESERVED
+
+PASS_SCOPED
+
+送审范围未声明开放新的执行权限，运行时边界仍待独立验证
+
+7. SCOPE_HONESTY
+
+PASS
+
+明确区分内部测试与未验证环境，无生产就绪虚假声明
+
+8. PHASE3_U1_IMPLEMENTATION_CLOSED
+
+NO
+
+缺少独立仓库字节复算及原始运行记录交叉核验
+
+PASS_SCOPED 表示依据当前内联材料审查通过，不表示独立复现通过。
+
+三、关键审计发现
+
+FINDING 1：双 HEAD 绑定修正合理
+
+产品及测试文件绑定 9ee36837，证据产物绑定 aa730476，可以解决 R7 中部分文件并不存在于指定提交的问题。
+
+该修正不要求重做 U1，也不构成产品代码变更。
+
+FINDING 2：R7 自我更正接受
+
+送审方明确披露之前四个证据路径不存在于 9ee36837，并说明其后续引入时间。
+
+接受这一更正，但此前错误的文件绑定结论不得继续作为有效审计证据。
+
+FINDING 3：正负对照设计合理，但仍需字节核验
+
+送审材料声明：
+
+正向：65/65 PASS。
+
+负向：63/65 PASS，DB9 与 DB11 失败。
+
+TypeScript：退出码 0。
+
+恢复原文件：SHA-256 与固定代码 HEAD 一致。
+
+上述结果如果从固定提交与原始输出中独立核实，将为 U1 提供有力的回归证据。目前仅确认其报告内容逻辑一致。
+
+此外，A 节中以“6 个新证据文件”概括 Git 文件列表，不是完整逐字原始输出；正式核验必须使用完整文件路径。
+
+四、REQUIRED CHANGES
+
+只保留一个证据门禁，不新增代码修改要求。
+
+CHANGE 39（P1）：独立复核证据闭环
+
+提供可被审计方读取的 Git 仓库地址（owner/repo）及固定提交访问权限，或提供包含 Git 对象的可核验离线归档。
+
+独立确认三个 HEAD 实际存在，核实九个文件的提交归属、字节长度与 SHA-256。
+
+独立核对 9ee36837..23584224 的代码差异，以及 23604dcb..9ee36837 的指定产品文件差异。
+
+核对运行记录中的完整命令、退出码、原始输出、负向对照及恢复后文件指纹。
+
+如全部通过，下一轮允许直接申请 U1 FINAL CLOSURE，无需重复 CHANGE 34–38，也无需重做已经通过的功能测试。
+
+在完成这一门禁之前，U1 保持未正式关闭状态。
+
+五、下一步授权
+
+NEXT_AUTHORIZED = PHASE3_A_U1_CHANGE39_EVIDENCE_VERIFICATION_ONLY
+
+允许进行只读核验、证据整理和复审准备。
+
+不授权 U2–U5 实施，不授权自主代码修复执行、外部写入、自动合并或自动部署。
+
+六、机器可读裁决
+
+纯文本
+
+AUDIT_ID=MSG-20261009-23
+REVIEWED_HEAD=9ee36837
+EVIDENCE_HEAD=aa730476
+HEAD_AFTER_EVIDENCE=23584224
+FINAL_VERDICT=PASS_WITH_REVISE
+AUDIT_LEVEL=INLINE_EVIDENCE_REVIEW
+INDEPENDENT_REPOSITORY_VERIFIED=NO
+CHANGE38_HEAD_BINDING_RAW_OUTPUTS=PASS_SCOPED
+CHANGE38_FILE_SHA256_MATCH_ALL=PASS_SCOPED
+CHANGE38_PRODUCT_CODE_UNCHANGED_DIFF=PASS_SCOPED
+CHANGE38_RUN_COMMANDS_EXITCODES=PASS_SCOPED
+CHANGE38_SELF_CORRECTION_R7_LABELLING=PASS
+U1_READ_ONLY_BOUNDARY_PRESERVED=PASS_SCOPED
+SCOPE_HONESTY=PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED=NO
+PHASE3_A_U2_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE39_P1_INDEPENDENT_EVIDENCE_VERIFICATION
+PRODUCT_CODE_CHANGES_REQUIRED=NO
+U1_REIMPLEMENTATION_REQUIRED=NO
+NEXT_AUTHORIZED=PHASE3_A_U1_CHANGE39_EVIDENCE_VERIFICATION_ONLY
+NEXT_AUDIT=MSG-20261009-24
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+审计结论： CHANGE 38 的证据整理与自我更正可以接受。当前剩余阻断项是独立核验，而不是已确认的产品实现缺陷。MSG-20261009-24 应以关闭这一证据门禁为唯一目标。
+
+本次未修改、提交或写入任何仓库文件。
+```

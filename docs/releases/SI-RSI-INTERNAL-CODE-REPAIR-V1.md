@@ -1704,3 +1704,78 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.27 MSG-20261009-23 裁决归档 = **PASS WITH REVISE**（CHANGE 38 内联层面通过；独立核验仍未取得）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-23] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（102/102，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=3162 / NORM_LINES=102 / FNV=7be03090`。
+> 审计锚点：`REVIEWED_HEAD=9ee36837`、`EVIDENCE_HEAD=aa730476`、`HEAD_AFTER_EVIDENCE=23584224`。
+
+**本轮正式裁决**
+
+```text
+CHANGE38_INLINE_EVIDENCE_ACCEPTED = YES
+CHANGE38_INDEPENDENT_REPOSITORY_VERIFIED = NO
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+本轮不要求修改产品代码。
+```
+
+**八项逐项**：`HEAD_BINDING_RAW_OUTPUTS / FILE_SHA256_MATCH_ALL / PRODUCT_CODE_UNCHANGED_DIFF /
+RUN_COMMANDS_EXITCODES / U1_READ_ONLY_BOUNDARY_PRESERVED` = PASS_SCOPED；
+`SELF_CORRECTION_R7_LABELLING` = PASS；`SCOPE_HONESTY` = PASS；`PHASE3_U1_IMPLEMENTATION_CLOSED` = NO。
+`PASS_SCOPED` 表示「依据当前内联材料审查通过，不表示独立复现通过」。
+
+**评审方接受的两点**
+
+1. 双 HEAD 绑定修正合理：产品/测试文件绑定 `9ee36837`、证据产物绑定 `aa730476`，
+   解决了 R7 中「部分文件并不存在于指定提交」的问题，且不构成产品代码变更；
+2. R7 自我更正被接受（此前四个证据路径不存在于 `9ee36837` 的结论不得再作为有效证据）。
+
+**评审方提出的两点限定**
+
+- 正负对照（65/65 PASS；负向 63/65、DB9 与 DB11 失败；tsc 退出码 0；恢复后指纹一致）
+  「如果从固定提交与原始输出中独立核实，将为 U1 提供有力的回归证据。目前仅确认其报告内容逻辑一致。」
+- 送审 A 节以「6 个新证据文件」概括 Git 文件列表，「不是完整逐字原始输出；正式核验必须使用完整文件路径」。
+  ⇒ 下一轮必须逐条列出 9 个文件的完整路径，不再使用概括写法。
+
+**唯一剩余门禁：CHANGE 39（P1）独立复核证据闭环**
+
+- 提供**可被审计方读取**的 Git 仓库地址（owner/repo）及固定提交访问权限，
+  或提供**包含 Git 对象的可核验离线归档**；
+- 独立确认三个 HEAD 实际存在，核实九个文件的提交归属、字节长度与 SHA-256；
+- 独立核对 `9ee36837..23584224` 的代码差异，以及 `23604dcb..9ee36837` 的指定产品文件差异；
+- 核对运行记录中的完整命令、退出码、原始输出、负向对照及恢复后文件指纹；
+- 如全部通过，**下一轮允许直接申请 U1 FINAL CLOSURE**，无需重复 CHANGE 34–38，也无需重做已通过的功能测试。
+
+**通道事实（本机观测）**：审计侧 GitHub 连接器仍无法列出/读取该私有仓库；
+此前 `MSG-20261009-20` 的「REVISE — EVIDENCE NOT VERIFIED」与本轮 `INDEPENDENT_REPOSITORY_VERIFIED=NO`
+同源。审计方在裁决中明确「本次未修改、提交或写入任何仓库文件」。
+
+```text
+MSG-20261009-23_FINAL_VERDICT = PASS_WITH_REVISE（AUDIT_LEVEL=INLINE_EVIDENCE_REVIEW）
+MSG-20261009-23_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 102/102；FNV1A 7be03090）
+REVIEWED_HEAD = 9ee36837
+EVIDENCE_HEAD = aa730476
+HEAD_AFTER_EVIDENCE = 23584224
+CHANGE38_SELF_CORRECTION_R7_LABELLING = PASS
+SCOPE_HONESTY = PASS
+CHANGE38_INDEPENDENT_REPOSITORY_VERIFIED = NO
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+REQUIRED_CHANGES = CHANGE39_P1_INDEPENDENT_EVIDENCE_VERIFICATION
+PRODUCT_CODE_CHANGES_REQUIRED = NO
+U1_REIMPLEMENTATION_REQUIRED = NO
+NEXT_AUTHORIZED = PHASE3_A_U1_CHANGE39_EVIDENCE_VERIFICATION_ONLY
+NEXT_AUDIT = MSG-20261009-24
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```
+
+**待用户决定（HOST_ACTION_REQUIRED）**：CHANGE 39 要求「审计方可读取的仓库地址 + 固定提交访问权限」。
+该私有仓库若保持私有，审计侧连接器无法读取；把它改为公开属于仓库可见性变更（超出当前授权边界，需用户决定）。
+备选：把包含 Git 对象的可核验离线归档（对象字节 + `git hash-object` 复算）作为会话附件交付给审计方复核。
