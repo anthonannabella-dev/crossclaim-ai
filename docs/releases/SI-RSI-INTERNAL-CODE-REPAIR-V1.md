@@ -1394,3 +1394,47 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.21 MSG-20261009-19 裁决归档（PASS WITH REVISE）+ CHANGE 32（并发事务隔离）实施
+
+> 归档：`AI-ARCHITECT-INBOX.md`（逐字，**FULL_COPY_OK**：原文 29 行 / 归档 29 行，缺失 0、多出 0）
+> 源文件：`work/self-repair/verdict-msg-20261009-19.txt`（来源＝HOST 在会话中粘贴的裁决正文）
+> 裁决：`VERDICT = PASS WITH REVISE`；`REVIEWED_HEAD = e4c2f27d`、`EVIDENCE_HEAD = 16cf7747`；
+> CHANGE 29 = **PASS**（三个完整 U1 文件可从 GitHub 固定提交读取、与 evidence.json 一致、SHA-256 独立复算一致）；
+> CHANGE 30 = PASS_SCOPED、CHANGE 31 = PASS_SCOPED；`PHASE3_U1_IMPLEMENTATION_CLOSED = NO`。
+
+**CHANGE 32（P0）并发事务隔离 —— 已完成**
+
+- 缺陷：`createPrismaTrustedFactsReadPort` 用**实例级** `activeTransaction` 保存“当前事务句柄”，
+  并发 `resolve()` 共用同一 `readPort` 实例时，后发请求可能复用先发请求的事务（并可能在其后被清空后回落裸 client）。
+- 修复：改为 `AsyncLocalStorage` **按调用链**隔离事务句柄 —— 并发调用各自持有自己的只读事务；
+  同一调用链内的嵌套调用复用同一事务；异常随调用链自动失效，不存在残留句柄复用路径。未新增 Runtime/Scheduler/Controller。
+- 新增 `U1-DB9` 真实 PostgreSQL 并发回归：同一 `readPort` 实例 + 两个租户（版本 3 / 5），
+  **A 先进入只读事务并停住，B 才启动**（强制交错），断言：
+  ① 事务归属独立（两次并发调用的事务句柄序号互异）；② 每此调用 `transaction_read_only = on`；
+  ③ 每次调用内的写入均被拒（PG 25006）；④ 无跨租户串扰（各自拿到本租户 authorizationId/version）；
+  ⑤ 异常路径 fail-closed（不存在组织 ⇒ `ORGANIZATION_NOT_FOUND`），其后调用获得**全新**事务。
+- **负向对照**：把端口还原为 CHANGE 32 之前的实现（实例级共享句柄）后运行同一套测试，
+  `U1-DB9` **失败**：`expected 1 not to be 1`（两次并发调用拿到同一事务句柄）—— 证明该回归确实能捕获此缺陷。
+
+**验证结果（本机实测）**：端口级 53 + 真实 PostgreSQL 9 = **62/62 PASS**；`apps/api tsc --noEmit` **0 error**；
+证据包 `tools/verification/self-repair/phase3a-u1-final-r6-evidence.json`（62 项用例、7 条 `U1_EVIDENCE`、负向对照摘要），
+另附原始输出 `…-r6-vitest-raw.txt`、`…-r6-tsc-raw.txt`、`…-r6-negative-control-vitest-raw.txt` 与对照实现 `…-r6-negative-control-adapter.ts`。
+
+```text
+MSG19_VERDICT = PASS_WITH_REVISE（逐字归档 FULL_COPY_OK 29/29）
+CHANGE29 = PASS / CHANGE30 = PASS_SCOPED / CHANGE31 = PASS_SCOPED
+CHANGE32 = IMPLEMENTED（AsyncLocalStorage 按调用链隔离 + U1-DB9 并发回归 + 负向对照）
+PHASE3_U1_FINAL_R6_CODE_COMMIT = 23604dcb
+PHASE3_U1_FINAL_R6_TESTS = 端口级 53 + 真实 PG 9 = 62/62 PASS；api tsc 0
+PHASE3_U1_FINAL_R6_NEGATIVE_CONTROL = 旧实现下 U1-DB9 失败（expected 1 not to be 1）
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO（等待 MSG-20261009-20 裁决）
+NEXT_UNIT = 送审 MSG-20261009-20（CHANGE 32 修复证据；申请 U1 CLOSED）
+NEXT_AUDIT = MSG-20261009-20
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```
