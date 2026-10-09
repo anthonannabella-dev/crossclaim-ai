@@ -176650,3 +176650,289 @@ PRODUCTION=NOT_VERIFIED
 
 下一轮 MSG-20261009-35 应仅提交 CHANGE 32–35 的设计修订与最小审计证据。本次审查没有修改仓库；即使 R10 设计通过，真实 PostgreSQL、Linux 隔离及并发测试仍须在后续实施阶段分别取证。
 ```
+
+### [MSG-20261009-35] U2 设计 R10 = **REVISE**（CHANGE 33 首个 PASS_SCOPED；新增 CHANGE 36–39，含 2 个 P0）—— 十项：`CHANGE33_POSTGRES_CONCURRENT_INVALIDATION_FIXED=PASS_SCOPED`（`SELECT ... FOR UPDATE` 同事务锁 Incident/Task 后再做资格检查可防止被锁行在提交前被改；固定锁序、限制重试、未知 COMMIT 禁重插均合理；但**仅限设计机制**，实施时须确认所有影响资格的可变状态都纳入事务内重验、事务后变化仍须消费前复查）、`CHANGE32_LOCK_RELEASE_PATH_RACE_FIXED=REVISE`、`CHANGE34_UNKNOWN_COMMIT_RECONCILE_SEMANTICS_FIXED=REVISE`、`CHANGE35_SIDE_EFFECT_REPORT_CONSISTENCY_FIXED=REVISE`、`U2_INPUT_OUTPUT_CONTRACT=REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE`、`U2_IMPLEMENTATION_BOUNDARY=PASS`、`SCOPE_HONESTY=PASS`、`U2_DESIGN_APPROVED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`；独立核验：`R9→R10 = 2 提交/3 文件`、blob SHA `7a86e43c…f11ac3ca1` **匹配**、`apps/api` 0 变更，文档 SHA-256 **未独立复算**且 PostgreSQL/Linux/Vitest/CI 未运行验证；**新增 REQUIRED_CHANGES**：**CHANGE 36（P0）锁释放缺同 UID 并发防护**——`RENAME_NOREPLACE` 只防目标覆盖、`O_NOFOLLOW` 只防最终路径符号链接、目录权限只挡其他用户；**同一服务账户的第二个进程**仍可在「A 检查与改名之间」替换源目录项：须明确锁目录安全假设（单进程独占 / 不同 UID 隔离 / 同 UID 多进程）、若允许同 UID 并发须给出**可验证的路径互斥机制**（不得仅凭目录属主权限）、释放前后检查须覆盖持锁实际对象与源目录项且异常 fail-closed、明确「取锁→候选事务结束→释放」生命周期关系、**U2-31 增加同 UID 双进程竞争与「释放验证后、删除前」对抗性路径替换测试**；验收原则：不得删除不属于本次持锁者的锁对象，无法证明所有权必须保留现场不得自动清理；**CHANGE 37（P0）COMMIT 对账须证明记录属于本次事务**——**查到完全匹配记录 ≠ 本次 INSERT 已提交**（同 dedupeKey 的候选可能先前已存在）：须区分 `RECORD_EXISTS` 与 `THIS_INSERT_COMMITTED`、对账必须匹配**本次 INSERT 可验证的唯一候选 ID 或等价事务归因凭据**（仅靠 dedupeKey/digest/关联字段不足）、无法排除既有记录或竞争事务时 `commitState=UNKNOWN` 且**不得输出 `newRowsCommitted=1`**、`ON CONFLICT DO NOTHING` 零行路径与未知 COMMIT 路径严格分开、新增对抗用例（预先存在完全匹配候选 + 未知 COMMIT 禁止误报 `CANDIDATE_INSERTED`），并说明现有标识是否足以构建可证明的提交归因，不能则保持 UNKNOWN；**CHANGE 38（P1）统一事务状态与新增行数语义**——`commitState` 目前混用于「数据库事务结果」与「本次是否提交新候选」（合法复用场景会出现 `commitState=NOT_COMMITTED` 而事务其实已提交）：须限定为本次候选 INSERT 的提交状态或重命名为 `candidateInsertCommitState`、`newRowsCommitted` 明确为本次新插入并确认持久化的行数、为未尝试 INSERT 的合法复用规定确定性映射、补全 `insertAttempted`/`insertSucceededInTx`/`reconciled`/`lockReleaseFailed` 在各结果中的组合约束、且 **COMMIT 未知与锁释放同时失败时不得由 `LOCK_RELEASE_FAILED` 覆盖提交不确定性**，保持三个 outcome 不扩枚举；**CHANGE 39（P1）隔离证明与 refs digest 精确定义**——`utf8("u2refs:v1" + "\n" + 字节)` 混用字符串与原始字节（须先编码固定前缀再 Buffer 拼接，不得把 packed-refs 隐式转字符串）、须明确 common git dir / worktree gitdir 的**相对路径解析、顺序与域分隔**以避免不同组合产生同一切片、**区分传输通道与签发者身份认证**（环境变量/启动挂载不天然证明签发者可信，同 UID 可伪造）、无法建立可信进程或签发者身份时维持 `NOT_ATTESTED`（不要求新增密钥系统，无法满足则直接拒绝）；NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R11_READ_ONLY_CHANGES_36_TO_39 / NEXT_AUDIT=MSG-20261009-36（须提供 R10→R11 差异、完整状态组合表、锁并发时序与提交对账正负例判定表）；reviewed ref 35a50c63
+
+```text
+MSG-20261009-35｜U2 设计 R10 独立审计裁决
+FINAL VERDICT：REVISE
+审计对象： CrossClaim AI · SI/RSI INTERNAL CODE REPAIR V1
+审计范围： PHASE 3-A / U2 DESIGN R10 / CHANGE 32–35
+审查提交： 35a50c63e1f37b70081eaed1dafc98d90163ea13
+
+一、总体裁决
+
+我已通过 GitHub 连接器读取 R10 提交、设计文档及 R9→R10 的提交比较结果。
+
+本轮确认取得实质性进展，但尚不批准进入 U2 实施。
+
+R10 已解决上一轮多项核心问题的设计方向，包括 PostgreSQL 权威行锁、未知 COMMIT 的保守对账、不可覆盖的锁文件改名及副作用报告的三态语义。
+
+独立核实的版本信息如下：
+
+核验项目
+
+结果
+
+R9 基线
+
+d9172daa，已核对
+
+R10 提交
+
+35a50c63，已核对
+
+Git blob SHA
+
+7a86e43c…f11ac3ca1，匹配
+
+R9→R10 提交数
+
+2，匹配
+
+R9→R10 变更文件数
+
+3，匹配
+
+apps/api 产品代码变更
+
+0，按 GitHub 比较文件清单确认
+
+R10 文档 SHA-256
+
+未独立复算
+
+PostgreSQL / Linux / Vitest / CI
+
+未进行运行验证
+
+本次裁决基于实际取得的文档内容与提交差异，不把设计审查等同于运行测试。
+
+二、十项裁决
+
+审计项目
+
+裁决
+
+1. CHANGE32_LOCK_RELEASE_PATH_RACE_FIXED
+
+REVISE
+
+2. CHANGE33_POSTGRES_CONCURRENT_INVALIDATION_FIXED
+
+PASS_SCOPED
+
+3. CHANGE34_UNKNOWN_COMMIT_RECONCILE_SEMANTICS_FIXED
+
+REVISE
+
+4. CHANGE35_SIDE_EFFECT_REPORT_CONSISTENCY_FIXED
+
+REVISE
+
+5. U2_INPUT_OUTPUT_CONTRACT
+
+REVISE
+
+6. U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED
+
+REVISE
+
+7. U2_IMPLEMENTATION_BOUNDARY
+
+PASS
+
+8. SCOPE_HONESTY
+
+PASS
+
+9. U2_DESIGN_APPROVED
+
+NO
+
+10. U2_IMPLEMENTATION_AUTHORIZED
+
+NO
+
+裁决依据： R10 §18 已经引入关键安全机制，但锁所有权、提交结果归因和副作用报告仍存在影响实施安全性的边界问题。
+
+本轮不要求重新设计 U2 架构，也不要求修改已经封板的 U1。
+
+三、必须修订的问题
+
+CHANGE 36（P0）—— 锁释放仍缺少同 UID 并发防护
+
+对应 R10 §18.1。
+
+RENAME_NOREPLACE 避免目标被覆盖，O_NOFOLLOW 防止最终路径的符号链接跟随，目录权限阻止其他用户改写。这些措施有效，但尚不能证明同一运行账户内的其他进程无法替换源路径。
+
+例如，同一服务账户启动两个进程，进程 B 可以拥有与 A 相同的目录写权限。即使 A 保存了旧 fd，B 仍可能在 A 检查与改名之间替换目录项。
+
+修订要求：
+
+明确锁目录的安全假设：是单进程独占、不同 UID 隔离，还是存在同 UID 多进程。
+
+如果允许同 UID 并发，必须提供可验证的路径互斥机制，不能仅凭目录属主权限证明安全。
+
+释放前后的检查必须涵盖持有锁的实际对象和源目录项，异常必须 fail-closed。
+
+明确锁获取、候选事务结束、锁释放之间的生命周期关系。
+
+U2-31 增加同 UID 双进程竞争，以及释放验证后、删除前的对抗性路径替换测试。
+
+验收： 不得删除不属于本次持锁者的锁对象；任何无法证明所有权的状态必须保留现场，不得自动清理。
+
+CHANGE 37（P0）—— COMMIT 对账需要证明记录属于本次事务
+
+对应 R10 §18.3。
+
+R10 正确规定了：
+
+查不到记录 ≠ 已回滚
+
+但另一个方向也需要区分：
+
+查到完全匹配的记录，不必然等于本次 INSERT 已经提交。
+
+如果相同 dedupeKey 的候选在本次操作之前已经存在，那么重新查询得到匹配记录，只能证明数据库存在相应记录，不能直接证明本次事务新写入一行。
+
+修订要求：
+
+区分 RECORD_EXISTS 与 THIS_INSERT_COMMITTED 两类事实。
+
+对账必须匹配本次 INSERT 可验证的唯一候选 ID 或等价事务归因凭据；单靠 dedupeKey、digest、关联字段一致不够。
+
+如果无法排除既有记录或竞争事务的影响，commitState=UNKNOWN，不得输出 newRowsCommitted=1。
+
+将 ON CONFLICT DO NOTHING 零行路径与未知 COMMIT 路径严格分开。
+
+增加对抗性用例：预先存在完全匹配候选，本次 COMMIT 返回未知，禁止误报 CANDIDATE_INSERTED。
+
+无需新增 schema，但必须说明现有标识是否足以构建可证明的提交归因。如果不能，则保留 UNKNOWN。
+
+CHANGE 38（P1）—— 统一事务状态与新增行数的语义
+
+对应 R10 §18.4。
+
+目前 commitState 既用于数据库事务的结果，又用于“本次是否提交新候选”的业务含义。
+
+在合法既有候选复用场景中，事务可能成功提交，但状态表给出：
+
+commitState=NOT_COMMITTED
+
+这种表达容易使后续调用方误判事务执行结果。
+
+修订要求：
+
+commitState 明确只描述本次候选 INSERT 的提交状态，或重命名为 candidateInsertCommitState。
+
+newRowsCommitted 明确描述本次调用新插入并确认持久化的行数。
+
+对于未尝试 INSERT 的合法复用场景，规定其确定性映射，避免和“已尝试但事务回滚”混同。
+
+补全 insertAttempted、insertSucceededInTx、reconciled、lockReleaseFailed 在每一种结果中的组合约束。
+
+当 COMMIT 未知且锁释放同时失败时，不得由 LOCK_RELEASE_FAILED 覆盖更重要的提交不确定性。
+
+建议保持既有三个 outcome，不扩展结果枚举；通过报告字段区分各类状态。
+
+CHANGE 39（P1）—— 隔离证明与 refs digest 仍需精确定义
+
+对应 R10 §18.4 对 CHANGE 26 的补充。
+
+R10 已定义分隔符、换行符和排序方式，但存在两个待消除的歧义。
+
+第一，utf8("u2refs:v1" + "\n" + 上述字节) 混合了字符串和原始字节。实现时必须明确先编码固定前缀，再进行 Buffer 拼接，不能把 packed-refs 的二进制内容隐式转成字符串。
+
+第二，环境变量或启动时挂载并不天然证明签发者可信。若同 UID 进程能够伪造注入值，签发信任仍可能被绕过。
+
+修订要求：
+
+Digest 使用明确的字节序列拼接，固定排序编码规则。
+
+明确 common git dir、worktree gitdir 的相对路径解析、顺序及域分隔，避免不同文件组合产生同样的拼接结果。
+
+区分证明的传输通道和签发者身份认证。
+
+对无法建立可信进程身份或签发者身份的情况维持 NOT_ATTESTED。
+
+不要求新增密钥管理系统；无法满足可信前提时直接拒绝 U2 即可。
+
+四、对 R10 已解决问题的确认
+
+CHANGE 33：PASS_SCOPED。 SELECT FOR UPDATE 在同一事务内锁定 Incident 和 Task，再进行权威资格检查，可以防止这些被锁定的行在提交前遭其他事务更新。固定加锁顺序、限制重试、对未知 COMMIT 禁止自动重插，均属于合理设计。
+
+这里的通过仅限于设计机制。实施时必须确认所有影响资格的可变数据库状态都纳入事务内重验；对于事务结束后的状态变化，仍必须在消费前重新检查。
+
+CHANGE 34：部分通过。 将未查询到记录保持为 UNKNOWN 是正确修复；阻断其完整通过的只是本次事务归因问题。
+
+CHANGE 35：部分通过。 reason 与 outcome 的分离正确，三态 newRowsCommitted 也比原先安全。仍需解决字段含义和组合一致性。
+
+实施边界与范围真实性：PASS。 R10 没有声称已通过真实 PostgreSQL、Linux/systemd、Vitest、TypeScript 或生产验收，也没有把文档修订冒充代码完成。当前审查没有发现超出所申报的产品代码修改范围。
+
+五、下一轮最小授权范围
+
+建议下一轮仅进行 R11 设计文档修订，集中关闭 CHANGE 36–39。
+
+不要求扩大功能范围，不重新打开 U1，不允许 U3–U5 提前实施，也不允许通过实测替代尚未定义清楚的安全契约。
+
+MSG-20261009-36 应提供 R10→R11 设计差异、完整状态组合表、锁并发时序与提交对账的正负例判定表。
+
+待上述设计问题关闭，再独立判断是否授权 U2_PLATFORM_ONLY_INSERT_SUBSET 的最小实现。
+
+六、机器可读审计裁决
+
+以下可直接交给 Codex / Hermes，作为下一轮执行边界。
+
+MSG-20261009-35 · 审计结果
+
+复制
+
+只读裁决 · 未修改仓库
+
+纯文本
+
+AUDIT_ID=MSG-20261009-35
+REPO=anthonannabella-dev/crossclaim-ai
+BRANCH=feat/si-rsi-internal-code-repair-v1
+U1_CODE_HEAD=9ee36837
+U2_DESIGN_COMMIT_R9=d9172daa
+U2_DESIGN_COMMIT_R10=35a50c63
+U2_DESIGN_GIT_BLOB_SHA=7a86e43ca3dc8c77bbea2ec20581f58f11ac3ca1
+U2_DESIGN_DOC_SHA256=7c8e36aab76fb3d33d202fe99baa1cbcc8053d1f33292713541c4fc12287488d
+U2_DESIGN_DOC_SHA256_VERIFICATION=NOT_INDEPENDENTLY_VERIFIED
+R9_TO_R10_COMMITS=2
+R9_TO_R10_FILES=3
+R9_TO_R10_PRODUCT_CODE_CHANGES=0
+FINAL_VERDICT=REVISE
+CHANGE32_LOCK_RELEASE_PATH_RACE_FIXED=REVISE
+CHANGE33_POSTGRES_CONCURRENT_INVALIDATION_FIXED=PASS_SCOPED
+CHANGE34_UNKNOWN_COMMIT_RECONCILE_SEMANTICS_FIXED=REVISE
+CHANGE35_SIDE_EFFECT_REPORT_CONSISTENCY_FIXED=REVISE
+U2_INPUT_OUTPUT_CONTRACT=REVISE
+U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE
+U2_IMPLEMENTATION_BOUNDARY=PASS
+SCOPE_HONESTY=PASS
+U2_DESIGN_APPROVED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PHASE3_A_U3_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE36_P0,CHANGE37_P0,CHANGE38_P1,CHANGE39_P1
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R11_READ_ONLY_CHANGES_36_TO_39
+NEXT_AUDIT=MSG-20261009-36
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+POSTGRESQL_INTEGRATION_TEST=NOT_VERIFIED
+VITEST=NOT_VERIFIED
+TSC=NOT_VERIFIED
+LINUX_SYSTEMD=NOT_VERIFIED
+CI=NOT_VERIFIED
+PRODUCTION=NOT_VERIFIED
+
+最终结论：R10 暂不通过 U2 设计验收，实施权限继续关闭。 下一轮只需修订上述四项，不应再扩展修复范围或重做已通过部分。
+```

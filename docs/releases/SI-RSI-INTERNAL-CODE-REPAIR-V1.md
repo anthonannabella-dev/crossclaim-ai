@@ -2446,3 +2446,66 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.39 MSG-20261009-35 裁决归档 = **REVISE**（CHANGE 33 首个 PASS_SCOPED；新增 CHANGE 36–39，含 2 个 P0）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-35] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（163/163，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=5408 / NORM_LINES=163 / FNV=0d8abefe`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R9=d9172daa`、`REVIEWED_HEAD=35a50c63`。
+
+**审计方独立核验**：`R9→R10` = **2 提交 / 3 文件**（提交数与文件数**均匹配**）、
+**Git blob SHA `7a86e43c…f11ac3ca1` 匹配**、`apps/api` 0 变更；
+R10 文档 SHA-256 **未独立复算**；PostgreSQL/Linux/Vitest/CI **未进行运行验证**。
+
+**十项**：`CHANGE33 = PASS_SCOPED`（**本轮唯一通过项**：`SELECT ... FOR UPDATE` 同事务锁 Incident/Task 后再判资格，
+可防止被锁行在提交前被改；固定锁序、限制重试、未知 COMMIT 禁重插均合理——但**仅限设计机制**）、
+`CHANGE32 = REVISE`、`CHANGE34 = REVISE`、`CHANGE35 = REVISE`、
+`U2_INPUT_OUTPUT_CONTRACT = REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED = REVISE`、
+`U2_IMPLEMENTATION_BOUNDARY = PASS`、`SCOPE_HONESTY = PASS`、
+`U2_DESIGN_APPROVED = NO`、`U2_IMPLEMENTATION_AUTHORIZED = NO`。
+
+**REQUIRED_CHANGES（下一轮 MSG-20261009-36 只做这四项；`R11`）**
+
+- **CHANGE 36（P0）锁释放缺同 UID 并发防护**：`RENAME_NOREPLACE` 只防**目标覆盖**、`O_NOFOLLOW` 只防最终路径
+  符号链接、目录权限只挡**其他用户**；**同一服务账户的第二个进程**仍可在「A 检查与改名之间」替换**源目录项**。须：
+  ① 明确锁目录安全假设（单进程独占 / 不同 UID 隔离 / 同 UID 多进程）；② 若允许同 UID 并发，须给出
+  **可验证的路径互斥机制**（不得仅凭目录属主权限）；③ 释放前后检查须覆盖**持锁实际对象与源目录项**，
+  异常 **fail-closed**；④ 明确「取锁 → 候选事务结束 → 释放」的生命周期关系；
+  ⑤ **U2-31 增加同 UID 双进程竞争**与「释放验证后、删除前」的对抗性路径替换测试。
+  **验收原则**：不得删除不属于本次持锁者的锁对象；无法证明所有权必须**保留现场、不得自动清理**。
+- **CHANGE 37（P0）COMMIT 对账须证明记录属于本次事务**：**查到完全匹配记录 ≠ 本次 INSERT 已提交**
+  （同 `dedupeKey` 的候选可能**先前已存在**）。须：① 区分 `RECORD_EXISTS` 与 `THIS_INSERT_COMMITTED`；
+  ② 对账必须匹配**本次 INSERT 可验证的唯一候选 ID 或等价事务归因凭据**（仅靠 dedupeKey/digest/关联字段不足）；
+  ③ 无法排除既有记录或竞争事务影响时 `commitState=UNKNOWN`，**不得输出 `newRowsCommitted=1`**；
+  ④ `ON CONFLICT DO NOTHING` **零行路径**与**未知 COMMIT 路径**严格分开；
+  ⑤ 新增对抗用例：预先存在完全匹配候选 + 本次 COMMIT 返回未知 ⇒ **禁止误报 `CANDIDATE_INSERTED`**；
+  ⑥ 说明现有标识是否足以构建可证明的提交归因，不能则保持 `UNKNOWN`（无需新增 schema）。
+- **CHANGE 38（P1）统一事务状态与新增行数语义**：`commitState` 目前**混用**「数据库事务结果」与
+  「本次是否提交新候选」（合法复用场景会出现 `commitState=NOT_COMMITTED` 而事务其实已提交）。须：
+  ① 限定为本次候选 INSERT 的提交状态，或重命名为 `candidateInsertCommitState`；
+  ② `newRowsCommitted` 明确为「本次调用新插入并确认持久化的行数」；③ 为**未尝试 INSERT 的合法复用**
+  规定确定性映射（避免与「已尝试但回滚」混同）；④ 补全 `insertAttempted`/`insertSucceededInTx`/`reconciled`/
+  `lockReleaseFailed` 在各结果中的**组合约束**；⑤ **COMMIT 未知与锁释放同时失败时，不得由 `LOCK_RELEASE_FAILED`
+  覆盖更重要的提交不确定性**；⑥ 保持三个 outcome、不扩枚举，用报告字段区分状态。
+- **CHANGE 39（P1）隔离证明与 refs digest 精确定义**：① `utf8("u2refs:v1" + "\n" + 字节)` **混用字符串与原始字节**
+  ⇒ 必须先编码固定前缀再 **Buffer 拼接**，不得把 `packed-refs` 隐式转字符串；② 明确 **common git dir /
+  worktree gitdir** 的相对路径解析、顺序与**域分隔**，避免不同文件组合产生相同拼接结果；
+  ③ **区分传输通道与签发者身份认证**（环境变量/启动挂载不天然证明签发者可信，同 UID 可伪造注入值）；
+  ④ 无法建立可信进程或签发者身份时**维持 `NOT_ATTESTED`**（不要求新增密钥系统，无法满足则直接拒绝）。
+
+```text
+MSG-20261009-35_FINAL_VERDICT = REVISE
+MSG-20261009-35_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 163/163；FNV1A 0d8abefe）
+CHANGE_33 = PASS_SCOPED（设计机制通过；实施须确认全部可变资格状态纳入事务内重验）
+U2_DESIGN_APPROVED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · U3–U5 = NO
+REQUIRED_CHANGES = CHANGE_36_P0_SAME_UID_LOCK_RELEASE_RACE ; CHANGE_37_P0_COMMIT_ATTRIBUTION ;
+                   CHANGE_38_P1_TX_STATE_AND_NEWROWS_SEMANTICS ; CHANGE_39_P1_ATTESTATION_AND_REFS_DIGEST
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R11_READ_ONLY_CHANGES_36_TO_39
+NEXT_AUDIT = MSG-20261009-36（须附 R10→R11 差异、完整状态组合表、锁并发时序与提交对账正负例判定表）
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
