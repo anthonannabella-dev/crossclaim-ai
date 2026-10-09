@@ -1,12 +1,13 @@
-# PHASE 3-A · U2 设计 R19（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R20（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-41 = REVISE` → `MSG-20261009-42 = REVISE` → `MSG-20261009-43 = REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R19_READ_ONLY_CHANGES_73_TO_78`。
-> 本文件是 **U2 设计 R19** 送审材料（MSG-20261009-44），**不含任何产品代码改动**。
-> **R19 的修订集中在 §27**（`P2` 探针独立性契约 / 协议边界与负面验收 / FD 边界失效时的**写入保证**与内核语义勘误 /
-> M1 **恢复状态机**与去重权威 / 行版本身份与**有效期限** / U2-50g~j），含本仓库范围内的只读证据核验；
-> §1–§26 保留历史；凡冲突者以 §27 为准（**R13–R19 优先于 §20.4.1**）。
+> `MSG-20261009-42 = REVISE` → `MSG-20261009-43 = REVISE` → `MSG-20261009-44 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R20_READ_ONLY_CHANGES_79_TO_82`。
+> 本文件是 **U2 设计 R20** 送审材料（MSG-20261009-45），**不含任何产品代码改动**。
+> **R20 的修订集中在 §28**（最终 `P2`→`COMMIT` 的**排他保证**（预防性 vs 事后检出）/
+> M1 **跨实例恢复阻断权威** / `XID`·`xmin` 的**证明边界**（降为辅助证据）/
+> `U2-50j`·`U2-51b` 的**验收语义修正**），含本仓库范围内的只读证据核验；
+> §1–§27 保留历史；凡冲突者以 §28 为准（**R13–R20 优先于 §20.4.1**）。
 
 | 锚点 | 值 |
 | --- | --- |
@@ -29,7 +30,8 @@
 | U2 设计 R16 | `97dee91e` |
 | U2 设计 R17 | `c9ec3eca` |
 | U2 设计 R18 | `c391245e` |
-| U2 设计 R19 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R19 | `824ac886` |
+| U2 设计 R20 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -2739,5 +2741,203 @@ R19_NOT_VERIFIED = P2_INDEPENDENCE_ENFORCEMENT ; DEPLOYMENT_INVENTORY_EVIDENCE ;
 ```
 
 本文件仍为**纯设计 R19**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+本轮只读核验**仅**读取 `apps/api/prisma/schema.prisma`、既有迁移文件与 `apps/api/src` 中的只读检索结果，
+**未**连接任何数据库、**未**执行任何写入。
+
+---
+
+## 28. R20 修订（对应 MSG-20261009-44 的 CHANGE 79–82）
+
+> 授权来源：`MSG-20261009-44 = REVISE` ⇒ `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R20_READ_ONLY_CHANGES_79_TO_82`。
+> 本轮只处理这四项；`CHANGE 73`（PASS）与 `CHANGE 74`（PASS_SCOPED）**不重开**，其余已接受条款**不重复**。
+> `U2_DESIGN_R19_ACCEPTED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`U1_REOPEN=NO` **不变**。
+
+```text
+AUDIT_SCOPE   = 4d95e04c..<本轮设计提交> = 2 commits / 3 files（含上一轮裁决归档提交）
+SINGLE_COMMIT = 4d95e04c..<本轮设计提交> = 1 commit / 1 file
+PRODUCT_CODE  = 0
+```
+
+| CHANGE | R19 位置 | R20 修订位置 | 变更性质 |
+| --- | --- | --- | --- |
+| **CHANGE 79（P0）** | §27.3.3–§27.3.5 | **§28.1** | **撤回**「提交前 `P2` 必然检出」；确立**预防性前提**或 **DB 端 fencing**；禁用「缩窗/事后检查」替代 |
+| **CHANGE 80（P0）** | §27.4.3 | **§28.2** | **跨实例恢复阻断权威**（单一协调者 + 人工分支 + 不一致确定性处置） |
+| **CHANGE 81（P0）** | §27.5.3 | **§28.3** | `xmin` **降为辅助证据**；明确可证明「存在」与可证明「本执行提交」的界限 |
+| **CHANGE 82（P1）** | §27.6 | **§28.4** | `U2-50j` 拆分为两个时序；`U2-51b` **分离安全结论与数据库结论** |
+
+### 28.1 CHANGE 79（P0）—— 最终 `P2` → `COMMIT` 的**排他保证**
+
+**承认审计方的判断**：R19 §27.3 承认用户态存在 TOCTOU，但 §27.6 的 `U2-50j` 又要求「提交前 `P2` 必须检出提前释放」；
+**两者只有在释放发生于最终 `P2` 之前时才同时成立**。审计方给出的反例成立：
+
+```text
+T1: 最终 P2 检查通过
+T1: 原 flock 因边界失效被释放
+T2: 成功取得 flock
+T2: 提交自己的写入
+T1: 发出 COMMIT
+T1: COMMIT 成功
+T1: 提交后 P2 检出异常        # 只能发现异常，不能撤销 T1 已完成的提交
+```
+
+**R20 规则**
+
+1. **撤回**：「提交前 `P2` **必然**检出所有提前释放」的表述**作废**。
+   `P2` 的定位**进一步收窄**为：①最终 `P2` **之前**发生的释放，**可被检出**；
+   ②最终 `P2` **之后**（含 `COMMIT` 往返期间）发生的释放，**不可被提交前的任何检查检出**。
+2. **真正的安全前提（必须逐字写入实施契约）**：
+
+```text
+SAFETY_PREMISE(P0) = 在整个提交窗口内，本实例的锁不得被意外释放
+   其中 提交窗口 = [最终 P2 完成, COMMIT 返回]
+  ⇒ 该性质必须是【预防性】的（结构上不可能发生），
+    或由【数据库端可执行的 fencing / 串行化】强制执行；
+  ⇒ 不得以「窗口很小」「事后检查」替代。
+```
+
+3. **预防性实现（在无 DB 端能力时唯一可接受路径）**：提交窗口内的"不可能释放"必须由**同时满足**下列条件构成：
+   ①**专用写入进程**（§27.3.1）内**不存在**任何可达 `flock(LOCK_UN)` / `close(锁 FD)` 的代码路径；
+   ②**依赖闭包最小且已审计**：无原生扩展、无 FFI、无动态代码加载（无 `eval`/`vm`/插件/`dlopen` 类机制）；
+   ③**释放能力以一次性令牌表达**：`T3` 释放函数只能凭 `T1` 结束时不创建的"释放令牌"调用，
+     该令牌**仅在**「提交窗口结束且结果已记录」后由控制流生成 ⇒ **提交窗口内无令牌可用**；
+   ④**静态规则集**覆盖 ①②③ 的全部 API 面（§26.3.5 + §27.3.6 勘误版），并在构建期强制。
+   **如实标注**：①②③ 是**实现不变量**（由代码结构与静态规则保证），**不是**内核层面的普遍保证；
+   它们只能在**受控执行环境**（§20.1.3）与**依赖闭包可审计**的前提下成立。
+4. **DB 端 fencing（推荐但当前不可用）**：以**数据库端可执行的栅栏**把「锁已失效」与「写入被拒绝」绑定——
+   例：写入语句携带**栅栏令牌**（fence token），由数据库侧判定其**仍然有效**，失效则该写入**失败**。
+   该机制要求**额外表/函数/权限**（`SCHEMA_MIGRATION=HOLD`、权限未核验）⇒ 当前 **不可用**；
+   在获得之前，本设计**只能**依赖第 3 条的预防性实现，并**必须**保留第 5 条的事后检出作为**检测手段**（非保证）。
+5. **事后检出（保留，但仅作检测）**：`COMMIT` 返回后的 `P2` 复核（§27.3.5）**保留**，
+   其结论按 §28.4 的**分离语义**记录（`safetyOutcome` / `dbCommitOutcome` / `exclusiveWindowViolated` / `downstreamAutomation`）；
+   **禁止**把它描述为「排他权的证明」。
+6. **不可证明时的处置（写死）**：若第 3 条的 ①②③④ **不能同时成立**（或无法证明），
+   **且**第 4 条的 DB 端 fencing **不可用** ⇒ **`EXCLUSIVE_WINDOW_UNAVAILABLE`，不得写入**。
+7. **明确禁止的替代物**：①「缩小微观窗口」；②「提交后检查」；③「更频繁的探针」；④「扫描/计数器」——
+   以上**均不得**用于替代第 2 条的互斥安全证明。
+
+### 28.2 CHANGE 80（P0）—— M1 **跨实例恢复阻断权威**
+
+**承认审计方的判断**：数据库唯一索引（`CREATE UNIQUE INDEX "AutonomyCandidate_dedupeKey_key"`）
+可防止**两个成功提交的事务**建立相同 `dedupeKey` 的候选记录，但**无法保证两个执行实例共享同一个恢复状态判断**：
+在「E1 结果未知、E2 发现唯一键冲突」时，可确认**目标记录存在**，但**不一定能确认哪个执行提交**；
+**不得**据唯一键冲突把 E1 标记为成功；**本地文件不能天然成为所有实例共享的阻断权威**。
+
+**R20 规则**
+
+1. **恢复的串行化（在受控范围内实现"单一协调者"）**：**恢复流程必须与写入共用同一把排他锁**——
+   即「恢复」也必须在 `T0`→`T1`→`T2` 的**排他窗口内**执行（含 §28.1 的 `SAFETY_PREMISE`）。
+   由此在 U2 受控范围内**结构性地**保证：**同一时刻只有一个恢复协调者**可推进任何恢复判定；
+   未取得排他窗口 ⇒ **不得**进行任何恢复判定（保持 `UNKNOWN` 并转人工）。
+2. **跨实例的持久阻断（如实选择可行分支）**：
+   - **分支 A（需新增 schema）**：以**唯一的、所有写入者共同遵守**的持久登记处记录
+     `ATTRIBUTION_UNRECOVERABLE` 等状态 ⇒ **当前 `SCHEMA_MIGRATION=HOLD`，不可用**；
+   - **分支 B（本轮采用）**：**明确将不可归因状态转入人工/控制面处置**——
+     以**意图记录 + 结构化日志 + 控制面工单**作为记录，并**在获得授权前禁止**：
+     ①并发恢复 ②自动重试 `INSERT` ③任何自动化后续动作（`downstreamAutomation=BLOCKED`）。
+   **如实标注**：分支 B 下「跨实例自动互认」为 `NOT_VERIFIED`（未实现），因此**不得**据此授权并发恢复或自动推进。
+3. **本地意图记录与数据库提交不一致时的确定性处置（逐行）**：
+
+| 本地意图 | 主库观察 | 确定性处置 |
+| --- | --- | --- |
+| `PREPARED` | **无**目标行 | **不得**推断已提交；进入**受控恢复**（须持排他窗口）；**不得**直接重放 `INSERT` |
+| `PREPARED` | 目标行存在，且**因果证据有效**（§28.3 的"可证明"级别） | 可确认**对应提交**（`thisExecutionCommitted=YES`，须同时满足全部前提） |
+| `PREPARED` | 目标行存在，但因果证据**不可验证** | `UNKNOWN` + `ATTRIBUTION_UNRECOVERABLE` ⇒ **人工处置**，`downstreamAutomation=BLOCKED` |
+| **缺失/不可读/HMAC 校验失败** | 目标行存在 | `UNKNOWN` + `ATTRIBUTION_UNRECOVERABLE` ⇒ **人工处置**（**不得**凭内容相似补全归因） |
+| **缺失** | 无目标行 | **`UNKNOWN`** ⇒ 转人工（**不得**自动重放） |
+| `COMMIT_UNKNOWN` | 任一 | `UNKNOWN`；**禁止**自动重试 `INSERT` |
+4. **禁止项（重申并加严）**：①不得以唯一键冲突判定某执行"提交成功"；②不得在未取得排他窗口时做恢复判定；
+   ③不得在 `ATTRIBUTION_UNRECOVERABLE` 下推进任何自动化动作；④不得把本地文件的存在当作"已消费/已提交"的证明。
+
+### 28.3 CHANGE 81（P0）—— `XID` / `xmin` 的**证明边界**（降为辅助证据）
+
+**承认审计方的判断**：R19 对冻结语义的更正方向正确，但
+`xmin == low32(capturedXid8)` ∧ `currentXid8 − capturedXid8 < 2^31` ∧ `freezing_impossible`
+**仍不足以独立证明目标行一定由该执行创建**：①`xmin` 是**行版本**事务标识，**不是业务执行标识**；
+②时间窗限制**不能独立证明**该行未被更新、重写或替换；③当前与历史事务 ID 的差距**不能证明行的完整来源**；
+④冻结参数与 XID 消耗速度**只能辅助评估风险**。
+
+**R20 规则**
+
+1. **证据分级（本项目据此对外表述，禁止越级）**：
+
+| 结论 | 允许的证据 | 说明 |
+| --- | --- | --- |
+| **`CANDIDATE_EXISTS`** | 主库存在 `dedupeKey` 相同且必要不变字段一致的行 | **只证明存在**（可能由本执行或其他写入者插入） |
+| **`THIS_EXECUTION_COMMITTED`** | 需**执行身份与数据库事务之间的可信绑定**（第 2 条） | **当前配置下不可达成**（第 3 条） |
+| **`UNKNOWN`** | 其余全部情形（含 `xmin` 只匹配但不满足第 2 条） | **保守默认** |
+2. **可接受的"可信绑定"来源（须同时具备"只能由本执行产生"与"数据库侧可验证"两条性质）**：
+   - **(T1) 同事务数据库审计记录**：在本事务内写入一条关联 `{executionRef, candidateId}` 的记录 ⇒ **需新增表/约束**（`HOLD`，当前不可用）；
+   - **(T2) 数据库端回执/栅栏**：由数据库侧提供**可持久验证**的事务回执或栅栏令牌 ⇒ **需额外能力/权限**（不可用）；
+   - **(T3) 服务端串行化 + 服务端生成令牌**：由数据库侧在事务内生成并返回、且**其他写入者无法预测**的令牌，并与候选行绑定 ⇒ **需 schema/能力**（不可用）。
+3. **当前配置下的确定性结论（关键）**：在 `SCHEMA_MIGRATION=HOLD`、无额外数据库能力的条件下，
+   **没有任何机制满足第 2 条** ⇒ 本设计**不得**宣称 `THIS_EXECUTION_COMMITTED=YES`；
+   `thisExecutionCommitted` 在本配置下**上限为 `UNKNOWN`**（`COMMIT_ATTRIBUTION_PROOF = NOT_AVAILABLE_IN_CURRENT_CONFIGURATION`）。
+   这与 §24.2 的字段分列一致：**允许** `candidateExists=YES` 与 `thisExecutionCommitted=UNKNOWN` 并存。
+4. **`xmin` 的定位（降级并写明用途）**：`xmin` **仅作辅助证据**，用于：
+   ①**辅助排除**（例如与本实例捕获的 `xid8` 不一致时，**支持**"不是本执行"的判断——仍需保守表述）；
+   ②**辅助检测外来修改**（行被更新/删除重插/重写时 `xmin` 变化 ⇒ 触发 `UNKNOWN`）；
+   **不得**单独用于**肯定**归因。原 §27.5.3 的"epoch 构造"**降级为辅助校验**，其通过**不**提升证明等级。
+5. **原行版本连续性的证明要求（未满足即 `UNKNOWN`）**：①同一**主库实例**；②窗口内该行**未被更新/删除重插/重写**
+   （以两次读数一致 + `xmin` 一致 + §26.4 的窗口内证据共同支持）；③窗口内**不可能发生冻结**（须有参数与推进证据；取证失败即不成立）；
+   ④`(ctid, tableoid)` 等物理定位不得被当作长期稳定标识（仅作**同窗口内**辅助比较）。
+6. **提升证明等级的唯一路径**：在**目标 PostgreSQL 版本**上完成实测，并**先取得**第 2 条之一的机制（授权）；
+   在此之前，任何"已证明 epoch 归属"的表述**禁止出现**（`XID_EPOCH_CONSTRUCTION_VERIFIED=NOT_VERIFIED`）。
+
+### 28.4 CHANGE 82（P1）—— 修正 `U2-50j` 与 `U2-51b` 的**验收语义**
+
+1. **`U2-50j` 拆分为两个时序**（原单一用例作废）：
+
+| 编号 | 时序 | 必须结果 |
+| --- | --- | --- |
+| **U2-50j-1** | 释放在**最终 `P2` 之前**（含 `T1` 取锁后、`T2` 门禁前） | **可检出**：`P2`/门禁失败 ⇒ `ROLLBACK`、零写入（`LOCK_RELEASED_EARLY`） |
+| **U2-50j-2** | 释放在**最终 `P2` 之后**（`COMMIT` 发出前或往返期间） | **提交前不可检出**；须由 §28.1 的 `SAFETY_PREMISE`（预防性实现或 DB 端 fencing）**阻止**；若**未**满足该前提 ⇒ 该场景**不允许被设计为"可检出"**，只能按 §28.1.6 **拒绝写入**（`EXCLUSIVE_WINDOW_UNAVAILABLE`） |
+2. **`U2-51b` 的分离语义（写死）**：`outcome='REJECTED'` 表示**安全验收拒绝**，**不得**直接表达数据库事务已回滚。
+   必须**分列**：
+
+```text
+safetyOutcome            = REJECTED
+dbCommitOutcome          = COMMITTED | NOT_COMMITTED | UNKNOWN
+exclusiveWindowViolated  = true
+downstreamAutomation     = BLOCKED
+```
+
+3. **禁止**：把「安全拒绝」混写为「数据库未提交」；把「提交后检出」当成「排他权证明」；
+   把「`U2-50j` 通过」当成 §28.1 安全前提已成立。
+4. **保留**：`U2-50g`（`PREPARED` 已 fsync、`COMMIT` 前崩溃 ⇒ 不得误判 YES）、`U2-50h`（冻结后 `xmin` 未变或超窗 ⇒ `UNKNOWN`）、
+   `U2-50i`（E1 归因不可恢复、E2 竞争同一 `dedupeKey` ⇒ 不得产生第二个候选）的**负面方向不变**。
+
+### 28.5 R20 未变部分与未验证项
+
+§12 候选键 v2 与 digest 概念、§13.1 接口、§13.2 矩阵（`U2-50j` 拆分、其余保持）、§16.1 `CONTROLLED_FIXED_WORKTREE`、
+§17.1 隔离证明框架、§17.2 U2-20A/B/C、§17.3 零行冲突复用路径、§18.1 释放全链校验、§18.2 行锁与重试边界、
+§19.4 通道/签发者分离、§20.3（CHANGE 42）状态语义、§21.2（CHANGE 45）方向、§21.3.4 验证时机与有效期、
+§22.2 `flock` 释放/继承修正、§22.4 四条件、§22.6 字节级契约、§22.7 原子占用、
+§23.1 `T0`/`T1`/`T2` 分阶段条件、§23.3 检测 vs 保证、§23.4 归因四类、§23.5 证据范围纪律、§23.6 字节编码三断言、
+§23.7 消费持久化、§24.1 `P2` 必要非充分与错误分类、§24.2 存在性/提交归因区分、§24.3 `CONSUMPTION_UNKNOWN`、
+§25.2 统一锁 FD 边界与全窗口覆盖、§25.3 M1~M4 候选、
+§26.1 `O3-CONTRADICTED` 边界、§26.2 唯一生产锁协议、§26.3 威胁模型与构建期规则、§26.4 意图记录契约、
+§26.6 U2-50a~f、§27.1 `P2` 独立性契约（**CLOSED**）、§27.2 `DEPLOYMENT_INVENTORY` 与负面验收（**CLOSED_SCOPED**）、
+§27.3.1–§27.3.2 写入进程隔离与 fail-stop、§27.4.1 意图记录五态、§27.4.5 禁止项、
+`builderRef` 固定常量、**U2 路径仅 INSERT**、U2 路径无 `UPDATE`/`DELETE`、不新增 schema/migration、
+不接 Runtime/Queue、不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
+`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+
+```text
+R20_NOT_VERIFIED = SAFETY_PREMISE_PREVENTIVE_IMPLEMENTATION（①~④ 未实现/未证明） ;
+                   DB_SIDE_FENCING_CAPABILITY（不可用） ; COMMIT_ATTRIBUTION_PROOF（当前配置下不可达成） ;
+                   CROSS_INSTANCE_RECOVERY_BLOCKING（分支 B：未实现自动互认） ;
+                   XID_EPOCH_CONSTRUCTION_VERIFIED（降级为辅助校验，未在目标 PG 实测） ;
+                   P2_INDEPENDENCE_ENFORCEMENT ; DEPLOYMENT_INVENTORY_EVIDENCE ;
+                   FILESYSTEM_AND_MOUNT_PREREQUISITES ; WRITE_PROCESS_ISOLATION ;
+                   M1_RECOVERY_STATE_MACHINE ; ATTRIBUTION_MAX_WINDOW_EVIDENCE ;
+                   LOCKFD_BOUNDARY_STATIC_RULES ; U2_LINUX_MULTIPROCESS_TESTS ;
+                   DB_PRIVILEGE_VERIFICATION ; GLOBAL_IMMUTABILITY_PROOF ;
+                   DB_RUNTIME_PRIVILEGES ; DB_TRIGGERS_ACTUAL ; DB_ROLES ; DB_WRITER_SET_ACTUAL ;
+                   OBSERVATION_WINDOW_IMMUTABILITY ; U2_NONCE_CONSUMPTION_STORE ;
+                   POSTGRESQL_INTEGRATION_TEST ; VITEST ; TSC ; LINUX_SYSTEMD ; CI ; PRODUCTION ;
+                   U2_DESIGN_DOC_SHA256（送审方报告）
+```
+
+本文件仍为**纯设计 R20**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
 本轮只读核验**仅**读取 `apps/api/prisma/schema.prisma`、既有迁移文件与 `apps/api/src` 中的只读检索结果，
 **未**连接任何数据库、**未**执行任何写入。
