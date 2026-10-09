@@ -875,3 +875,67 @@ NEXT_UNIT = ① CHANGE 17–20（U1 授权唯一性 / 金额显式规则 / 来�
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
+
+---
+
+### 2.13 PHASE 3-A · U1 FINAL-R2 修复（CHANGE 17–20）实施与验证证据
+
+> 授权口径（MSG-20261009-15）：`NEXT_AUTHORIZED = PHASE3_A_U1_FINAL_R2_REPAIR_AND_EVIDENCE + DESIGN_ONLY_CHANGES_21_TO_23`。
+> 范围：**仅** U1 代码 + 设计文档；**不构成**任务队列 / Runtime / Prisma schema / 任何写路径的修改授权。
+
+**变更内容**
+
+- **CHANGE 17（P0）授权唯一性**：读取端由 `findStandingAuthorization`（`findFirst` 取最高版本）改为
+  `listStandingAuthorizations`（`findMany` 取该组织**全部**行）；适配器做
+  `ACTIVE` ∧ 有效期 ∧ 动作 ∧ 资源范围（`provider` / `platformAccountId` / `domain` / `jurisdiction`，
+  **未提供的维度不构成约束**，提供空串 = 不匹配）匹配；0 条按原因细分
+  （`AUTHORIZATION_NOT_FOUND` / `AUTHORIZATION_REVOKED` / `AUTHORIZATION_NOT_EFFECTIVE` / `ACTION_TYPE_NOT_ALLOWED`）；
+  **同一请求下 ≥2 条有效记录 ⇒ `AUTHORIZATION_AMBIGUOUS`（fail-closed，不取「最高版本」）**；
+  provenance 记录唯一命中的 `authorizationId`（可追溯到具体行，而不仅是版本号）。
+- **CHANGE 18（P0）金额与币种显式规则**：请求**必须显式**声明 `monetaryAction: boolean`；为 `true` 时必须提供
+  `amountUsd` + `currency`，金额须为 ≤4 位小数的**非负十进制**（禁科学计数法 / 负号 / 空串），请求币种须为
+  `USD` 且**授权行 currency 亦须为 `USD`**；为 `false` 时**不得**携带金额 / 币种；任何不明确 ⇒
+  `MONETARY_INPUT_INVALID`；超限或授权上限不可解析 ⇒ `MONETARY_LIMIT_EXCEEDED`（十进制按字符串 / 整数位长度比较，无浮点）。
+- **CHANGE 19（P0）来源边界与版本失效**：`caller ∈ { SERVER_REQUEST_GATE, RUNTIME_MEMBER }`，
+  由**可信执行上下文注入**（不是请求字段），其余（`BUILDER` / `MODEL` / `CLIENT` / 空串）⇒ `CALLER_NOT_TRUSTED`；
+  新增 `expectedFactVersion`，与本次读取得到的 `factVersion = org:<identityVersion>|auth:<authorizationVersion>`
+  比对，不一致 ⇒ `STALE_FACT_VERSION`（不得以旧事实取得新的提交权限）。
+- **CHANGE 20（P1）证据补强**：**全部读取置于只读事务**（`SET TRANSACTION READ ONLY` 为事务内首条语句）；
+  只读事务内任何写语句被 PostgreSQL **直接拒绝** —— 这是可执行的「无写」证据，而非「源码里没有写方法」；
+  解析前后对 **Organization / StandingAuthorization / AuditLog / RecoveryOpportunity / AutonomyTask /
+  AutonomyLease / AutonomyIncident** 做前后状态比较，并核对 `Organization.updatedAt` 未变。
+
+**验证证据（本机可实测）**
+
+| 项目 | 命令 | 结果 |
+| --- | --- | --- |
+| 端口级单元测试 | `vitest run src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts` | **38 / 38 PASS** |
+| 真实 PostgreSQL 只读端口 | `vitest run src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts`（隔离库 `crossclaim_p3r2_iso`） | **6 / 6 PASS** |
+| 类型检查 | `apps/api tsc --noEmit` | **0 error** |
+
+覆盖的负向用例（全部 fail-closed）：缺租户上下文 / 伪造调用方（MODEL、BUILDER、CLIENT、空）/
+组织不存在 / 无授权行 / 资源范围无匹配 / 授权已撤销 / 未生效 / 已过期 / **多授权冲突** /
+动作类型不在授权范围 / 缺 `monetaryAction` 声明 / 金额或币种缺失 / 金额形态非法（科学计数法、负号、>4 位小数、空串）/
+请求币种非 USD / 授权行币种非 USD / 非金额动作携带金额或币种 / 超限 / 上限不可解析 / 期望事实版本不一致 / 运行时复核未确认。
+
+**CHANGE 21–23（设计）**：已按 MSG-20261009-15 收口写入设计文档 **§17**：撤销 ↔ 文件发布的**共同排序权威**
+（无证排序 ⇒ 仅 staging-only、摘要路径存在须**无覆盖发布**、发布后校验内容与摘要一致、`ISOLATED_WRITE` 在关闭前不得实施）、
+`fencingGeneration` 持久化原子递增与**规范化身份编码** / identityVersion 的事务与 fencing 边界 /
+TestRunner 须位于 Builder 不可修改的可信边界 / 环境摘要（镜像、依赖、入口、环境变量、策略版本）、
+A11/A12 扩展**崩溃·重试·并发·持久化故障矩阵**。**均为设计文本，未实施、未授权实施。**
+
+**未验证项（如实标注）**：Linux / systemd 实机、真实浏览器验收、真实 Provider / 模型调用（HOLD）、CI、生产环境 = **NOT VERIFIED**。
+
+```text
+PHASE3_U1_FINAL_R2_PROGRESS = CHANGE 17 OK / CHANGE 18 OK / CHANGE 19 OK / CHANGE 20 OK（U1 代码修订 + 证据补强）
+PHASE3_U1_MSG15_VERDICT = MSG-20261009-15 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A fa1509df）
+PHASE3_A_U1_EVIDENCE = 端口级 38/38 PASS + 真实 PG 6/6 PASS（隔离库 crossclaim_p3r2_iso）+ api tsc 0
+PHASE3_U1_READ_ONLY_EVIDENCE = 只读事务内 DELETE / CREATE 被数据库拒绝（read-only transaction）+ 全相关表前后一致 + Organization.updatedAt 未变
+PHASE3_CHANGES_21_TO_23 = DESIGN_ONLY_COMPLETED（设计文档 §17；未实施）
+PHASE3_U1_IMPLEMENTATION_CLOSED = PENDING_AUDIT（待 MSG-20261009-16）
+NEXT_UNIT = 送审 MSG-20261009-16（① CHANGE 17–20 修复证据 ② CHANGE 21–23 设计修订）
+NEXT_AUDIT = MSG-20261009-16
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```

@@ -497,3 +497,96 @@ DB CAS 的证明**不得**外推到文件系统或外部系统。
 `EXTERNAL_WRITE = HOLD`、`AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN`、`PRODUCTION_READY = NO`；
 `runtimeSourceIsolationImplemented = false` 仍为阻断执行接线的硬门。
 
+
+> **取代声明（本轮生效，MSG-20261009-15 → CHANGE 17–20）**：第 17 节修订 §15.2 的端口签名
+> （`findStandingAuthorization` → `listStandingAuthorizations`）与 `resolve` 入参、§15.3 的授权来源描述
+> （由「取最高版本」改为「取全部行 + 唯一性判定」）以及 §15.3 的 fail-closed 原因码清单。
+> §15.x 正文**保持原样不改写**，仅作为 MSG-20261009-14 时点的历史记录。
+
+---
+
+## 17. CHANGE 17–23 收口规格（回应 MSG-20261009-15；U1 代码修订 + 设计修订）
+
+> 授权：`PHASE3_A_U1_FINAL_R2_REPAIR_AND_EVIDENCE + DESIGN_ONLY_CHANGES_21_TO_23`。
+> 本节先固定**接口与验收语义**（供 CHANGE 17–20 的代码修订逐条实现），并收口 CHANGE 21–23 的设计条款。
+> **限制**：CHANGE 17–20 的改动仅限 U1 代码与其测试；**不构成**对既有队列 / Runtime / Prisma schema / 任何写路径的修改授权。
+
+### 17.1 CHANGE 17（P0）授权唯一性（接口语义）
+
+`resolve()` 的授权选择规则（顺序即优先级，任一不满足即 fail-closed）：
+
+1. 候选集合 = 该组织的**全部** `StandingAuthorization`（读取端由 `findFirst` 改为 `listStandingAuthorizations`，返回列表）；
+2. 逐条过滤：`revocationState = ACTIVE` ∧ `effectiveAt ≤ now < expiresAt` ∧ `allowedActionTypes ∋ actionType`
+   ∧ **资源范围匹配**（`provider` / `platformAccountId` / `domain` / `jurisdiction`；请求未提供的维度=不限定）；
+3. **0 条** ⇒ 依次判定 `AUTHORIZATION_REVOKED`（存在该动作的已撤销记录）→ `AUTHORIZATION_NOT_EFFECTIVE`（存在该动作但不在有效期）
+   → `AUTHORIZATION_NOT_FOUND` / `ACTION_TYPE_NOT_ALLOWED`；
+4. **≥2 条** ⇒ **`AUTHORIZATION_AMBIGUOUS`（fail-closed）** —— 不允许多条有效记录时"猜一条"；
+5. 恰好 1 条 ⇒ 继续金额与版本检查。
+
+provenance 必须记录该唯一记录的 `authorizationId` / `authorizationVersion` / `scopeDigest`（可追溯到具体行）。
+
+### 17.2 CHANGE 18（P0）金额与币种显式规则
+
+请求必须**显式声明** `monetaryAction: boolean`（缺省即不合法，避免"金额缺失"被默认放行）：
+
+| 情形 | 规则 | 失败码 |
+| --- | --- | --- |
+| `monetaryAction = true` 且 `amountUsd` 或 `currency` 缺失 | 拒绝 | `MONETARY_INPUT_INVALID` |
+| 金额不是 ≤4 位小数的非负十进制（含负数、科学计数、超精度、空串） | 拒绝 | `MONETARY_INPUT_INVALID` |
+| 币种不是 `USD`（与 `monetaryLimitUsd` 口径一致） | 拒绝 | `MONETARY_INPUT_INVALID` |
+| 授权行 `currency ≠ USD`（金额类动作） | 拒绝 | `MONETARY_INPUT_INVALID` |
+| 金额 ≤ 上限 | 通过 | — |
+| 金额 > 上限，或上限不可解析 | 拒绝 | `MONETARY_LIMIT_EXCEEDED` |
+| `monetaryAction = false` 却携带 `amountUsd` / `currency` | 拒绝 | `MONETARY_INPUT_INVALID` |
+
+**合法非金额动作**（如 `recovery.read`）以 `monetaryAction = false` 单独验证，不参与限额比较。
+
+### 17.3 CHANGE 19（P0）U1 来源边界与版本失效契约
+
+1. **调用边界白名单**：`caller ∈ { SERVER_REQUEST_GATE, RUNTIME_MEMBER }`；其余值（如 `BUILDER` / `MODEL` / `CLIENT`）⇒ `CALLER_NOT_TRUSTED`。
+   —— 不接收模型字段 ≠ 服务端上下文不可伪造，因此显式要求调用方声明其受信任边界。
+2. **版本失效**：调用方可传入 `expectedFactVersion`；解析出的 `factVersion`（`org:<identityVersion>|auth:<authorizationVersion>`）
+   与之不一致 ⇒ **`STALE_FACT_VERSION`**（旧事实**不得**获得新的提交权限）。
+3. `operationRecheck` 仍必须来自运行时注入；`NOT_CONFIRMED` ⇒ `OPERATION_RECHECK_NOT_CONFIRMED`。
+
+### 17.4 CHANGE 20（P1）证据补强（验收口径）
+
+1. **强只读证据**：在**只读事务**内执行全部适配器读取
+   （`BEGIN; SET TRANSACTION READ ONLY; …`，等价 Prisma `$transaction` + `SET TRANSACTION READ ONLY`）——
+   若调用链出现任何写入，数据库将直接报错，从而证明"零写入"而不是"没看到写入"。
+2. **全相关表前后状态比较**：不只比较三张 Autonomy 表，还覆盖 `Organization` / `StandingAuthorization` / `AuditLog` /
+   `RecoveryOpportunity` 等**相关表**的行数与关键摘要。
+3. **负向用例**：伪造 `caller`、伪造 `expectedFactVersion`、多授权冲突、跨主体/越权资源范围、异常授权行
+   （非 ACTIVE / 超期 / 币种不符 / 限额不可解析）逐项 fail-closed。
+4. 说明保留：`updatedAt` 仅作为**行修订信号**参与 `identityVersion`，本节不主张它是身份/授权变更的完整单调版本；
+   真正的权威版本语义须在 U2（Candidate 关联）中定义（当前未授权）。
+
+### 17.5 CHANGE 21（P0·设计）撤销 ↔ 文件发布的共同排序权威
+
+- 必须存在**单一发布协调机制**同时掌握：授权检查、fencing 与发布顺序（等价于"以数据库行锁/条件写作为发布闸门"）；
+- 若无法证明该顺序 ⇒ **禁止公开发布**，仅允许 `staging-only`（不向任何其它组件暴露）；
+- 摘要路径已存在时采用**无覆盖发布语义**（并发冲突不得覆盖原候选）；
+- 发布完成后必须**重新校验实际内容与摘要一致**；"目录只读"不构成内容不可篡改的证明；
+- **在这些问题关闭前，`ISOLATED_WRITE` 不得授权实施。**
+
+### 17.6 CHANGE 22（P1·设计）规范化身份与可信验证环境
+
+- `fencingGeneration` 必须由**持久化原子机制**递增（不得依赖进程内计数）；
+- `candidateDigest` / 租户 / 事实版本 / 目标身份的**规范化编码**必须确定（避免不同输入序列化为同一业务身份）；
+- `identityVersion` 的读取与提交检查之间必须定义**事务或 fencing 边界**；
+- TestRunner 必须位于 **Builder 无法修改**的可信执行边界；运行镜像 / 依赖 / 测试入口 / 环境变量 / 策略版本参与环境摘要或等效不可变约束；
+- **禁止**把工作区内不可信 hook / 构建脚本 / 测试脚本直接当作可信执行入口；
+- 结果摘要必须绑定**完整测试执行身份与产物**，不得由 Builder 单方面声明。
+
+### 17.7 CHANGE 23（P1·设计）A11 / A12 故障矩阵
+
+| 验收 | 必须覆盖的故障注入 | 判定 |
+| --- | --- | --- |
+| A11 终态完整性 | 进程崩溃（提交前 / 提交后）、重复 `settle`、旧 fencing owner 提交、并发恢复 | 已确认提交事实在恢复后**保持不变**；旧 owner 不得改写终态；无重复外部副作用 |
+| A12 发布边界 | 并发撤销与发布、发布中断、重复重试、文件系统持久化失败 | 存在**可验证线性化顺序**；无法证明时**无候选进入公开可消费位置** |
+
+### 17.8 本轮状态
+
+本节为**规格与设计修订**（CHANGE 21–23 全部在此收口；CHANGE 17–20 的语义在此固定）。
+U1 代码按本节语义实施属**下一单元**；`ISOLATED_WRITE` 仍未授权实施；
+`PHASE3_U1_IMPLEMENTATION_CLOSED = NO`、`PHASE3_A_U2_TO_U5_AUTHORIZED = NO` 保持不变。
