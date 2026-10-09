@@ -2387,3 +2387,62 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.38 MSG-20261009-34 裁决归档 = **REVISE**（CHANGE 27 关闭、26/28 条件通过；新增 CHANGE 32–35，含 3 个 P0）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-34] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（204/204，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=6234 / NORM_LINES=204 / FNV=d85473d1`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R8=7a5d8058`、`REVIEWED_HEAD=d9172daa`。
+
+**审计方独立核验**：`R8→R9` = **2 提交 / 3 文件**，GitHub 比较状态 **ahead** 与送审一致，
+无 `apps/api` 变更（`R8_TO_R9_COMPARE_VERIFICATION=VERIFIED_VIA_GITHUB`）；
+但文档 SHA-256 **与** blob SHA 本轮均标 `NOT_INDEPENDENTLY_VERIFIED`；
+PostgreSQL/Vitest/tsc/Linux-systemd/CI/生产 全 `NOT_VERIFIED`。
+
+**十二项**：`CHANGE27 = PASS`（U2-20A/B/C 正确区分，不再要求互相矛盾的结果）、
+`CHANGE26 = PASS WITH REVISE`、`CHANGE28 = PASS WITH REVISE`、
+`CHANGE29/30/31 = REVISE`、`U2_INPUT_OUTPUT_CONTRACT = PASS WITH REVISE`、
+`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED = REVISE`、`U2_IMPLEMENTATION_BOUNDARY = PASS`、
+`SCOPE_HONESTY = PASS`、`U2_DESIGN_APPROVED = NO`、`U2_IMPLEMENTATION_AUTHORIZED = NO`。
+
+**REQUIRED_CHANGES（下一轮 MSG-20261009-35 只做这四项；`R10`）**
+
+- **CHANGE 32（P0）锁释放仍非可证明原子**：POSIX `rename()` **可能覆盖已存在目标**，
+  且**源路径可能被其他进程替换**（验证旧 fd 的 inode ≠ 随后按路径 rename 的同一对象）。须：
+  ① Linux 使用 `renameat2(RENAME_NOREPLACE)` 或等效**不可覆盖**机制；② 把**锁文件父目录纳入隔离保护范围**
+  （禁止非受信主体替换/重命名锁路径）；③ 释放前后校验 `(dev,inode)` 与所有权证据，任一不一致**不得 `unlink`**；
+  ④ rename 失败/目标冲突/源路径异常**必须保留人工调查证据**；⑤ 新增 **U2-31**（并发锁路径替换、目标冲突、
+  进程异常中断）。**并强调**：`RENAME_NOREPLACE` 只解决目标覆盖，**目录权限约束仍是必要条件**。
+- **CHANGE 33（P0）PostgreSQL 并发失效防护不足**：事务内读取 **≠** 状态稳定
+  （A 读 `DIAGNOSED` → B 改为不合格并提交 → A 仍 `INSERT`+`COMMIT`）。须明确：
+  ① Incident/关联 Task 的**行锁或隔离策略**（可用 `SELECT ... FOR UPDATE`，但须证明所有相关状态写入均受锁协调）；
+  ② 并发关联修改防护；③ 死锁/序列化失败/锁等待超时处理；④ 重试安全边界与「必须拒绝而非重试」的时刻；
+  ⑤ **U2-30 须为可控交错的真实 PostgreSQL 双连接测试**，断言最终已提交状态与候选资格一致。
+- **CHANGE 34（P0）未知 COMMIT 对账语义漏洞**：**查不到记录 ≠ 已回滚**（结果未定/数据库切换/副本延迟）。
+  须定义对账的**权威数据源与一致性前提**、事务结束且结果**可确定**的条件；
+  未达确定性时 `COMMIT_NOT_CONFIRMED` 对应 **`commitState=UNKNOWN`**；
+  **只有拿到明确的未提交证据才允许 `NOT_COMMITTED`**；对账期间**禁止盲目重复 INSERT**。
+- **CHANGE 35（P1）副作用报告无法表达未知提交**：`candidateRowsWritten` 语义须明确
+  （已尝试 / 事务内成功 / 最终已提交新行数），无法判定时允许 **`UNKNOWN`** 或拆分
+  「事务内写入事实」与「最终提交事实」；并给出完整状态表：
+  新候选确认提交 → `COMMITTED` + 新 ID；合法既有候选复用 → `NOT_COMMITTED（本次无新提交）` + 既有 ID；
+  输入校验拒绝 → `NOT_COMMITTED` + `null`；插入失败且事务确认回滚 → `NOT_COMMITTED` + `null`；
+  **结果未知且对账无定论 → `UNKNOWN` + `null`**；提交成功但释放失败 → `COMMITTED` + 已确认 ID。
+  另须明确 `COMMIT_CONFIRMED_BY_RECONCILE` 是 **outcome、reason 还是附加状态**，避免与 §13.1 的 `outcome` 枚举冲突。
+
+```text
+MSG-20261009-34_FINAL_VERDICT = REVISE
+MSG-20261009-34_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 204/204；FNV1A d85473d1）
+CHANGE_27 = CLOSED（U2-20A/B/C）
+U2_DESIGN_APPROVED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · U3–U5 = NOT AUTHORIZED
+REQUIRED_CHANGES = CHANGE_32_P0_LOCK_RELEASE_PATH_RACE ; CHANGE_33_P0_POSTGRES_CONCURRENT_INVALIDATION ;
+                   CHANGE_34_P0_UNKNOWN_COMMIT_RECONCILE_SEMANTICS ; CHANGE_35_P1_SIDE_EFFECT_REPORT_CONSISTENCY
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R10_READ_ONLY_CHANGES_32_TO_35
+NEXT_AUDIT = MSG-20261009-35
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```

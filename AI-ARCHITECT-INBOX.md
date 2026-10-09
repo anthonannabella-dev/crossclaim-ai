@@ -176287,3 +176287,366 @@ PRODUCTION=NOT_VERIFIED
 
 本轮仅执行了仓库只读核查，未修改、提交或写入你的 GitHub 仓库。
 ```
+
+### [MSG-20261009-34] U2 设计 R9 = **REVISE**（CHANGE 27 关闭、26/28 条件通过；新增 CHANGE 32–35，含 3 个 P0）—— 十二项：`CHANGE27_U2_20_SPLIT_FIXED=PASS`（20A/20B/20C 已正确区分、不再要求互相矛盾的结果）、`CHANGE26_ATTESTATION_TRUST_CHAIN_FIXED=PASS_WITH_REVISE`（方向符合设计目标，但 R10 须写明 `protectedRefsDigest` 的严格字节级规范——排序/字段分隔/空值/worktree 的 common git dir 边界——并明确**证明签发者的认证机制**；若受信通道仅由本地可篡改配置文件构成则不能建立可信链）、`CHANGE28_UNIQUE_CONFLICT_REUSE_PATH_FIXED=PASS_WITH_REVISE`（方向正确；实施时须保证 `ON CONFLICT DO NOTHING` 返回零行**不得**误判为插入成功，重开事务后必须重复基线与权威资格验证）、`CHANGE29_TX_BOUNDARY_AND_UNKNOWN_COMMIT_FIXED=REVISE`、`CHANGE30_LOCK_RELEASE_ATOMICITY_FIXED=REVISE`、`CHANGE31_REASON_VS_SIDE_EFFECT_CONSISTENCY_FIXED=REVISE`、`U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE`、`U2_IMPLEMENTATION_BOUNDARY=PASS`、`SCOPE_HONESTY=PASS`、`U2_DESIGN_APPROVED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`；独立核验：`R8→R9 = 2 提交/3 文件`、GitHub 比较状态 **ahead** 与送审一致、无 `apps/api` 变更（`R8_TO_R9_COMPARE_VERIFICATION=VERIFIED_VIA_GITHUB`），但文档 SHA-256 与 blob SHA 本轮**均**标 `NOT_INDEPENDENTLY_VERIFIED`；**新增 REQUIRED_CHANGES**：**CHANGE 32（P0）锁释放仍非可证明原子**——POSIX `rename()` 可能覆盖已存在目标、源路径可能被替换（验证旧 fd inode ≠ 随后按路径 rename 的对象）：须在 Linux 用 `renameat2(RENAME_NOREPLACE)` 或等效不可覆盖机制、把**锁文件父目录纳入隔离保护**（禁止非受信主体替换/改名锁路径）、释放前后校验 `(dev,inode)` 与所有权证据不一致即不得 `unlink`、失败须留人工调查证据，并新增 **U2-31**（并发锁路径替换/目标冲突/进程中断）；**CHANGE 33（P0）PostgreSQL 并发失效防护不足**——事务内读取 ≠ 状态稳定（A 读 DIAGNOSED → B 改为不合格并提交 → A 仍 INSERT+COMMIT）：须明确 Incident/Task 的**行锁或隔离策略**（可用 `SELECT ... FOR UPDATE` 但须证明所有相关状态写入均受锁协调）、并发关联修改防护、死锁/序列化失败/锁等待超时处理、重试安全边界与必须拒绝的时刻，且 **U2-30 须为可控交错真实双连接测试**并断言最终已提交状态与候选资格一致；**CHANGE 34（P0）未知 COMMIT 对账语义漏洞**——**查不到记录 ≠ 已回滚**（结果未定/切换/副本延迟），须定义对账的权威数据源与一致性前提、事务结束且结果可确定的条件；未达确定性时 `COMMIT_NOT_CONFIRMED` 对应 `commitState=UNKNOWN`；**只有拿到明确未提交证据才允许 `NOT_COMMITTED`**；对账期间禁止盲目重复 INSERT；**CHANGE 35（P1）副作用报告无法表达未知提交**——`candidateRowsWritten` 语义须明确（已尝试 / 事务内成功 / 最终已提交新行数），无法判定时允许 `UNKNOWN` 或拆分「事务内写入事实」与「最终提交事实」，并给出完整状态表（新候选确认提交 COMMITTED+新 ID / 合法复用 NOT_COMMITTED+既有 ID / 输入拒绝 NOT_COMMITTED+null / 插入失败确认回滚 NOT_COMMITTED+null / 结果未知 UNKNOWN+null / 提交成功但释放失败 COMMITTED+已确认 ID），并明确 `COMMIT_CONFIRMED_BY_RECONCILE` 是 outcome、reason 还是附加状态以免与 §13.1 枚举冲突；NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R10_READ_ONLY_CHANGES_32_TO_35 / NEXT_AUDIT=MSG-20261009-35；`POSTGRESQL_INTEGRATION_TEST/VITEST/TSC/LINUX_SYSTEMD/CI/PRODUCTION = NOT_VERIFIED`；reviewed ref d9172daa
+
+```text
+MSG-20261009-34｜U2 设计 R9 独立审计裁决
+FINAL_VERDICT = REVISE
+审计对象： SI/RSI INTERNAL CODE REPAIR V1 — PHASE 3-A U2 Design R9
+仓库： anthonannabella-dev/crossclaim-ai
+审查提交： d9172daa
+审计日期： 2026-10-09
+
+一、审计结论
+
+R9 的六项修订均取得实质进展，但仍有影响正确性与安全边界的未封闭问题。本轮不批准 U2 实施。
+
+通过 GitHub 连接器，我已独立读取 R9 设计文档，并核对 R8→R9 的提交比较结果。
+
+确认：
+
+R8→R9：2 个提交，变更 3 个文件。
+
+GitHub 返回的比较状态为 ahead，与送审记录一致。
+
+变更文件分别为 AI-ARCHITECT-INBOX.md、U2 设计文档、SI/RSI checkpoint 文档。
+
+GitHub 比较结果中没有 apps/api 产品代码文件变更。
+
+R9 §17.1–§17.7 的正文能够读取，并已进行设计逻辑审查。
+
+需要强调：提交比较得到独立验证，不等于文档 SHA-256 已经完成独立字节复算，也不等于真实运行环境已验证。
+
+审计依据：GitHub 连接器读取的固定提交设计文档及 R8→R9 提交比较结果。下列裁决不涉及仓库写入。
+
+二、十二项裁决
+
+审计项目
+
+裁决
+
+1. CHANGE26_ATTESTATION_TRUST_CHAIN_FIXED
+
+PASS WITH REVISE
+
+2. CHANGE27_U2_20_SPLIT_FIXED
+
+PASS
+
+3. CHANGE28_UNIQUE_CONFLICT_REUSE_PATH_FIXED
+
+PASS WITH REVISE
+
+4. CHANGE29_TX_BOUNDARY_AND_UNKNOWN_COMMIT_FIXED
+
+REVISE
+
+5. CHANGE30_LOCK_RELEASE_ATOMICITY_FIXED
+
+REVISE
+
+6. CHANGE31_REASON_VS_SIDE_EFFECT_CONSISTENCY_FIXED
+
+REVISE
+
+7. U2_INPUT_OUTPUT_CONTRACT
+
+PASS WITH REVISE
+
+8. U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED
+
+REVISE
+
+9. U2_IMPLEMENTATION_BOUNDARY
+
+PASS
+
+10. SCOPE_HONESTY
+
+PASS
+
+11. U2_DESIGN_APPROVED
+
+NO
+
+12. U2_IMPLEMENTATION_AUTHORIZED
+
+NO
+
+R9 已经正确引入了几个重要原则：隔离证明不得来自普通业务输入；协作锁不能冒充 OS 隔离；并发唯一键冲突需要重读权威身份；未知 COMMIT 不得伪装成回滚；返回的副作用状态必须反映实际可确认结果。
+
+剩余问题主要集中于原子锁释放、数据库并发失效、未知提交的证据语义，以及副作用状态是否足以准确表达结果。
+
+三、必须修订的阻断项
+
+CHANGE 32（P0）—— 锁释放仍未达到可证明的原子安全
+
+R9 §17.5 采用 fstat(fd)、读取 ownerToken、rename、校验、unlink 的方案，方向正确，但不能直接认定为无竞争窗口。
+
+问题是：
+
+普通 POSIX rename() 可能覆盖已经存在的目标文件，不能仅凭调用前检查断言目标不存在。同时，在源路径可能被其他进程替换的条件下，验证旧 fd 的 inode 并不等于随后按路径 rename 的一定是同一个 inode。
+
+要求 R10 补齐：
+
+明确 Linux 平台使用 renameat2(RENAME_NOREPLACE) 或等效的不可覆盖机制。
+
+将锁文件父目录纳入隔离保护范围，禁止非受信主体替换、重命名锁路径。
+
+释放前后校验 (dev,inode) 与所有权证据，任何不一致不得执行 unlink。
+
+rename 后源锁路径异常、目标冲突或校验失败，必须保留可供人工调查的证据。
+
+新增 U2-31：真实并发锁路径替换、目标冲突、进程异常中断测试。
+
+RENAME_NOREPLACE 解决目标覆盖问题，但并不单独解决源路径替换。因此目录权限约束仍是必要条件。
+
+裁决：CHANGE30 = REVISE。
+
+CHANGE 33（P0）—— PostgreSQL 并发失效防护尚不充分
+
+R9 §17.4 把 Incident、Task、故障上下文读取移入事务，这是必要改进，但事务内读取不等于并发状态稳定。
+
+例如：
+
+事务 A 读取 Incident.status=DIAGNOSED；
+
+事务 B 将其更新为不合格状态并提交；
+
+事务 A 继续 INSERT Candidate 并 COMMIT。
+
+如果没有适当的行锁、并发控制或可证明的隔离机制，仅有 authoritativeReadInsideTx=true 无法阻止该交错。
+
+要求 R10 明确：
+
+Incident 和关联 Task 使用何种行锁或事务隔离策略。
+
+如何防止并发关联修改造成错误候选提交。
+
+如何处理死锁、序列化失败和锁等待超时。
+
+重试是否安全，以及何时必须拒绝而不是重试。
+
+U2-30 必须包含可控交错的真实 PostgreSQL 双连接测试，断言最终已提交状态与候选资格一致。
+
+可以采用针对相关权威行的 SELECT ... FOR UPDATE 锁策略，但需要证明所有相关状态写入均受相应数据库锁协调。
+
+裁决：CHANGE29 = REVISE。
+
+CHANGE 34（P0）—— 未知 COMMIT 的对账语义仍有漏洞
+
+R9 对 COMMIT UNKNOWN 增加只读对账是正确的。
+
+但存在一处需要修正的推论：
+
+查询不到 Candidate，不必然证明该 COMMIT 已经回滚。
+
+例如，查询可能发生在事务最终结果尚未确定、数据库切换或非权威副本存在延迟的场景。
+
+因此：
+
+查询到完全匹配的、已提交可见记录，可以提供提交确认依据。
+
+查询不到记录，首先意味着未找到提交证据，不能无条件解释成确定未提交。
+
+查询失败，必须保持 UNKNOWN。
+
+要求 R10：
+
+定义对账使用的权威 PostgreSQL 数据源及一致性前提。
+
+明确事务已结束且结果可确定的条件。
+
+未满足确定性条件时，COMMIT_NOT_CONFIRMED 对应 commitState=UNKNOWN。
+
+只有拿到明确的未提交证据时，才允许 NOT_COMMITTED。
+
+对账期间禁止盲目重复 INSERT。
+
+裁决：CHANGE29 的 UNKNOWN COMMIT 部分 = REVISE。
+
+CHANGE 35（P1）—— 副作用报告无法完整表达未知提交
+
+当前接口：
+
+TypeScript
+
+interface U2SideEffectReport {
+
+candidateRowsWritten: 0 | 1;
+
+commitState: 'COMMITTED' | 'NOT_COMMITTED' | 'UNKNOWN';
+
+lockReleaseFailed: boolean;
+
+authoritativeReadInsideTx: boolean;
+
+}
+
+主要问题是 candidateRowsWritten 没有明确表示：
+
+已尝试插入；
+
+事务内 INSERT 成功；
+
+最终已提交的新行数量。
+
+在 COMMIT 结果未知时，若它表示最终已提交行数，则 0 | 1 都可能是未经证实的结果。
+
+建议保持最小改动，明确该字段的语义，并在不能判定最终提交数量时允许 UNKNOWN；或者拆分事务内写入事实与最终提交事实。
+
+此外需形成完整状态表，涵盖：
+
+场景
+
+commitState
+
+candidateId
+
+新候选确认提交
+
+COMMITTED
+
+新候选 ID
+
+合法既有候选复用
+
+NOT_COMMITTED（本次无新提交）
+
+既有 ID
+
+输入校验拒绝
+
+NOT_COMMITTED
+
+null
+
+插入失败且事务确认回滚
+
+NOT_COMMITTED
+
+null
+
+COMMIT 结果未知且对账无定论
+
+UNKNOWN
+
+null
+
+提交成功但锁释放失败
+
+COMMITTED
+
+已确认 ID
+
+这里的 NOT_COMMITTED 明确指本次调用没有提交新候选写入，不否认既有候选已经持久化。
+
+还需明确 COMMIT_CONFIRMED_BY_RECONCILE 在输出契约中究竟是独立 outcome、reason，还是附加状态，避免它与 §13.1 的 outcome 枚举冲突。
+
+裁决：CHANGE31 = REVISE。
+
+四、已接受的修订
+
+CHANGE 26 — PASS WITH REVISE
+
+隔离证明来源、服务端有效期上限、路径和 Git 目录身份绑定、运行期重新计算、证明有效性与真实写隔离的分层，均符合设计目标。
+
+仍需在 R10 写明 protectedRefsDigest 的严格字节级规范，包括排序、字段分隔、空值和 Git worktree 的 common git dir 边界；并明确证明签发者的认证机制。若所谓受信通道仅由本地可篡改配置文件构成，则不能据此建立可信链。
+
+CHANGE 27 — PASS
+
+U2-20A/B/C 已正确区分：
+
+外部写入遭拒，合法候选仍可提交；
+
+真实基线变更导致回滚；
+
+隔离证明不合格导致提前拒绝。
+
+三者不再要求互相矛盾的测试结果。
+
+CHANGE 28 — PASS WITH REVISE
+
+唯一约束冲突后的重读、权威身份复核和错误分类，方向正确。
+
+实施时需进一步保证 ON CONFLICT DO NOTHING 返回零行之后不会误判为插入成功，以及重新打开事务后必须重复必要的基线和权威资格验证。
+
+五、实施边界裁决
+
+本轮仍然坚持最小授权原则。
+
+U2 设计最终批准
+
+NO
+
+U2_PLATFORM_ONLY_INSERT_SUBSET 实施
+
+NOT AUTHORIZED
+
+U3–U5 实施
+
+NOT AUTHORIZED
+
+这并不否定 R9 已解决的设计问题，而是因为余下 P0 风险直接影响写入隔离、并发正确性和数据库提交真实性。
+
+下一轮仅允许对 R9 设计做只读修订，不修改产品代码、不运行未授权外部副作用，也不扩展至 U3–U5。
+
+六、给 Codex 的机器可读裁决
+
+可直接复制以下裁决块。布尔状态与枚举状态采用单一口径。
+
+MSG-20261009-34
+
+复制
+
+AUDIT_ID=MSG-20261009-34
+REPO=anthonannabella-dev/crossclaim-ai
+BRANCH=feat/si-rsi-internal-code-repair-v1
+U1_CODE_HEAD=9ee36837
+U2_DESIGN_COMMIT_R8=7a5d8058
+U2_DESIGN_COMMIT_R9=d9172daa
+U2_DESIGN_GIT_BLOB_SHA=5b909c1368dd4b906e380c6462d791fe1c5230d3
+U2_DESIGN_GIT_BLOB_SHA_VERIFICATION=NOT_INDEPENDENTLY_VERIFIED
+U2_DESIGN_DOC_SHA256=4d424e676baa0f746f64997fafa7259fbf22b11838e072bad8339721dba844f0
+U2_DESIGN_DOC_SHA256_VERIFICATION=NOT_INDEPENDENTLY_VERIFIED
+R8_TO_R9_COMMITS=2
+R8_TO_R9_FILES=3
+R8_TO_R9_PRODUCT_CODE_CHANGES=0
+R8_TO_R9_COMPARE_VERIFICATION=VERIFIED_VIA_GITHUB
+FINAL_VERDICT=REVISE
+CHANGE26_ATTESTATION_TRUST_CHAIN_FIXED=PASS_WITH_REVISE
+CHANGE27_U2_20_SPLIT_FIXED=PASS
+CHANGE28_UNIQUE_CONFLICT_REUSE_PATH_FIXED=PASS_WITH_REVISE
+CHANGE29_TX_BOUNDARY_AND_UNKNOWN_COMMIT_FIXED=REVISE
+CHANGE30_LOCK_RELEASE_ATOMICITY_FIXED=REVISE
+CHANGE31_REASON_VS_SIDE_EFFECT_CONSISTENCY_FIXED=REVISE
+U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE
+U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE
+U2_IMPLEMENTATION_BOUNDARY=PASS
+SCOPE_HONESTY=PASS
+U2_DESIGN_APPROVED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PHASE3_A_U3_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE32_P0_LOCK_RELEASE_PATH_RACE;CHANGE33_P0_POSTGRES_CONCURRENT_INVALIDATION;CHANGE34_P0_UNKNOWN_COMMIT_RECONCILE_SEMANTICS;CHANGE35_P1_SIDE_EFFECT_REPORT_CONSISTENCY
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R10_READ_ONLY_CHANGES_32_TO_35
+NEXT_AUDIT=MSG-20261009-35
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+POSTGRESQL_INTEGRATION_TEST=NOT_VERIFIED
+VITEST=NOT_VERIFIED
+TSC=NOT_VERIFIED
+LINUX_SYSTEMD=NOT_VERIFIED
+CI=NOT_VERIFIED
+PRODUCTION=NOT_VERIFIED
+
+最终授权： NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R10_READ_ONLY_CHANGES_32_TO_35
+
+下一轮 MSG-20261009-35 应仅提交 CHANGE 32–35 的设计修订与最小审计证据。本次审查没有修改仓库；即使 R10 设计通过，真实 PostgreSQL、Linux 隔离及并发测试仍须在后续实施阶段分别取证。
+```
