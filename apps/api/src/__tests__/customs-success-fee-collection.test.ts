@@ -11,7 +11,9 @@ import {
   CUSTOMS_FEE_COLLECTION_VERSION,
   evaluateCustomsSuccessFeeCollection,
   sumReceivablesSameCurrency,
-  verifyFeeCollectionFact,
+  authenticateCollectionFact,
+  signCollectionFactBody,
+  isVerifiedFeeCollectionFact,
   type CustomsFeeCollectionFact,
   type CustomsFeeCollectionInput,
   type VerifiedFeeCollectionFact,
@@ -32,25 +34,36 @@ const FEE_POLICY: FeePolicy = {
 };
 
 /** CHANGE 03：收款事实必须经核验（品牌类型），测试走同一条核验路径。 */
+const COLLECTION_SECRET = 'whsec_collection_test';
+
 function collectionFact(
   overrides: Partial<CustomsFeeCollectionFact> = {},
 ): VerifiedFeeCollectionFact {
-  const verified = verifyFeeCollectionFact({
-    fact: {
-      transactionId: 'txn-1',
-      merchantAccountId: 'acct-1',
-      receivableId: 'st-1',
-      collectedAmount: '1500.00',
-      outcome: 'COLLECTED',
-      source: 'PAYMENT_PROVIDER_WEBHOOK',
-      occurredAt: '2026-10-10T00:00:00.000Z',
-      ...overrides,
-    },
+  const payload = {
+    transactionId: 'txn-1',
+    merchantAccountId: 'acct-1',
+    receivableId: 'st-1',
+    currency: 'USD',
+    collectedAmount: '1500.00',
+    outcome: 'COLLECTED',
+    source: 'PAYMENT_PROVIDER_WEBHOOK',
+    occurredAt: '2026-10-10T00:00:00.000Z',
+    ...overrides,
+  };
+  const rawBody = JSON.stringify(payload);
+  const timestamp = '1770000000';
+  const result = authenticateCollectionFact({
+    rawBody,
+    signatureHeader: signCollectionFactBody(timestamp, rawBody, COLLECTION_SECRET),
+    timestampHeader: timestamp,
+    secret: COLLECTION_SECRET,
+    now: new Date(Number(timestamp) * 1000),
     expectedReceivableId: 'st-1',
     expectedMerchantAccountId: 'acct-1',
+    expectedCurrency: 'USD',
   });
-  if (verified === null) throw new Error('TEST_COLLECTION_FACT_UNVERIFIED');
-  return verified;
+  if (result.fact === null) throw new Error('TEST_COLLECTION_FACT_UNVERIFIED');
+  return result.fact;
 }
 
 function input(overrides: Partial<CustomsFeeCollectionInput> = {}): CustomsFeeCollectionInput {
@@ -276,28 +289,57 @@ describe('V2-08 收款结果 — 到账 / 失败 / 部分 / 退款 / 争议', ()
     expect(result.reasonCodes).toContain('COLLECTION_FACT_UNTRUSTED');
   });
 
-  it('核验期拒绝：交易号缺失 / 应收不匹配 / 商户不匹配 / 来源不可信', () => {
-    const base = {
+  // CHANGE 10（P0）：来源不能自我声明；必须经独立认证边界。
+  it('认证边界拒绝：无密钥 / 无签名 / 时间戳越窗 / 签名不符 / 载荷非法', () => {
+    const timestamp = '1770000000';
+    const rawBody = JSON.stringify({
       transactionId: 'txn-1',
       merchantAccountId: 'acct-1',
       receivableId: 'st-1',
+      currency: 'USD',
       collectedAmount: '1500.00',
-      outcome: 'COLLECTED' as const,
+      outcome: 'COLLECTED',
       source: 'PAYMENT_PROVIDER_WEBHOOK',
       occurredAt: '2026-10-10T00:00:00.000Z',
+    });
+    const now = new Date(Number(timestamp) * 1000);
+    const base = {
+      rawBody,
+      signatureHeader: signCollectionFactBody(timestamp, rawBody, COLLECTION_SECRET),
+      timestampHeader: timestamp,
+      secret: COLLECTION_SECRET,
+      now,
+      expectedReceivableId: 'st-1',
+      expectedMerchantAccountId: 'acct-1',
+      expectedCurrency: 'USD',
     };
-    const expectRejected = (fact: CustomsFeeCollectionFact) =>
-      expect(
-        verifyFeeCollectionFact({
-          fact,
-          expectedReceivableId: 'st-1',
-          expectedMerchantAccountId: 'acct-1',
-        }),
-      ).toBeNull();
-    expectRejected({ ...base, transactionId: null });
-    expectRejected({ ...base, receivableId: 'other' });
-    expectRejected({ ...base, merchantAccountId: 'acct-2' });
-    expectRejected({ ...base, source: 'CLIENT_REPORTED' });
+    const reason = (patch: Record<string, unknown>) =>
+      authenticateCollectionFact({ ...base, ...patch }).reasonCodes[0];
+
+    expect(reason({ secret: null })).toBe('COLLECTION_SECRET_NOT_CONFIGURED');
+    expect(reason({ signatureHeader: null })).toBe('COLLECTION_SIGNATURE_MISSING');
+    expect(reason({ timestampHeader: null })).toBe('COLLECTION_TIMESTAMP_MISSING');
+    expect(reason({ timestampHeader: '1770009999' })).toBe('COLLECTION_TIMESTAMP_OUT_OF_TOLERANCE');
+    expect(reason({ signatureHeader: 'deadbeef' })).toBe('COLLECTION_SIGNATURE_MISMATCH');
+    expect(reason({ rawBody: 'not-json' })).toBe('COLLECTION_SIGNATURE_MISMATCH');
+    expect(reason({ expectedMerchantAccountId: '  ' })).toBe('COLLECTION_MERCHANT_BINDING_REQUIRED');
+    expect(reason({ expectedReceivableId: 'other' })).toBe('COLLECTION_RECEIVABLE_MISMATCH');
+    expect(reason({ expectedCurrency: 'EUR' })).toBe('COLLECTION_CURRENCY_MISMATCH');
+  });
+
+  it('认证成功才产出品牌事实；调用方自造 source 字符串不起作用', () => {
+    expect(isVerifiedFeeCollectionFact(collectionFact())).toBe(true);
+    const selfDeclared = {
+      transactionId: 'txn-1',
+      merchantAccountId: 'acct-1',
+      receivableId: 'st-1',
+      currency: 'USD',
+      collectedAmount: '1500.00',
+      outcome: 'COLLECTED',
+      source: 'PAYMENT_PROVIDER_WEBHOOK',
+      occurredAt: '2026-10-10T00:00:00.000Z',
+    } as unknown as VerifiedFeeCollectionFact;
+    expect(isVerifiedFeeCollectionFact(selfDeclared)).toBe(false);
   });
 
   it('已核验收款事实：历史已收写入结果，撤销授权只影响未来扣款', () => {

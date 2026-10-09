@@ -23,6 +23,7 @@
 import { applyBpsFloorToCent, addDecimalAmounts, subtractDecimalAmounts } from './customs-profit-gate';
 import { compareDecimalAmounts, normalizeDecimalAmount } from './customs-paid-api-gate';
 import type { FeePolicy } from '../commercial/fee-policy';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export const CUSTOMS_FEE_COLLECTION_VERSION = 'customs-success-fee-collection-v2.0.0';
 
@@ -101,6 +102,7 @@ export interface CustomsFeeCollectionFact {
   transactionId: string | null;
   merchantAccountId: string | null;
   receivableId: string | null;
+  currency: string | null;
   collectedAmount: string | null;
   outcome: 'COLLECTED' | 'FAILED' | 'REFUNDED' | 'CHARGEBACK';
   source: string | null;
@@ -124,32 +126,134 @@ export function isVerifiedFeeCollectionFact(value: unknown): value is VerifiedFe
   );
 }
 
-/**
- * 核验收款事实：交易号非空、来源可信、归属（receivableId / merchantAccountId）与预期一致。
- * 任一不满足 → 返回 null（调用方必须按"不可信"处理）。
- */
-export function verifyFeeCollectionFact(input: {
-  fact: CustomsFeeCollectionFact;
+export type CollectionAuthenticationReason =
+  | 'COLLECTION_SECRET_NOT_CONFIGURED'
+  | 'COLLECTION_SIGNATURE_MISSING'
+  | 'COLLECTION_TIMESTAMP_MISSING'
+  | 'COLLECTION_TIMESTAMP_OUT_OF_TOLERANCE'
+  | 'COLLECTION_SIGNATURE_MISMATCH'
+  | 'COLLECTION_PAYLOAD_MALFORMED'
+  | 'COLLECTION_MERCHANT_BINDING_REQUIRED'
+  | 'COLLECTION_RECEIVABLE_MISMATCH'
+  | 'COLLECTION_CURRENCY_MISMATCH';
+
+export interface AuthenticateCollectionFactInput {
+  rawBody: string;
+  signatureHeader: string | null;
+  timestampHeader: string | null;
+  secret: string | null;
+  now: Date;
+  toleranceSeconds?: number;
+  /** 绑定预期：全部**必填**（CHANGE 10：不允许"预期缺失就跳过校验"）。 */
   expectedReceivableId: string;
-  expectedMerchantAccountId: string | null;
-}): VerifiedFeeCollectionFact | null {
-  const { fact } = input;
-  if (fact.transactionId === null || fact.transactionId.trim().length === 0) return null;
-  if (fact.receivableId === null || fact.receivableId !== input.expectedReceivableId) return null;
+  expectedMerchantAccountId: string;
+  expectedCurrency: string;
+}
+
+export interface AuthenticateCollectionFactResult {
+  verified: boolean;
+  reasonCodes: readonly CollectionAuthenticationReason[];
+  fact: VerifiedFeeCollectionFact | null;
+}
+
+function parseCollectionPayload(rawBody: string): CustomsFeeCollectionFact | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const record = parsed as Record<string, unknown>;
+  const outcome = record.outcome;
   if (
-    input.expectedMerchantAccountId !== null &&
-    fact.merchantAccountId !== input.expectedMerchantAccountId
+    outcome !== 'COLLECTED' &&
+    outcome !== 'FAILED' &&
+    outcome !== 'REFUNDED' &&
+    outcome !== 'CHARGEBACK'
   ) {
     return null;
   }
-  if (!(CUSTOMS_TRUSTED_COLLECTION_SOURCES as readonly string[]).includes(fact.source ?? '')) {
-    return null;
+  for (const key of ['transactionId', 'merchantAccountId', 'receivableId', 'currency', 'source', 'occurredAt'] as const) {
+    if (typeof record[key] !== 'string' || (record[key] as string).length === 0) return null;
   }
+  const collectedAmount = record.collectedAmount;
+  if (collectedAmount !== null && typeof collectedAmount !== 'string') return null;
   return {
-    ...fact,
-    source: fact.source as CustomsTrustedCollectionSource,
-    [VERIFIED_COLLECTION_BRAND]: true,
+    transactionId: record.transactionId as string,
+    merchantAccountId: record.merchantAccountId as string,
+    receivableId: record.receivableId as string,
+    currency: record.currency as string,
+    collectedAmount: collectedAmount as string | null,
+    outcome,
+    source: record.source as string,
+    occurredAt: record.occurredAt as string,
   };
+}
+
+/**
+ * CHANGE 10：**唯一**可信收款事实的产出边界。
+ * 必须先通过 HMAC-SHA256(timestamp.body) 验签（独立于调用方声明），再做归属绑定；
+ * 商户/应收/币种预期缺失或为空 → 一律拒绝（不得跳过校验）。
+ */
+export function authenticateCollectionFact(
+  input: AuthenticateCollectionFactInput,
+): AuthenticateCollectionFactResult {
+  const reject = (
+    reason: CollectionAuthenticationReason,
+  ): AuthenticateCollectionFactResult => ({ verified: false, reasonCodes: [reason], fact: null });
+
+  if (input.expectedMerchantAccountId.trim().length === 0) {
+    return reject('COLLECTION_MERCHANT_BINDING_REQUIRED');
+  }
+  if (input.secret === null || input.secret.length === 0) {
+    return reject('COLLECTION_SECRET_NOT_CONFIGURED');
+  }
+  if (input.signatureHeader === null || input.signatureHeader.length === 0) {
+    return reject('COLLECTION_SIGNATURE_MISSING');
+  }
+  if (input.timestampHeader === null || input.timestampHeader.length === 0) {
+    return reject('COLLECTION_TIMESTAMP_MISSING');
+  }
+  const tolerance = input.toleranceSeconds ?? 300;
+  const timestampSeconds = Number(input.timestampHeader);
+  if (!Number.isFinite(timestampSeconds) || Math.abs(input.now.getTime() / 1000 - timestampSeconds) > tolerance) {
+    return reject('COLLECTION_TIMESTAMP_OUT_OF_TOLERANCE');
+  }
+  const expectedSignature = createHmac('sha256', input.secret)
+    .update(`${input.timestampHeader}.${input.rawBody}`)
+    .digest('hex');
+  const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
+  const providedBuffer = Buffer.from(input.signatureHeader, 'utf8');
+  if (
+    expectedBuffer.length !== providedBuffer.length ||
+    !timingSafeEqual(expectedBuffer, providedBuffer)
+  ) {
+    return reject('COLLECTION_SIGNATURE_MISMATCH');
+  }
+
+  const fact = parseCollectionPayload(input.rawBody);
+  if (fact === null) return reject('COLLECTION_PAYLOAD_MALFORMED');
+  if (!(CUSTOMS_TRUSTED_COLLECTION_SOURCES as readonly string[]).includes(fact.source ?? '')) {
+    return reject('COLLECTION_PAYLOAD_MALFORMED');
+  }
+  if (fact.receivableId !== input.expectedReceivableId) return reject('COLLECTION_RECEIVABLE_MISMATCH');
+  if (fact.merchantAccountId !== input.expectedMerchantAccountId) return reject('COLLECTION_RECEIVABLE_MISMATCH');
+  if (fact.currency !== input.expectedCurrency) return reject('COLLECTION_CURRENCY_MISMATCH');
+  return {
+    verified: true,
+    reasonCodes: [],
+    fact: {
+      ...fact,
+      source: fact.source as CustomsTrustedCollectionSource,
+      [VERIFIED_COLLECTION_BRAND]: true,
+    },
+  };
+}
+
+/** 签名助手（供适配器与测试构造真实签名）。 */
+export function signCollectionFactBody(timestamp: string, rawBody: string, secret: string): string {
+  return createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
 }
 
 export interface CustomsFeeCollectionInput {
