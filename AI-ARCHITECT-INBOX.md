@@ -175234,3 +175234,227 @@ PRODUCTION_READY=NO
 
 下一轮仅修订 CHANGE 13–15，不授权产品代码实施。仓库没有被本次审计修改，所有生产与外部副作用门禁继续保持关闭。
 ```
+
+### [MSG-20261009-30] U2 设计 R5 = **PASS WITH REVISE**（`U2_DESIGN_APPROVED=YES_SCOPED_WITH_CONDITIONS` 保持，实施仍不授权）—— 九项：`CHANGE13_FINAL_IO_CONTRACT_FIXED=PASS_WITH_REVISE`、`CHANGE14_FINAL_ACCEPTANCE_MATRIX_FIXED=PASS`、`CHANGE15_PLATFORM_BASELINE_TRUST_FIXED=REVISE`、`U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=PASS_WITH_REVISE`、`U2_IMPLEMENTATION_BOUNDARY=PASS`、`SCOPE_HONESTY=PASS`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`U3–U5=NO`；独立核验：R5 §13 已定义最终接口、CHANGE 13–15 确已入库、`R4→R5` 涉及 3 个文件（设计文档/checkpoint/INBOX）、未见 `apps/api` 产品代码变更；**新增 REQUIRED_CHANGES = CHANGE 16–18**：**CHANGE 16（P0）封板基线与当前 HEAD 冲突**——§13.3 同时要求「固定基线=9ee36837」且「基线=写入时当前 HEAD」，但本分支 HEAD 是 f115f881，照现有文字实现则**所有候选都会 BASELINE_INVALID**（fail-closed 但正常 INSERT 路径不可用）：须明确 U1 封板提交是审计锚点还是运行基线（不得混用）、冻结工作树须定义独立不可变的候选构建基线与其 HEAD 解析语义、候选分支须有授权来源与独立审批、无可靠授权基线时一律 BASELINE_INVALID 且不得用当前 HEAD 或历史候选代替；§13.3 的 PENDING 表述**不得**解释为已开放新的基线选择权限；**CHANGE 17（P1）输入契约与拒绝优先级不一致**——接口只声明 incidentId/requestRef，但拒绝优先级含调用方 signalKey/ACCOUNT 字段/U1 字段：须把输入定义为**运行时严格白名单**（不能只靠 TS 静态类型）、额外字段按既定优先级拒绝且禁止静默忽略、明确 incidentId 的可信调用方与引用权限、无效 incidentId/缺 requestRef/类型非法的确定性失败，并补多违规字段并存的优先级测试（不扩大对外 API、不新增 schema）；**CHANGE 18（P1）Git 读取与 DB 写入的 TOCTOU 边界**——同一次只读解析不足以覆盖「Git 检查结束到事务提交之间 HEAD 变化」：须定义基线解析/候选读取/INSERT/提交的执行顺序，一旦窗口内 HEAD 变化必须拒绝且零写入；无法保证稳定则拒绝写入，不得把一次历史读取当作持续授权；U2-18 增加「Git 验证完成后、DB 写入前 HEAD 变化」负向用例；不得新增第二套 Runtime/Scheduler/Controller；审计方并说明本轮**未执行**真实 PostgreSQL/Vitest/TypeScript/Linux-systemd/CI；NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R6_READ_ONLY_CHANGES_16_TO_18 / NEXT_AUDIT=MSG-20261009-31；`U2_PLATFORM_ONLY_INSERT_SUBSET` 仅表示后续可申请的实施范围，本轮**未**开放；reviewed ref f115f881
+
+```text
+MSG-20261009-30｜U2 设计 R5 独立审计裁决
+FINAL_VERDICT = PASS WITH REVISE
+审计对象： SI/RSI INTERNAL CODE REPAIR V1 · PHASE 3-A · U2 设计 R5
+仓库： anthonannabella-dev/crossclaim-ai
+审计提交： f115f88127898f4fefc172ebfde6adfa6a59248e
+审计范围： CHANGE 13–15、最终设计契约、实施授权边界。
+
+本轮已通过 GitHub 连接器读取 R5 设计文档和对应提交差异，并比较 R4→R5。
+
+独立检查确认：
+
+R5 的 §13 已正式定义最终输入输出接口。
+
+CHANGE 13–15 的主要修订内容确实进入了版本控制。
+
+R4→R5 的比较结果涉及 3 个文件，分别是设计文档、checkpoint 文档和 AI-ARCHITECT-INBOX.md；并非整个提交区间只有一个文件变化。
+
+比较结果未显示 apps/api 产品代码变更。
+
+文档指纹 SHA-256 尚未独立复算，因此不能将用户提供的指纹标记为已验证。
+
+总体裁决：设计方向符合 PLATFORM-only、INSERT-only、fail-closed 的限定范围，但还存在影响直接实施的基线锚定与接口验证问题。
+
+因此本轮不直接开放 U2 产品代码实施。
+
+一、九项正式裁决
+
+审计项目
+
+裁决
+
+审计说明
+
+1. CHANGE13_FINAL_IO_CONTRACT_FIXED
+
+PASS WITH REVISE
+
+最终接口已建立，需消除输入与拒绝优先级的矛盾
+
+2. CHANGE14_FINAL_ACCEPTANCE_MATRIX_FIXED
+
+PASS
+
+U2-1～U2-18 状态明确，覆盖关键并发、幂等及拒绝路径
+
+3. CHANGE15_PLATFORM_BASELINE_TRUST_FIXED
+
+REVISE
+
+基线来源可信性改善，但封板基线与当前 HEAD 的关系尚不可实施
+
+4. U2_INPUT_OUTPUT_CONTRACT
+
+PASS WITH REVISE
+
+字段和失败返回已收敛，缺少对非法额外输入的正式校验规则
+
+5. U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED
+
+PASS WITH REVISE
+
+验收结构可接受，需补齐基线一致性与事务时序负向测试
+
+6. U2_IMPLEMENTATION_BOUNDARY
+
+PASS
+
+PLATFORM-only、INSERT-only、无执行接线，符合最小授权边界
+
+7. SCOPE_HONESTY
+
+PASS
+
+明确声明仅设计、未实施、生产未就绪
+
+8. U2_DESIGN_APPROVED
+
+YES_SCOPED_WITH_CONDITIONS
+
+有条件认可设计框架，尚未无条件收口
+
+9. U2_IMPLEMENTATION_AUTHORIZED
+
+NO
+
+完成下列修订并复审后再授权最小实施子集
+
+二、需要修订的项目
+
+CHANGE 16（P0）：封板基线与当前 HEAD 冲突
+
+§13.3 同时要求：
+
+固定基线为 9ee36837。
+
+解析出的基线等于固定审核基线。
+
+固定基线等于候选写入时刻的当前 HEAD。
+
+但本次审核设计位于 f115f881，与 U1 封板提交不同。
+
+这意味着：如果按照现有文字直接在该开发分支运行 U2，且 Git HEAD 保持在 R5 或后续提交上，所有候选都应因 BASELINE_INVALID 被拒绝。
+
+这符合 fail-closed，却使预期的正常 INSERT 路径无法通过。
+
+修订要求：
+
+明确 U1 封板提交是审计锚点，还是候选写入时的运行基线；不得混用。
+
+如果采用冻结工作树，应定义独立、不可变的候选构建基线及其 HEAD 解析语义。
+
+如果后续允许候选分支，应明确候选基线的授权来源和独立审批条件。
+
+在没有可靠授权基线时，一律 BASELINE_INVALID，不得以当前 HEAD 或历史候选自动代替。
+
+此外，§13.3 中的 PENDING 动态变更表述不能被解释为已经开放新的基线选择权限。
+
+CHANGE 17（P1）：输入契约与拒绝优先级不完全一致
+
+§13.1 定义的输入只有：
+
+TypeScript
+
+interface U2PlatformCandidateInput {
+
+incidentId: string;
+
+requestRef: string;
+
+}
+
+但拒绝优先级仍包含调用方提供 signalKey、ACCOUNT 身份字段、U1 事实字段等情形。
+
+这些额外字段不在接口中，却必须在运行时得到拒绝。
+
+修订要求：
+
+将输入定义为运行时严格白名单，而不是仅依赖 TypeScript 静态类型。
+
+额外字段依既定优先级拒绝，禁止静默忽略后继续 INSERT。
+
+明确 incidentId 可由哪类可信服务端调用方传递，以及如何保证其引用权限。
+
+规定无效 incidentId、缺失 requestRef、非法字段类型时的确定性失败行为。
+
+对多种违规字段同时出现的情况编写拒绝优先级测试。
+
+这一修订不要求扩大对外 API 或新增 schema。
+
+CHANGE 18（P1）：Git 基线读取与数据库写入的时序边界
+
+§13.3 声称在同一只读解析调用中读取 commit 和 HEAD 可以避免 TOCTOU。
+
+这能够降低 Git 读取过程中的不一致风险，但不能单独保证 Git 检查结束至数据库事务提交之间 HEAD 不发生变化。
+
+修订要求：
+
+定义基线解析、候选读取、INSERT 和事务提交的执行顺序。
+
+明确一旦发现 HEAD 在验证窗口内变化，必须拒绝并保持零候选写入。
+
+如果无法保证仓库状态在写入窗口内稳定，必须拒绝写入，而不是将一次历史读取视作持续有效的授权。
+
+在 U2-18 中增加“Git 验证完成后、数据库写入前 HEAD 变化”的负向用例。
+
+不得通过新增第二套 Runtime、Scheduler 或 Controller 解决这一问题。
+
+以上 CHANGE 16–18 均是 R5 设计精修要求，并非授权 U2 编写执行器或修改现有安全门禁。
+
+三、实施许可与下一轮范围
+
+本次审计认可 U2 的最小实施方向：
+
+U2_PLATFORM_ONLY_INSERT_SUBSET
+
+但该名称仅表示后续可申请的实施范围，不代表本轮已经开放产品代码实施。
+
+下一轮只允许完成 CHANGE 16–18 的设计修订、补充可验证的测试规格，以及归档设计证据。
+
+U3–U5 继续禁止启动。真实 Provider、模型调用、生产数据库迁移、自动合并和自动部署均不在授权范围内。
+
+特别说明：本轮未执行真实 PostgreSQL、Vitest、TypeScript、Linux/systemd 或 CI 测试。GitHub 只读检查不能替代这些后续实施验收。
+
+四、给 Codex 的机器可读裁决
+
+可直接复制并发送给 Codex
+
+复制裁决
+
+AUDIT_ID=MSG-20261009-30
+REPO=anthonannabella-dev/crossclaim-ai
+U1_CODE_HEAD=9ee36837
+U2_DESIGN_COMMIT_R4=378bfb2a
+U2_DESIGN_COMMIT_R5=f115f881
+U2_DESIGN_DOC_SHA256=5d9f4b2e46a68bbd5c50e403af58a51fe325a1d83127fd9f95f593a601e4dc1b
+U2_DESIGN_DOC_SHA256_INDEPENDENTLY_VERIFIED=NO
+FINAL_VERDICT=PASS_WITH_REVISE
+CHANGE13_FINAL_IO_CONTRACT_FIXED=PASS_WITH_REVISE
+CHANGE14_FINAL_ACCEPTANCE_MATRIX_FIXED=PASS
+CHANGE15_PLATFORM_BASELINE_TRUST_FIXED=REVISE
+U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE
+U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=PASS_WITH_REVISE
+U2_IMPLEMENTATION_BOUNDARY=PASS
+SCOPE_HONESTY=PASS
+U2_DESIGN_APPROVED=YES_SCOPED_WITH_CONDITIONS
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PHASE3_A_U3_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE_16_P0_BASELINE_HEAD_CONSISTENCY,CHANGE_17_P1_RUNTIME_INPUT_VALIDATION,CHANGE_18_P1_GIT_DB_TOCTOU_BOUNDARY
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R6_READ_ONLY_CHANGES_16_TO_18
+NEXT_AUDIT=MSG-20261009-31
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终结论： CHANGE 13–15 已使 U2 设计显著收敛，但 CHANGE 15 的基线与 HEAD 一致性问题仍是实质性 P0 阻断。建议 Codex 只执行 R6 三项设计修订，再提交 MSG-20261009-31。本轮未对仓库进行任何写入。
+```

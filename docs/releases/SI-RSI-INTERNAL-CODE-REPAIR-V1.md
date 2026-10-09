@@ -2143,3 +2143,61 @@ NEXT_AUDIT = MSG-20261009-30
 SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL = FORBIDDEN
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.34 MSG-20261009-30 裁决归档 = **PASS WITH REVISE**（CHANGE 13–15 收敛；新增 CHANGE 16–18）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-30] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（126/126，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=4097 / NORM_LINES=126 / FNV=a24ace4b`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R4=378bfb2a`、`REVIEWED_HEAD=f115f881`。
+
+**九项**：`CHANGE13 = PASS WITH REVISE`、`CHANGE14 = PASS`、`CHANGE15 = REVISE`、
+`U2_INPUT_OUTPUT_CONTRACT = PASS WITH REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED = PASS WITH REVISE`、
+`U2_IMPLEMENTATION_BOUNDARY = PASS`、`SCOPE_HONESTY = PASS`、
+`U2_DESIGN_APPROVED = YES_SCOPED_WITH_CONDITIONS`、`U2_IMPLEMENTATION_AUTHORIZED = NO`。
+
+**审计方独立核验**：R5 §13 已定义最终接口、CHANGE 13–15 已入库；`R4→R5` 涉及 3 个文件
+（设计文档、checkpoint、`AI-ARCHITECT-INBOX.md`）；**未见 `apps/api` 产品代码变更**；
+文档 SHA-256 未独立复算（`U2_DESIGN_DOC_SHA256_INDEPENDENTLY_VERIFIED=NO`）。
+
+**REQUIRED_CHANGES（下一轮 MSG-20261009-31 只做这三项；`R6`）**
+
+- **CHANGE 16（P0）封板基线与当前 HEAD 冲突**：§13.3 同时要求「固定基线 = `9ee36837`」与
+  「基线 = 候选写入时的当前 HEAD」，但本分支 HEAD 为 `f115f881` ⇒ 照现有文字实现，
+  **所有候选都会被 `BASELINE_INVALID` 拒绝**（fail-closed 成立，但正常 INSERT 路径不可用）。
+  须明确：① U1 封板提交是**审计锚点**还是**运行基线**，**不得混用**；② 若采用冻结工作树，
+  须定义**独立、不可变的候选构建基线**及其 HEAD 解析语义；③ 若允许候选分支，须明确候选基线的
+  **授权来源与独立审批条件**；④ 无可靠授权基线时一律 `BASELINE_INVALID`，**不得**以当前 HEAD
+  或历史候选自动代替；⑤ §13.3 的 `PENDING` 动态表述**不得**解释为已开放新的基线选择权限。
+- **CHANGE 17（P1）输入契约与拒绝优先级不一致**：接口只声明 `incidentId`/`requestRef`，
+  而拒绝优先级含调用方 `signalKey`、ACCOUNT 字段、U1 事实字段。须把输入定义为**运行时严格白名单**
+  （不能只靠 TypeScript 静态类型）；额外字段按既定优先级拒绝，**禁止静默忽略后继续 INSERT**；
+  明确 `incidentId` 的可信调用方类别与引用权限；规定无效 `incidentId`、缺失 `requestRef`、
+  字段类型非法时的**确定性失败行为**；补「多种违规字段同时出现」的拒绝优先级测试。
+  **不扩大对外 API、不新增 schema**。
+- **CHANGE 18（P1）Git 基线与数据库写入的 TOCTOU 边界**：同一只读解析调用**不足以**保证
+  「Git 检查结束 → 事务提交」之间 HEAD 不变。须定义基线解析 / 候选读取 / INSERT / 提交的**执行顺序**；
+  一旦验证窗口内 HEAD 变化 ⇒ 拒绝且**零写入**；无法保证仓库状态稳定 ⇒ 拒绝写入，
+  不得把一次历史读取当成持续授权；U2-18 增加「Git 验证完成后、DB 写入前 HEAD 变化」负向用例；
+  **不得**通过新增第二套 Runtime / Scheduler / Controller 解决。
+
+**审计方附注**：本轮**未执行**真实 PostgreSQL / Vitest / TypeScript / Linux-systemd / CI；
+GitHub 只读检查不能替代后续实施验收。`U2_PLATFORM_ONLY_INSERT_SUBSET` **仅表示后续可申请的实施范围**，
+本轮**未**开放产品代码实施。
+
+```text
+MSG-20261009-30_FINAL_VERDICT = PASS_WITH_REVISE
+MSG-20261009-30_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 126/126；FNV1A a24ace4b）
+U2_DESIGN_APPROVED = YES_SCOPED_WITH_CONDITIONS（保持）
+U2_IMPLEMENTATION_AUTHORIZED = NO
+PHASE3_A_U3_TO_U5_AUTHORIZED = NO
+REQUIRED_CHANGES = CHANGE_16_P0_BASELINE_HEAD_CONSISTENCY ;
+                   CHANGE_17_P1_RUNTIME_INPUT_VALIDATION ;
+                   CHANGE_18_P1_GIT_DB_TOCTOU_BOUNDARY
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R6_READ_ONLY_CHANGES_16_TO_18
+NEXT_AUDIT = MSG-20261009-31
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+```
