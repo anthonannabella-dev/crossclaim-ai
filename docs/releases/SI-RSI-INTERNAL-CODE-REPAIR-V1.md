@@ -2912,3 +2912,81 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.46 MSG-20261009-42 裁决归档 = **REVISE**（R17：`CHANGE 64/65 = PASS WITH REVISE`、`CHANGE 66 = REVISE`；只新增 CHANGE 67–72，其中 68/70/71 为 P0）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-42] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（177/177，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=5549 / NORM_LINES=177 / FNV=4c3ca834`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R16=97dee91e`、`REVIEWED_HEAD=c9ec3eca`。
+> **取证过程备注**：该裁决因 Codex 浏览器自动化会话令牌失效（`Codex auth token is unavailable`）而延迟取回；
+> 通道恢复后由**单个** markdown 容器 `innerText` 取得，并在归档前做**稳定性复核**（25 秒内两次采样长度均为 5848、
+> 无「停止生成」控件、尾句为完整结论句）⇒ 视为生成完成后再归档（未采用中断时的 3729 字符采样）。
+
+**审计方独立核验（全部 PASS）**：审计范围 `613ecfc2..c9ec3eca` = **1 commit / 1 file**、唯一变更文件为 U2 设计文档、
+差异 `+168 / −9`、范围内**无 `apps/api` 产品代码变更**、diff 确实包含 **§25.1–§25.4**。
+审计方并确认两项关键修正成立：**承认 `F_OFD_GETLK` 不能单独证明自身持锁**、**`candidateExists=YES` 不代表 `thisExecutionCommitted=YES`**。
+
+**逐项裁决**：`CHANGE 64（P0）= PASS WITH REVISE`（三值分级方向正确；否定证据语义须收紧）、
+`CHANGE 65（P1）= PASS WITH REVISE`（`releaseCounter=0 ≠ 锁仍被持有` 已解决；统一边界/唯一释放点/全窗口覆盖正确）、
+`CHANGE 66（P0）= REVISE`（M1–M4 为设计候选，M1 优先在目标 PostgreSQL 验证，但前提与升级风险须明确）。
+`U2_DESIGN_R17_ACCEPTED = NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED`、`U1_REOPEN = NO`。
+
+**新增 REQUIRED_CHANGES（下一轮 MSG-20261009-43 只做这六项；已通过项不重复提交）**
+
+- **CHANGE 67（P1）明确 `O3-CONTRADICTED` 的证据边界**：他方 OFD 持有冲突锁**只证明存在外部冲突**，
+  **不必然**证明「本 OFD 曾持有的锁已提前释放」；须结合**锁类型、锁范围、查询身份与锁生命周期**；
+  `O3-CONTRADICTED` = **已有充分证据推翻持锁不变量**，而非一般性查询异常；
+  「不能证明已释放、也不能证明仍有效」⇒ `INCONCLUSIVE`；任何不满足锁族/锁范围/OFD 身份匹配的查询**不得升级为 `PROVEN`**；
+  一旦无法确认排他性，**无论错误标签如何，写入门禁仍必须 fail-closed**。
+- **CHANGE 68（P0）统一实际锁协议，禁止混用不兼容锁族**：Linux 上 `flock(2)` 与 `fcntl` OFD 记录锁**通常是相互独立的锁体系**，
+  **不能假定彼此互斥** ⇒ 必须明确**唯一选定的生产锁协议**（统一 `flock(LOCK_EX)`，或统一 `F_OFD_SETLK/F_OFD_SETLKW`）；
+  所有参与排他写入的进程使用**相同协议、相同规范化锁对象、兼容锁范围**；
+  **不允许**进程 A 用 `flock`、进程 B 用 OFD 记录锁却视为同一互斥域；
+  测试须含**混合锁协议负面用例**——出现两个进程**同时认为自己持有排他锁**即**验收失败**。
+  **这是授权前的 P0 条件**（关系到排他窗口是否真实存在）。
+- **CHANGE 69（P1）静态约束必须覆盖可执行调用路径**：将 `fcntl` 解锁、`dup2/dup3`、`F_DUPFD`、FD 传递、运行时原生依赖纳入**威胁模型**；
+  明确经 `fork/spawn/exec`、线程共享或库调用**传递 FD 的边界**；对不能静态证明安全的依赖，须给出**目标环境隔离证据**，否则**禁止进入写入窗口**；
+  测试中**故意绕过 `LockFdBoundary`**，必须确认系统**不会继续报告排他条件成立**；
+  明确 **`O_CLOEXEC` 不是阻止 `fork` 后短暂继承 FD 的完整机制**，子进程继承与复制**必须单独验证**。
+- **CHANGE 70（P0）M1 必须区分「事务归属」与「提交事件的持久证明」**：
+  ①捕获 XID 的查询与候选 INSERT 必须位于**同一个真实数据库事务、同一事务上下文**；
+  ②外部记录中的 XID、`executionRef`、`returnedCandidateId` 必须建立**受信绑定**（**单纯可修改的外部 JSON 文件不够**）；
+  ③事务外持久记录**必须在 `COMMIT` 前完成持久化确认**；**该记录持久化失败 ⇒ 不得启动 `COMMIT`**；
+  ④**不得**因外部记录存在而认定 `COMMIT` 成功，仍须在**权威主库**确认目标行存在且系统列匹配；
+  ⑤外部记录丢失/损坏/身份无法认证/事务 ID 不匹配 ⇒ 一律 **`UNKNOWN`**，**不得凭内容相似补全归因**；
+  ⑥明确：若 `COMMIT` 已成功而外部对账记录不可恢复 ⇒ 系统**可能永久无法确认本次执行**，
+  此时选择 `UNKNOWN` **是正确安全行为**，**而不是让另一执行重新创建相同候选**。
+- **CHANGE 71（P0）修订 `xmin` 的时间与行版本语义**：`xmin` 表示**当前可见行版本**的插入事务标识，
+  **不天然代表逻辑业务记录一生中唯一的创建事务**；官方亦警告**不应长期依赖 32 位事务 ID 的唯一性** ⇒ 还须规定：
+  从事务标识捕获到提交结果确认的**有效时间与事务 ID 生命周期边界**；明确处理 **`VACUUM FREEZE`、表重写**
+  及其他可能影响**行版本来源判断**的数据库维护场景；**不得**以「`xmin` = xid8 低 32 位」作为**唯一**判断条件，
+  还须能证明其属于**同一个 XID epoch**；无法证明版本来源连续性 ⇒ **`UNKNOWN`**；
+  测试须包含「**低 32 位 XID 重复但完整事务身份不同**」的情形。
+- **CHANGE 72（P1）补足 M1 的反例验收（U2-50a ~ U2-50f）**：
+  `U2-50a` 外部记录落盘成功但事务回滚 ⇒ `UNKNOWN` 或明确未提交，**不得 YES**；
+  `U2-50b` `COMMIT` 成功但外部因果记录不可验证 ⇒ `UNKNOWN`；
+  `U2-50c` E2 创建内容相同但事务 XID 不同的行 ⇒ **不得归因 E1**；
+  `U2-50d` 行版本经过冻结/重写或生命周期无法确认 ⇒ `UNKNOWN`；
+  `U2-50e` 同一逻辑 `candidateId` 的行被删除重插 ⇒ **不得**据相同 ID 与 digest 判 YES；
+  `U2-50f` XID 与行版本匹配但外部记录的 execution 身份不可认证 ⇒ `UNKNOWN`。
+  **通过上述测试**才能把 M1 从「合理候选」推进为「可独立验证的因果绑定」。
+
+**审计方指出的三个实施前提（缺一不得授权）**：①**排他性证明**（统一锁协议确定 + `O2` 全窗口结构保证可落地并验证）；
+②**提交归因证明**（M1–M4 至少一种具有明确因果证据契约，且能安全处理 `UNKNOWN`）；③**环境证据**（Linux 多进程测试、`LockFdBoundary` 规则、PostgreSQL 事务绑定、数据库实际权限）。
+设计阶段不要求先完成全部生产测试，但**不得把尚未明确的核心安全契约留给实施时临时决定**。
+
+```text
+MSG-20261009-42_FINAL_VERDICT = REVISE
+MSG-20261009-42_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 177/177；FNV1A 4c3ca834）
+CHANGE_64=PASS_WITH_REVISE · CHANGE_65=PASS_WITH_REVISE · CHANGE_66=REVISE
+U2_DESIGN_R17_ACCEPTED = NO · U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED · U1_REOPEN = NO
+REQUIRED_CHANGES = CHANGE_67_P1 ; CHANGE_68_P0 ; CHANGE_69_P1 ; CHANGE_70_P0 ; CHANGE_71_P0 ; CHANGE_72_P1
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R18_READ_ONLY_CHANGES_67_TO_72
+NEXT_AUDIT = MSG-20261009-43
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```

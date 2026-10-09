@@ -179085,3 +179085,422 @@ PRODUCTION_READY=NO
 GitHub R16 提交
 ；本轮没有向仓库写入任何内容。
 ```
+
+### [MSG-20261009-42] U2 设计 R17 = **REVISE**（`CHANGE 64/65 = PASS WITH REVISE`、`CHANGE 66 = REVISE`；只新增 **CHANGE 67（P1）/68（P0）/69（P1）/70（P0）/71（P0）/72（P1）**）—— **独立核验全部 PASS**：审计范围 `613ecfc2..c9ec3eca` 为 **1 commit / 1 file**、唯一变更文件为 U2 设计文档、差异 `+168 / −9`、范围内**无 `apps/api` 产品代码变更**、diff 确实包含 **§25.1–§25.4**（对应 CHANGE 64–66 与新增矩阵）；审计方确认两项关键修正成立：**承认 `F_OFD_GETLK` 不能单独证明自身持锁**、**`candidateExists=YES` 不代表 `thisExecutionCommitted=YES`**；**CHANGE 64 = PASS WITH REVISE**（三值分级方向正确，但**否定证据的语义须收紧**）⇒ **新增 CHANGE 67（P1）**：明确 `O3-CONTRADICTED` 的**证据边界**——他方 OFD 持有冲突锁只能证明**存在外部冲突**，**不必然**证明「本 OFD 曾持有的锁已提前释放」；必须结合**锁类型、锁范围、查询身份与锁生命周期**才能作后一判断；`O3-CONTRADICTED` 应表示**已有充分证据推翻持锁不变量**，而非一般查询异常；**不能证明已释放但不能证明仍有效 ⇒ `INCONCLUSIVE`**；任何不满足锁族/锁范围/OFD 身份匹配的查询**不得升级为 `PROVEN`**；一旦无法确认排他性，**无论错误标签如何，写入门禁仍必须 fail-closed**；**CHANGE 65 = PASS WITH REVISE**（`releaseCounter=0 ≠ 锁仍被持有` 的逻辑问题已解决；统一 `LockFdBoundary`、禁止 FD 外泄、唯一释放点、覆盖整个提交与对账窗口均为正确约束）⇒ **新增 CHANGE 68（P0）**：**统一实际锁协议、禁止混用不兼容锁族**——Linux 上 `flock(2)` 与 `fcntl` OFD 记录锁**通常是相互独立的锁体系**，不能假定彼此互斥；必须明确**唯一选定的生产锁协议**（统一 `flock(LOCK_EX)` 或统一 `F_OFD_SETLK/F_OFD_SETLKW`）、所有参与排他写入的进程使用**相同协议、相同规范化锁对象、兼容锁范围**、**不允许** A 用 flock 而 B 用 OFD 记录锁却视为同一互斥域；测试须含**混合锁协议负面用例**，出现两进程同时自认持有排他锁即**验收失败**（授权前 P0 条件）；**新增 CHANGE 69（P1）**：**静态约束必须覆盖可执行调用路径**——`fcntl` 解锁、`dup2/dup3`、`F_DUPFD`、FD 传递、运行时原生依赖均纳入威胁模型；明确经 `fork/spawn/exec`、线程共享或库调用传递 FD 的边界；对不能静态证明安全的依赖须给出目标环境隔离证据，否则禁止进入写入窗口；须有「故意绕过 `LockFdBoundary` ⇒ 系统不得继续报告排他成立」的测试；并明确 **`O_CLOEXEC` 不是阻止 `fork` 后短暂继承 FD 的完整机制**，子进程继承与复制须单独验证；**CHANGE 66 = REVISE**（M1–M4 为设计候选、M1 值得优先在目标 PostgreSQL 验证）⇒ **新增 CHANGE 70（P0）**：M1 必须区分**「事务归属」与「提交事件的持久证明」**——捕获 XID 的查询与候选 INSERT 必须位于**同一真实数据库事务**；外部记录中的 XID/`executionRef`/`returnedCandidateId` 必须**受信绑定**（单纯可改的 JSON 文件不够）；外部持久记录**必须在 COMMIT 前完成持久化确认，失敗则不得启动 COMMIT**；不得因外部记录存在就认定 COMMIT 成功，仍须在**权威主库**确认目标行存在且系统列匹配；外部记录丢失/损坏/身份无法认证/事务 ID 不匹配一律 **`UNKNOWN`**；并明确「数据库提交已成功但外部对账记录不可恢复 ⇒ 可能永久无法确认本次执行，此时 `UNKNOWN` 是正确安全行为，**不得让另一执行重新创建相同候选**」；**新增 CHANGE 71（P0）**：**修订 `xmin` 的时间与行版本语义**——`xmin` 表示**当前可见行版本**的插入事务标识，**不天然代表逻辑记录一生中唯一的创建事务**，官方亦警告不应长期依赖 32 位事务 ID 唯一性；须规定事务标识的**有效时间与生命周期边界**；明确处理 **`VACUUM FREEZE`、表重写**等影响行版本来源判断的维护场景；**不得以简单的 `xmin = xid8 低 32 位` 作为唯一判据**，还须证明属于**同一 XID epoch**；无法证明版本来源连续性 ⇒ **`UNKNOWN`**；测试须含「低 32 位 XID 重复但完整事务身份不同」的情形；**新增 CHANGE 72（P1）**：补足 M1 反例验收 **U2-50a~f**（外部记录落盘成功但事务回滚 ⇒ `UNKNOWN`/明确未提交，**不得 YES**；COMMIT 成功但外部因果记录不可验证 ⇒ `UNKNOWN`；E2 创建内容相同但 XID 不同的行 ⇒ **不得归因 E1**；行版本经冻结/重写或生命周期无法确认 ⇒ `UNKNOWN`；同一逻辑 `candidateId` 被删除重插 ⇒ 不得凭相同 ID 与 digest 判 YES；XID 与行版本匹配但外部记录 execution 身份不可认证 ⇒ `UNKNOWN`）；**授权结论**：`U2_DESIGN_R17_ACCEPTED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`U1_REOPEN=NO`、`SCHEMA_MIGRATION=HOLD`、`RUNTIME_WIRING/MODEL_CALL/PROVIDER_CALL=FORBIDDEN`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`；缺失的三个实施前提（**排他性证明 / 提交归因证明 / 环境证据**）必须先行明确，不得留给实施时临时决定；`REQUIRED_CHANGES=CHANGE_67_P1,CHANGE_68_P0,CHANGE_69_P1,CHANGE_70_P0,CHANGE_71_P0,CHANGE_72_P1`、`NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R18_READ_ONLY_CHANGES_67_TO_72` / `NEXT_AUDIT=MSG-20261009-43`；reviewed ref `c9ec3ecaee0c369d1be18f0e776234951e518cc1`
+
+```text
+MSG-20261009-42｜CrossClaim AI · U2 设计 R17 独立审计裁决
+REVISE — 暂不授权实施
+
+审计对象： PHASE 3-A · U2 设计 R17
+固定 HEAD： c9ec3ecaee0c369d1be18f0e776234951e518cc1
+审计范围： 613ecfc2..c9ec3eca
+审计方式： GitHub 只读独立复核
+
+一、总体裁决
+
+本轮已通过 GitHub 连接器独立核对固定提交及其差异，确认：
+
+范围为 1 commit / 1 file。
+
+唯一变更文件是 docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md。
+
+差异为 +168 / −9。
+
+所核对的提交范围内没有 apps/api 产品代码变更。
+
+实际 diff 确实包含 §25.1、§25.2、§25.3、§25.4，对应 CHANGE 64–66 及新增验收矩阵。
+
+查看已核对的 GitHub 提交
+
+分项裁决
+
+项目
+
+
+
+裁决
+
+
+
+说明
+
+
+
+
+CHANGE 64 · P0
+
+
+
+PASS WITH REVISE
+
+
+
+O3 证据分级方向正确，否定证据的语义仍须收紧
+
+
+
+
+CHANGE 65 · P1
+
+
+
+PASS WITH REVISE
+
+
+
+统一 FD 边界方向正确，跨进程与底层接口覆盖仍需补强
+
+
+
+
+CHANGE 66 · P0
+
+
+
+REVISE
+
+
+
+M1 因果绑定仍存在必须明确的前提与错误升级风险
+
+
+
+
+R17 整体设计
+
+
+
+REVISE
+
+
+
+尚未达到无条件设计封板标准
+
+
+
+
+U2_PLATFORM_ONLY_INSERT_SUBSET
+
+
+
+NOT_AUTHORIZED
+
+
+
+不允许进入 INSERT 实施
+
+
+
+
+生产授权
+
+
+
+NO
+
+
+
+保持原限制
+
+关键判断： R17 在设计完整性、失败关闭及证据归因方面取得了实质进展。尤其是承认 F_OFD_GETLK 不能单独证明自身持锁，以及 candidateExists=YES 不代表 thisExecutionCommitted=YES，这两项修正成立。
+
+但 CHANGE 66 所依赖的数据库因果证据尚未形成完整、可验证的证明链。因此本轮不能把“提出了可行候选机制”裁定为“机制已具备充分实施条件”。
+
+二、CHANGE 64（P0）审计
+
+裁决：PASS WITH REVISE
+
+§25.1 的主要修订可以接受：
+
+O3-PROVEN / CONTRADICTED / INCONCLUSIVE 三值分类成立。
+
+fdinfo 四要素检查能够避免仅凭文件 inode 一致就认定锁归属。
+
+F_OFD_GETLK 被正确降级为冲突查询，不再作为自身持锁证明。
+
+未验证的机制一律归入 INCONCLUSIVE。
+
+未得到肯定证据时，只有 O2 独立成立才允许继续。
+
+Linux 文档也确认，F_OFD_GETLK 返回的是与拟请求锁相冲突的锁信息，并非当前 OFD 的持锁清单。
+Linux manual page
++1
+
+CHANGE 67（P1）：明确 O3-CONTRADICTED 的证据边界
+
+当前 §25.1.3 的表述存在一个需要修订的细节：
+
+冲突查询显示存在冲突且非本 OFD，可产生 CONTRADICTED。
+
+这一结论需要额外限定。
+
+其他 OFD 持有冲突锁，可以证明当前请求存在外部冲突，但不必然证明本 OFD 曾经持有的锁已经提前释放。必须结合锁类型、锁范围、查询身份和锁生命周期，才能作出后一个判断。
+
+建议补充：
+
+O3-CONTRADICTED 表示已有充分证据推翻规定的持锁不变量，而不是一般性的查询异常。
+
+不能证明锁已释放、但也不能证明锁仍有效的情况，返回 INCONCLUSIVE。
+
+任何不满足锁族、锁范围或 OFD 身份匹配的查询，不得升级为 PROVEN。
+
+一旦无法确认排他性，独立于错误标签，写入门禁仍必须 fail-closed。
+
+这属于证据含义的精确化，不要求重做已经接受的 O3 分类体系。
+
+三、CHANGE 65（P1）审计
+
+裁决：PASS WITH REVISE
+
+§25.2 已解决原来最重要的逻辑问题：releaseCounter=0 不等于锁仍被持有。
+
+统一 LockFdBoundary、禁止 FD 外泄、唯一释放点、覆盖整个数据库提交和对账窗口，都属于正确的设计约束。
+
+不过还需处理一个实质性的跨进程排他性问题。
+
+CHANGE 68（P0）：统一实际锁协议，禁止混用不兼容的锁族
+
+Linux 上的 flock(2) 和 fcntl OFD record locks 虽然都与 open file description 有关，但在本地 Linux 文件系统上通常是相互独立的锁体系，不能直接假定它们彼此互斥。
+Linux manual page
++1
+
+因此，R17 将 OFD record lock、flock、LOCK_UN 放在一个抽象边界下仍不够。
+
+必须明确：
+
+唯一选定的生产锁协议：例如统一使用 flock(LOCK_EX)，或统一使用 F_OFD_SETLK/F_OFD_SETLKW。
+
+所有参与排他写入的进程使用相同协议、相同规范化锁对象和兼容的锁范围。
+
+不允许进程 A 用 flock、进程 B 用 OFD record lock，却将二者视为同一个互斥域。
+
+测试必须包含混合锁协议的负面用例；出现两个进程同时认为自己持有排他锁时，验收失败。
+
+这是授权前的 P0 条件。 它关系到排他窗口是否真实存在，而不仅是锁 FD 的管理规范。
+
+CHANGE 69（P1）：静态约束必须覆盖可执行调用路径
+
+R17 的“模块外出现 close/dup/flock 即构建失败”是必要控制，但单纯文本或语法规则不能证明不存在间接的底层调用。
+
+需进一步限定检测范围及无法证明时的处理：
+
+fcntl 解锁、dup2/dup3、F_DUPFD、FD 传递、运行时原生依赖均纳入威胁模型。
+
+明确通过 fork、spawn、exec、线程共享或库调用传递 FD 的边界。
+
+对不能静态证明安全的依赖，给出目标环境隔离证据；否则禁止进入写入窗口。
+
+在测试进程中故意绕过 LockFdBoundary，确认系统不会继续报告排他条件成立。
+
+还应明确：O_CLOEXEC 不是阻止 fork 后短暂继承 FD 的完整机制。子进程的继承和复制必须单独验证。
+
+四、CHANGE 66（P0）审计
+
+裁决：REVISE
+
+§25.3 的核心方向正确：随机 executionRef 和候选行内容一致，都不能独立证明数据库行属于本次执行。
+
+M1–M4 可以作为设计候选，其中 M1 值得优先进行目标 PostgreSQL 验证。不过当前版本仍有几个需要明确的边界。
+
+CHANGE 70（P0）：M1 必须区分“事务归属”和“提交事件的持久证明”
+
+M1 的原理是：
+
+同事务 XID → 外部 execution 记录 → 行 xmin → 对账
+
+在严格条件下，这可以建立很强的事务来源证据，因为 PostgreSQL 事务 ID 并不是由普通业务 INSERT 任意指定的。
+
+但必须将以下条件写成明确的判定要求：
+
+捕获 XID 的查询与候选 INSERT 必须位于同一个真实数据库事务、同一事务上下文中。
+
+外部记录中的 XID、executionRef、returnedCandidateId 必须建立受信绑定；单纯可修改的外部 JSON 文件不够。
+
+事务外持久记录必须在 COMMIT 前完成持久化确认。如果该记录持久化失败，不得启动 COMMIT。
+
+不能因为外部记录存在就认定 COMMIT 成功；仍须在权威主库确认目标行存在且系统列匹配。
+
+外部记录丢失、损坏、身份无法认证、事务 ID 不匹配，都必须返回 UNKNOWN，不得凭内容相似补全归因。
+
+还要明确：如果数据库 COMMIT 已经成功，而外部系统故障导致对账记录不可恢复，系统可能永久无法确认本次执行。此时选择 UNKNOWN 是正确的安全行为，而不是让另一执行重新创建相同候选。
+
+CHANGE 71（P0）：修订 xmin 的时间与行版本语义
+
+PostgreSQL 的 xmin 表示当前可见行版本的插入事务标识，并不天然代表逻辑业务记录一生中唯一的创建事务。PostgreSQL 官方文档明确警告，不应长期依赖 32 位事务 ID 的唯一性。
+postgresql.org
+
+R17 已识别 XID 回绕与 UPDATE 风险，但还须增加：
+
+规定从事务标识捕获到提交结果确认的有效时间及事务 ID 生命周期边界。
+
+明确处理 VACUUM FREEZE、表重写和其他可能影响行版本来源判断的数据库维护场景。
+
+不以简单的 xmin = xid8 低32位 作为唯一判断条件；还须能证明其属于同一个 XID epoch。
+
+对无法证明版本来源连续性的情况，一律返回 UNKNOWN。
+
+测试需包含模拟低 32 位 XID 重复但完整事务身份不同的情形。
+
+这些约束可与既有 M1 注意事项合并，无需重新设计 M2–M4。
+
+CHANGE 72（P1）：补足 M1 的反例验收
+
+增加以下必要测试：
+
+编号
+
+
+
+反例
+
+
+
+必须结果
+
+
+
+
+U2-50a
+
+
+
+外部记录落盘成功，数据库事务回滚
+
+
+
+UNKNOWN 或明确未提交，不得 YES
+
+
+
+
+U2-50b
+
+
+
+COMMIT 成功，但外部因果记录不可验证
+
+
+
+UNKNOWN
+
+
+
+
+U2-50c
+
+
+
+E2 创建内容相同但事务 XID 不同的行
+
+
+
+不得归因 E1
+
+
+
+
+U2-50d
+
+
+
+行版本经过冻结、重写或生命周期无法确认
+
+
+
+UNKNOWN
+
+
+
+
+U2-50e
+
+
+
+同一逻辑 candidateId 的行被删除重插
+
+
+
+不得根据相同 ID 与 digest 判 YES
+
+
+
+
+U2-50f
+
+
+
+XID 与行版本匹配，但外部记录的 execution 身份不可认证
+
+
+
+UNKNOWN
+
+通过上述测试才能把 M1 从“合理候选”推进为“可独立验证的因果绑定”。
+
+五、U2 实施授权裁决
+
+U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED
+
+原因不是 R17 没有进展，而是当前仍缺少三个实施前提：
+
+排他性证明： 统一锁协议必须确定，O2 的全窗口结构保证必须可以落地并验证。
+
+提交归因证明： M1–M4 至少一种机制必须具有明确的因果证据契约，且能安全处理 UNKNOWN。
+
+环境证据： 当前 Linux 多进程测试、LockFdBoundary 规则、PostgreSQL 事务绑定及数据库实际权限均未验证。
+
+设计阶段不要求先完成全部生产测试，但不能把尚未明确的核心安全契约留给实施时临时决定。
+
+下一轮授权范围
+
+允许继续进行 R18 纯设计修订及只读证据核验，仅处理 CHANGE 67–72。已通过的 CHANGE 54/56/58/59、不涉及本轮争议的 P2 设计以及 U1 封板内容，均不要求重新提交。
+
+R18 达到设计闭合后，可另行评估是否授权最小隔离实施单元。即便获得实施授权，也不等同于开放 Runtime、生产写入或自动部署。
+
+六、可直接交给 Code 的机器可读裁决
+
+MSG-20261009-42 / 审计结果
+
+复制
+
+以下是本次独立评审结论，不是仓库已写入的状态。
+
+纯文本
+AUDIT_ID=MSG-20261009-42
+REVIEWED_HEAD=c9ec3ecaee0c369d1be18f0e776234951e518cc1
+AUDIT_SCOPE=613ecfc2..c9ec3eca
+AUDIT_SCOPE_COMMITS_VERIFIED=1
+AUDIT_SCOPE_FILES_VERIFIED=1
+PRODUCT_CODE_CHANGES_IN_SCOPE=0
+
+VERDICT=REVISE
+CHANGE_64=PASS_WITH_REVISE
+CHANGE_65=PASS_WITH_REVISE
+CHANGE_66=REVISE
+
+REQUIRED_CHANGES=CHANGE_67_P1,CHANGE_68_P0,
+                 CHANGE_69_P1,CHANGE_70_P0,
+                 CHANGE_71_P0,CHANGE_72_P1
+
+U2_DESIGN_R17_ACCEPTED=NO
+U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R18_READ_ONLY_CHANGES_67_TO_72
+U1_CODE_HEAD=9ee36837
+U1_REOPEN=NO
+
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+NEXT_AUDIT=MSG-20261009-43
+
+最终结论：R17 = REVISE。 允许 R18 对剩余六项具体问题作定向设计修订，不扩大范围、不重新打开 U1、不触碰仓库或产品代码。
+
+本次 GitHub 提交差异已独立核对；完整文档 SHA-256、目标 Linux 内核行为、真实 PostgreSQL 环境以及运行测试结果仍未独立验证，不能据此宣称 U2 已具备生产安全性。本次未向仓库写入任何内容。
+```
