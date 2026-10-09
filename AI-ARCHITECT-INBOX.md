@@ -175991,3 +175991,299 @@ PRODUCTION=NOT_VERIFIED
 
 最终裁决：REVISE。 CHANGE 21 已关闭；CHANGE 19 尚有 P0 阻断，CHANGE 20 需要执行顺序修订。下一轮只允许 R8 设计收口，不授权实施或放宽任何生产安全门禁。
 ```
+
+### [MSG-20261009-33] U2 设计 R8 = **REVISE**（CHANGE 25 通过；新增 CHANGE 26–31，其中 3 个 P0）—— 十项：`CHANGE25_SINGLE_RUNTIME_MODE_FIXED=PASS`、`CHANGE23_LOCK_LIFECYCLE_VS_CLEANLINESS_FIXED=PASS_WITH_REVISE·P1`、`CHANGE24_REJECTION_ORDER_VS_DB_READ_ORDER_FIXED=PASS_WITH_REVISE·P1`、`CHANGE22_OS_LEVEL_WRITE_ISOLATION_FIXED=REVISE·P0`、`U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE·P0`、`U2_IMPLEMENTATION_BOUNDARY=PASS`、`SCOPE_HONESTY=PASS`、`U2_DESIGN_APPROVED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`；独立核验：R7→R8 = **2 提交/3 文件**、`apps/api` 0 变更、R8 文件 **Git blob SHA `df417b9eef11ae10408a277d7722336292580ea0` 与送审值一致**（`GIT_COMPARE_VERIFICATION=PASS`、`GIT_BLOB_SHA_VERIFICATION=PASS`）、§16.1–§16.5 确实存在，但文档 SHA-256 仍未独立复算；**新增 REQUIRED_CHANGES**：**CHANGE 26（P0）ISOLATION_ATTESTED 缺可信证明链**（证明只能由可信运行环境生成并经受信配置/通道获取、普通业务输入不得提供；服务端固定有效期上限；须验证工作树 canonical path、`.git` 实际目录、refs/packed-refs 等保护范围；明确同 UID 写入者/特权进程/权限变更的信任边界；禁止把一次历史 ACL 检查当作持续不可变证明；验收须区分 `ATTESTATION_VALID` 与真正的 `WRITE_ISOLATION_ENFORCED`）；**CHANGE 27（P0）U2-20 断言自相矛盾**（若外部越权写入被 OS 拒绝则 Git/工作树不变、合法候选**可以**提交，不能无条件要求候选零新增）——须拆为 U2-20A（外部非授权写入被拒：Git 不变、合法候选可提交、无越权写入）/U2-20B（真实检测到基线变化：回滚、零新增、不泄露 candidate ID）/U2-20C（隔离证明缺失或无效：拒绝进入写入流程、零新增）；**CHANGE 28（P0）唯一键冲突与并发复用未闭环**（A/B 双事务都查不到候选、A 插入成功后 B 撞唯一键，而「仅在已比对一致时才复用」无法覆盖该路径）——须先核实现有唯一约束确实覆盖候选去重键，冲突后经明确的恢复/重试路径重新读取并逐项比对权威身份，完全一致才 `CANDIDATE_REUSED`，任何不一致 ⇒ `INPUT_KEY_MISMATCH` 且 `candidateId=null`，不得把所有数据库异常当去重冲突，并**新增真实 PostgreSQL 双连接竞争测试**；**CHANGE 29（P1）** 第 11–13 步读取在事务外（权威身份可能基于旧状态）⇒ 关键读取须入事务或事务内等价强度复验，并证明 Incident/Task 变化与 INSERT 并发时不提交失效候选；第 19 步 `COMMIT` 异常**不得**一律声称已回滚（连接中断可能结果未知）⇒ 须只读对账并返回安全的未确认结果、不得未经验证重试；**CHANGE 30（P1）** 锁释放的「先读 ownerToken 再删除」存在竞态，须给出锁句柄/身份的稳定验证或环境权限与独占管理，并补：创建后写入/同步失败处理、释放失败告警与下次调用拒绝、人工解除陈旧锁的权限/证据/审计、以及「DB 提交成功但释放失败时不得误报为零写入」；**CHANGE 31（P1）** 拒绝码须与最终副作用状态一致（null 与缺失的确定性优先级、非普通对象/Proxy 边界、Git 检查失败 vs 真实基线变化、INSERT 普通数据库错误的稳定契约、COMMIT 成功+释放失败时的真实候选状态；**不得**因返回 REJECTED 就声称数据库一定未提交）；NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R9_READ_ONLY_CHANGES_26_TO_31 / NEXT_AUDIT=MSG-20261009-34；`POSTGRESQL_INTEGRATION_TEST/VITEST/TSC/LINUX_SYSTEMD/CI/PRODUCTION = NOT_VERIFIED`；reviewed ref 7a5d8058
+
+```text
+MSG-20261009-33｜U2 设计 R8 独立审计裁决
+FINAL VERDICT：REVISE
+审计对象： SI/RSI INTERNAL CODE REPAIR V1 · PHASE 3-A · U2 DESIGN R8
+
+本轮结论：R8 的四项修订方向基本正确，但仍存在影响候选写入安全性的 P0 缺口，暂不批准 U2 实施。
+
+我已通过 GitHub 连接器直接读取 R8 提交中的设计文档，并独立核对 R7→R8 的提交差异。
+
+核实结果：
+
+R7→R8：2 个提交，3 个变更文件。
+
+apps/api 产品代码：0 个变更文件。
+
+R8 设计文件的 Git blob SHA：df417b9eef11ae10408a277d7722336292580ea0，与送审值一致。
+
+R8 的 §16.1–§16.5 实际存在，涵盖 CHANGE 22–25。
+
+文档 SHA-256 尚未进行独立原始字节复算。
+
+PostgreSQL、Vitest、TypeScript、Linux/systemd、CI 和生产运行均未验证。
+
+本次可以确认设计文本与提交差异，但不能将设计中的安全声明视为已经获得运行时证明。
+
+一、十项裁决
+
+审计项目
+
+裁决
+
+1. CHANGE22_OS_LEVEL_WRITE_ISOLATION_FIXED
+
+REVISE · P0
+
+2. CHANGE23_LOCK_LIFECYCLE_VS_CLEANLINESS_FIXED
+
+PASS WITH REVISE · P1
+
+3. CHANGE24_REJECTION_ORDER_VS_DB_READ_ORDER_FIXED
+
+PASS WITH REVISE · P1
+
+4. CHANGE25_SINGLE_RUNTIME_MODE_FIXED
+
+PASS
+
+5. U2_INPUT_OUTPUT_CONTRACT
+
+PASS WITH REVISE
+
+6. U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED
+
+REVISE · P0
+
+7. U2_IMPLEMENTATION_BOUNDARY
+
+PASS
+
+8. SCOPE_HONESTY
+
+PASS
+
+9. U2_DESIGN_APPROVED
+
+NO
+
+10. U2_IMPLEMENTATION_AUTHORIZED
+
+NO
+
+特别说明： 本轮否决实施授权，不代表否定 R8 的整体方向。OS 级隔离、锁移出工作树、拒绝顺序调整、单一运行模式四项修改均具有实际价值。阻断点集中在隔离证明的可信性和并发写入的事务正确性。
+
+二、必须修订的项目
+
+CHANGE 26（P0）—— ISOLATION_ATTESTED 缺少可信证明链
+
+R8 §16.1 将 OS 隔离作为强制前置条件，这是正确方向。但当前定义只有：
+
+worktreePath / ownerAccount / aclEvidenceRef / writeDeniedProbeRef / issuedAt / maxAgeMs
+
+这些字段本身不能证明隔离真实存在。
+
+具体缺口：
+
+缺少证明材料来源真实性校验。调用方可能提供任意字符串作为 aclEvidenceRef。
+
+maxAgeMs 由调用方配置，没有服务端强制上限。
+
+未规定证明必须绑定实际工作树的 canonical path、Git 元数据目录及受保护 ref。
+
+没有明确防范同一 UID、具有写权限的其他进程、特权账户及 ACL 在证明后发生变更。
+
+要求修订：
+
+隔离证明只能由可信运行环境生成，U2 从受信配置或受信通道获取，普通业务输入不得自行提供。
+
+固定证明有效期上限，由服务端配置控制。
+
+验证工作树真实路径、.git 实际指向的目录、refs、packed-refs 等 Git 元数据保护范围。
+
+对能够绕过隔离的同 UID 写入者、特权进程和权限变更明确列出信任边界。
+
+禁止把一次历史 ACL 检查解释为运行期间持续不可变的证明。
+
+验收结果必须区分 ATTESTATION_VALID 与真正的 WRITE_ISOLATION_ENFORCED。
+
+CHANGE 27（P0）—— U2-20 的断言不能同时成立
+
+当前 §16.1 要求：对抗进程写入被 OS 拒绝，同时候选行零新增。
+
+这里存在逻辑问题。
+
+假设 U2 已经通过所有业务验证，随后无权限的对抗进程尝试修改 Git ref，但被 OS 拒绝。
+
+此时：
+
+Git HEAD 没变。
+
+工作树没变。
+
+OS 隔离正常工作。
+
+U2 没有观察到任何基线异常。
+
+那么合法候选事务继续提交完全可能是正确行为，不能无条件要求候选行数为零。
+
+建议将 U2-20 拆成：
+
+用例
+
+必须断言
+
+U2-20A：外部非授权写入被拒绝
+
+Git 不变；合法候选可提交；没有越权写入
+
+U2-20B：实际检测到基线变化
+
+回滚；候选零新增；不得泄露 candidate ID
+
+U2-20C：隔离证明缺失或无效
+
+拒绝进入写入流程；候选零新增
+
+这样才能明确区分防护成功和异常回滚。
+
+CHANGE 28（P0）—— 唯一键冲突与并发复用路径没有闭环
+
+R8 §16.3 第 16–17 步存在竞态：
+
+事务 A 查询候选：不存在。
+
+事务 B 查询相同候选：不存在。
+
+A 成功 INSERT。
+
+B INSERT 遇到唯一键冲突。
+
+当前规则称唯一冲突仅在第 16 步已经全部一致时才复用，但 B 在第 16 步根本没有查询到该行。
+
+因此规则无法覆盖正常并发竞争。
+
+必须补充明确实现语义：
+
+仅使用既有唯一约束，先核实约束确实覆盖候选去重键。
+
+唯一冲突后，通过明确设计的事务恢复或重试路径重新读取已有候选。
+
+重新逐项比较权威身份。
+
+完全一致才能返回 CANDIDATE_REUSED。
+
+任意不一致返回 INPUT_KEY_MISMATCH，且 candidateId=null。
+
+不允许把所有数据库异常都当作去重冲突。
+
+必须新增真实 PostgreSQL 双连接竞争测试。
+
+CHANGE 29（P1）—— 数据读取与事务边界不一致
+
+R8 第 11–13 步读取 Incident、Task、故障上下文；第 15 步才开启事务。
+
+这意味着权威身份可能基于事务外的旧状态。
+
+建议将关键权威读取纳入候选写入事务，或者在事务内执行同等强度的重新验证。
+
+需要证明在 Incident 状态变化、Task 关联变化与候选 INSERT 并发发生时，不会提交已失效候选。
+
+此外，第 19 步 COMMIT 异常不能一律声称已经回滚，因为连接中断可能导致提交结果未知。
+
+对提交结果未知的情况，应执行只读对账，并返回安全的未确认结果，不得未经验证重试而产生重复副作用。
+
+CHANGE 30（P1）—— 锁释放规则补充原子性约束
+
+CHANGE 23 的主要修复通过：锁文件移出仓库、禁止 TTL 自动接管、属主校验、崩溃后不自动清锁。
+
+但仅先读取 ownerToken、再执行删除，存在校验和删除之间的竞态。
+
+应明确锁文件句柄与锁身份的稳定验证机制，或者通过环境权限和独占管理保证删除不会误伤后来者。
+
+还需补充：
+
+锁创建后写入及同步失败的处理。
+
+正常释放失败后的告警与下次调用的拒绝行为。
+
+人工解除陈旧锁时的权限、证据和操作审计。
+
+正常数据库提交成功但释放失败时，不能把已提交事实误报成数据库零写入。
+
+CHANGE 31（P1）—— 拒绝码与最终副作用状态保持一致
+
+CHANGE 24 的 19 步顺序已经修正了 INPUT_KEY_MISMATCH 过早判断的问题。
+
+但还需补充：
+
+null 与缺失字段的确定性优先级。
+
+非普通对象、Proxy 等不可信输入的异常边界。
+
+Git 检查执行失败与真实检测到基线变化的区别。
+
+INSERT 期间普通数据库错误的稳定错误契约。
+
+COMMIT 成功、锁释放失败时的真实候选状态。
+
+原则是：不能因为最终返回 REJECTED，就声称数据库一定没有发生提交。
+
+三、实施授权与下一阶段
+
+当前授权严格限定为：
+
+PHASE3_A_U2_DESIGN_R9_READ_ONLY_CHANGES_26_TO_31
+
+本轮不得进入 U2 产品代码实现。R9 应只处理 CHANGE 26–31，不必重做已经收敛的 U2 架构。
+
+完成后提交 MSG-20261009-34，重点验证上述 P0 阻断是否真正解除。
+
+U3–U5、Runtime Wiring、模型调用、Provider 调用、生产部署与自动合并均继续禁止。
+
+四、机器可读审计块
+
+纯文本
+
+AUDIT_ID=MSG-20261009-33
+REPO=anthonannabella-dev/crossclaim-ai
+BRANCH=feat/si-rsi-internal-code-repair-v1
+U1_CODE_HEAD=9ee36837
+U2_DESIGN_COMMIT_R7=f6c6d677
+U2_DESIGN_COMMIT_R8=7a5d8058
+U2_DESIGN_GIT_BLOB_SHA=df417b9eef11ae10408a277d7722336292580ea0
+U2_DESIGN_DOC_SHA256=99d60d8107550dd1916b4bf60ccd6e9cc9f845be14c53326962bd922d98c8241
+U2_DESIGN_DOC_SHA256_VERIFICATION=NOT_INDEPENDENTLY_VERIFIED
+R7_TO_R8_COMMITS=2
+R7_TO_R8_FILES=3
+R7_TO_R8_PRODUCT_CODE_CHANGES=0
+GIT_COMPARE_VERIFICATION=PASS
+GIT_BLOB_SHA_VERIFICATION=PASS
+FINAL_VERDICT=REVISE
+CHANGE22_OS_LEVEL_WRITE_ISOLATION_FIXED=REVISE_P0
+CHANGE23_LOCK_LIFECYCLE_VS_CLEANLINESS_FIXED=PASS_WITH_REVISE_P1
+CHANGE24_REJECTION_ORDER_VS_DB_READ_ORDER_FIXED=PASS_WITH_REVISE_P1
+CHANGE25_SINGLE_RUNTIME_MODE_FIXED=PASS
+U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE
+U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE_P0
+U2_IMPLEMENTATION_BOUNDARY=PASS
+SCOPE_HONESTY=PASS
+U2_DESIGN_APPROVED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PHASE3_A_U3_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE26_P0,CHANGE27_P0,CHANGE28_P0,CHANGE29_P1,CHANGE30_P1,CHANGE31_P1
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R9_READ_ONLY_CHANGES_26_TO_31
+NEXT_AUDIT=MSG-20261009-34
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+POSTGRESQL_INTEGRATION_TEST=NOT_VERIFIED
+VITEST=NOT_VERIFIED
+TSC=NOT_VERIFIED
+LINUX_SYSTEMD=NOT_VERIFIED
+CI=NOT_VERIFIED
+PRODUCTION=NOT_VERIFIED
+
+最终裁决：REVISE。 R8 已显著改进受控工作树和锁生命周期设计，但隔离证明可信性、对抗测试语义和并发唯一冲突处理必须先完成设计收口。U2 实施授权维持 NO，直到后续设计审计通过。
+
+本轮仅执行了仓库只读核查，未修改、提交或写入你的 GitHub 仓库。
+```

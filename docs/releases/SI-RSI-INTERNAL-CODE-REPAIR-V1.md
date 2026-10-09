@@ -2326,3 +2326,64 @@ POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = N
 SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.37 MSG-20261009-33 裁决归档 = **REVISE**（CHANGE 25 通过；新增 CHANGE 26–31，含 3 个 P0）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-33] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（168/168，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=5125 / NORM_LINES=168 / FNV=ae50ce56`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R7=f6c6d677`、`REVIEWED_HEAD=7a5d8058`。
+
+**审计方独立核验**：R7→R8 = **2 提交 / 3 文件**、`apps/api` **0 变更**；
+R8 文件的 **Git blob SHA `df417b9eef11ae10408a277d7722336292580ea0` 与送审值一致**
+（`GIT_COMPARE_VERIFICATION=PASS`、`GIT_BLOB_SHA_VERIFICATION=PASS`）；§16.1–§16.5 确实存在；
+但文档 SHA-256 仍未独立复算，且 PostgreSQL/Vitest/tsc/Linux-systemd/CI/生产 全 `NOT_VERIFIED`。
+
+**十项**：`CHANGE25 = PASS`、`CHANGE23 = PASS WITH REVISE · P1`、`CHANGE24 = PASS WITH REVISE · P1`、
+`CHANGE22 = REVISE · P0`、`U2_INPUT_OUTPUT_CONTRACT = PASS WITH REVISE`、
+`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED = REVISE · P0`、`U2_IMPLEMENTATION_BOUNDARY = PASS`、
+`SCOPE_HONESTY = PASS`、`U2_DESIGN_APPROVED = NO`、`U2_IMPLEMENTATION_AUTHORIZED = NO`。
+
+**REQUIRED_CHANGES（下一轮 MSG-20261009-34 只做这六项；`R9`）**
+
+- **CHANGE 26（P0）`ISOLATION_ATTESTED` 缺可信证明链**：证明只能由**可信运行环境**生成、经**受信配置/通道**
+  获取（普通业务输入不得提供）；**服务端固定有效期上限**；须验证工作树 **canonical path**、`.git` 实际指向目录、
+  `refs`、`packed-refs` 等保护范围；明确**同 UID 写入者 / 特权进程 / 权限变更**的信任边界；
+  **禁止**把一次历史 ACL 检查解释为运行期持续不可变；验收须区分 `ATTESTATION_VALID` 与
+  真正的 `WRITE_ISOLATION_ENFORCED`。
+- **CHANGE 27（P0）U2-20 断言自相矛盾**：若外部越权写入**被 OS 拒绝**，则 Git/工作树不变、
+  **合法候选可以提交**，不能无条件要求候选零新增。拆为 **U2-20A**（外部非授权写入被拒：Git 不变、
+  合法候选可提交、无越权写入）/ **U2-20B**（真实检测到基线变化：回滚、零新增、不泄露 candidate ID）/
+  **U2-20C**（隔离证明缺失或无效：拒绝进入写入流程、零新增）。
+- **CHANGE 28（P0）唯一键冲突与并发复用未闭环**：A/B 双事务都查不到候选、A 插入成功后 B 撞唯一键，
+  而「仅在已比对一致时复用」无法覆盖该路径。须：核实现有唯一约束确实覆盖候选去重键；冲突后经
+  **明确的恢复/重试路径**重新读取并**逐项比对权威身份**；完全一致才 `CANDIDATE_REUSED`；
+  任何不一致 ⇒ `INPUT_KEY_MISMATCH` 且 `candidateId=null`；**不得**把所有数据库异常当去重冲突；
+  **新增真实 PostgreSQL 双连接竞争测试**。
+- **CHANGE 29（P1）读取与事务边界不一致**：第 11–13 步的权威读取在事务外（可能基于旧状态）⇒
+  关键读取须纳入写入事务或在事务内等价强度复验，并证明 Incident/Task 变化与 INSERT 并发时**不提交失效候选**；
+  第 19 步 `COMMIT` 异常**不得**一律声称已回滚（连接中断可能结果未知）⇒ 只读对账 + 安全的未确认结果，
+  **不得**未经验证重试。
+- **CHANGE 30（P1）锁释放原子性**：「先读 `ownerToken` 再删除」之间存在竞态，须给出锁句柄/身份的稳定验证
+  或环境权限与独占管理；并补：创建后写入/同步失败处理、释放失败告警与**下次调用拒绝**、
+  人工解除陈旧锁的**权限/证据/审计**、以及「DB 提交成功但释放失败**不得**误报为零写入」。
+- **CHANGE 31（P1）拒绝码与最终副作用状态一致**：`null` 与缺失的确定性优先级、非普通对象/Proxy 边界、
+  Git 检查执行失败 vs 真实基线变化、INSERT 普通数据库错误的稳定契约、COMMIT 成功 + 释放失败时的真实候选状态；
+  原则：**不得**因返回 `REJECTED` 就声称数据库一定未提交。
+
+```text
+MSG-20261009-33_FINAL_VERDICT = REVISE
+MSG-20261009-33_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 168/168；FNV1A ae50ce56）
+CHANGE_25 = PASS（唯一运行模式）
+U2_DESIGN_APPROVED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · U3–U5 = NO
+REQUIRED_CHANGES = CHANGE_26_P0_ATTESTATION_TRUST_CHAIN ; CHANGE_27_P0_U2_20_SPLIT ;
+                   CHANGE_28_P0_UNIQUE_CONFLICT_REUSE_PATH ; CHANGE_29_P1_TX_BOUNDARY ;
+                   CHANGE_30_P1_LOCK_RELEASE_ATOMICITY ; CHANGE_31_P1_REASON_VS_SIDE_EFFECT
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R9_READ_ONLY_CHANGES_26_TO_31
+NEXT_AUDIT = MSG-20261009-34
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
