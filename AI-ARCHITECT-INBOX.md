@@ -172871,3 +172871,102 @@ PRODUCTION_READY = NO
 
 将本裁决逐字归档，并更新 checkpoint。修订完成后重新提交独立审计，不得自行宣布 U1 CLOSED。
 ```
+
+### [MSG-20261009-20] U1 FINAL-R6（CHANGE 32 并发隔离）= **REVISE — EVIDENCE NOT VERIFIED**（评审方本轮无法检索到固定 HEAD 的仓库/提交/证据文件，故无法独立核验；CHANGE 32 方向被认可，未发现新缺陷）；U1 仍未 CLOSED；新增 **CHANGE 33（P0）**：在 23604dcb 下核验 AsyncLocalStorage 初始化/进入/退出/嵌套复用/异常路径、U1-DB9 是否真实时间重叠、句柄差异与取得层级、PG 断言、负向对照最小还原范围、62 项与 tsc 对应固定 HEAD；并须证明嵌套复用合法且跨调用严格隔离、失效事务不可访问；NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R6_EVIDENCE_VERIFICATION_ONLY / NEXT_AUDIT=MSG-20261009-21；reviewed ref 23604dcb
+
+```text
+MSG-20261009-20｜独立审计裁决
+FINAL VERDICT：REVISE — EVIDENCE NOT VERIFIED
+
+REVIEWED_HEAD： 23604dcb
+审计范围： U1 FINAL-R6 · CHANGE 32 并发事务隔离
+裁决日期： 2026-10-09
+
+一、总体裁决
+
+CHANGE 32 的修复方案在技术方向上合理。使用 AsyncLocalStorage 将事务上下文绑定至异步调用链，原则上可以解决实例级 activeTransaction 被并发 resolve() 共享的问题。
+
+送审材料描述的 U1-DB9 测试，也针对了上轮最重要的并发缺陷：同一个 readPort 实例处理两个并发租户请求时，不允许复用错误的事务句柄。
+
+但是，本轮未能完成 GitHub 原始证据核验：
+
+已尝试通过 GitHub 连接器搜索仓库、提交和证据文件，未检索到目标。
+
+公开搜索同样未找到对应提交及证据文件。
+
+因此无法独立核对固定 HEAD 的代码、测试实现、原始日志、文件哈希及负向对照。
+
+本轮不能把送审方报告的 62/62 PASS 等同于独立审计 PASS。
+
+裁决为 REVISE，原因是证据可核验性不足，而不是已经发现 CHANGE 32 的代码存在新缺陷。
+
+二、六项逐项裁决
+
+审计项目
+裁决
+依据
+CHANGE32_CONCURRENT_TRANSACTION_ISOLATION
+REVISE
+AsyncLocalStorage 方向合理；未核对代码及事务作用域
+CHANGE32_CONCURRENCY_REGRESSION_TEST
+REVISE
+报告 U1-DB9 PASS；尚未核验测试源码及 PG 原始输出
+CHANGE32_NEGATIVE_CONTROL
+REVISE
+报告旧实现失败；未核验对照代码及运行结果
+U1_READ_ONLY_BOUNDARY_PRESERVED
+PASS_SCOPED
+送审范围与禁止权限声明符合边界；不代表已验证实现
+SCOPE_HONESTY
+PASS
+明确声明真实 Provider、生产、CI 等未验证
+PHASE3_U1_IMPLEMENTATION_CLOSED
+NO
+核心三项尚缺独立证据核验
+
+三、下一轮必须核实的内容
+
+CHANGE 33（P0）：固定 HEAD 证据核验
+在 23604dcb 下读取并核对：
+trusted-facts-adapter.ts 中 AsyncLocalStorage 的初始化、进入、退出、嵌套复用以及异常处理路径。
+U1-DB9 测试是否确保 A、B 两个事务在时间上真实重叠，而不是仅使用 Promise.all 形成表面并发。
+A、B 使用的事务句柄是否不同；句柄标识是否在同一层级、同一机制下取得。
+transaction_read_only=on、PG 25006、租户事实隔离、异常恢复是否均由实际数据库断言支持。
+负向对照是否仅还原 CHANGE 32 相关实现、其余测试条件保持一致。
+62 项测试、TypeScript 检查、证据 JSON 与原始输出是否都对应固定代码 HEAD。
+需要特别关注两个容易遗漏的问题：
+第一，AsyncLocalStorage 不自动保证事务生命周期安全。 必须核对事务回调结束后，是否仍可能有脱离回调生命周期的异步任务访问已失效事务，以及是否能够 fail-closed。
+第二，嵌套事务复用不等于跨调用隔离。 需要同时证明同一调用链正确复用、不同调用链严格隔离，且嵌套调用不会绕过只读事务边界。
+这些是核验条件，不是本轮确认存在的代码缺陷。
+
+四、授权决定
+
+本轮不要求重新设计 CHANGE 32，也不要求增加新功能。下一轮只允许恢复证据可访问性、核验固定 HEAD，并在核验发现真实缺陷时提交最小范围修复。
+在 U1 正式关闭之前，PHASE 3A 的 U2–U5 不授权实施。不得据此开放外部写入、代码自动合并或自动部署。
+
+五、机器可读裁决
+
+CODEX 审计回执
+复制裁决
+AUDIT_ID=MSG-20261009-20
+REVIEWED_HEAD=23604dcb
+FINAL_VERDICT=REVISE
+CHANGE32_CONCURRENT_TRANSACTION_ISOLATION=REVISE_EVIDENCE_NOT_VERIFIED
+CHANGE32_CONCURRENCY_REGRESSION_TEST=REVISE_EVIDENCE_NOT_VERIFIED
+CHANGE32_NEGATIVE_CONTROL=REVISE_EVIDENCE_NOT_VERIFIED
+U1_READ_ONLY_BOUNDARY_PRESERVED=PASS_SCOPED_DECLARED_BOUNDARY_ONLY
+SCOPE_HONESTY=PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED=NO
+PHASE3_A_U2_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE33_P0_FIXED_HEAD_SOURCE_TEST_RAW_EVIDENCE_AND_NEGATIVE_CONTROL_VERIFICATION
+NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R6_EVIDENCE_VERIFICATION_ONLY
+NEXT_AUDIT=MSG-20261009-21
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终结论： CHANGE 32 的送审内容已覆盖关键并发风险，且负向对照设计具有针对性，但目前仍只能判断为“证据陈述充分、独立核验未完成”。下一轮应优先打通固定 HEAD 的只读审计访问，而不是继续扩大代码修改范围。
+
+本轮裁决仅在当前会话输出，未写入或修改 GitHub 仓库。
+```

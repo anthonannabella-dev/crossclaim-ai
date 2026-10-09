@@ -1438,3 +1438,57 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.22 MSG-20261009-20 裁决（U1 FINAL-R6 / CHANGE 32）= **REVISE — EVIDENCE NOT VERIFIED**；U1 仍未关闭（新增 CHANGE 33 P0）
+
+> 归档：`AI-ARCHITECT-INBOX.md`（逐字，**FULL_COPY_OK**：原文 74 行 / 归档 74 行，缺失 0、多出 0）
+> 源文件（页面提取）：`work/self-repair/verdict-msg-20261009-20.txt`，规范化指纹 FNV1A=7caa6f09
+> 审计会话：https://chatgpt.com/c/6ac866ad-b654-83ec-bc91-4cb4a287294（REVIEWED_HEAD = 23604dcb）
+
+**裁决要点**
+
+- **方向被认可、未发现新缺陷**：CHANGE 32 用 `AsyncLocalStorage` 把事务上下文绑定到异步调用链「原则上可以解决」实例级共享问题；
+  U1-DB9「针对了上轮最重要的并发缺陷」；负向对照「具有针对性」。
+- **本轮未能完成核验**：评审方的 GitHub 连接器「搜索仓库、提交和证据文件，未检索到目标」，公开搜索也未找到，
+  因此无法独立核对固定 HEAD 的代码、测试实现、原始日志、文件哈希与负向对照。
+- 逐项：`CHANGE32_CONCURRENT_TRANSACTION_ISOLATION/REGRESSION_TEST/NEGATIVE_CONTROL = REVISE_EVIDENCE_NOT_VERIFIED`；
+  `U1_READ_ONLY_BOUNDARY_PRESERVED = PASS_SCOPED_DECLARED_BOUNDARY_ONLY`；`SCOPE_HONESTY = PASS`；
+  `PHASE3_U1_IMPLEMENTATION_CLOSED = NO`。
+
+**CHANGE 33（P0）下一轮必须核验（在 23604dcb 下）**
+
+1. `trusted-facts-adapter.ts` 中 `AsyncLocalStorage` 的**初始化 / 进入 / 退出 / 嵌套复用 / 异常处理路径**。
+2. U1-DB9 是否确保 A、B 两个事务在**时间上真实重叠**（而非仅 `Promise.all` 的表面并发）。
+3. A、B 的事务句柄是否不同，且句柄标识在**同一层级、同一机制**下取得。
+4. `transaction_read_only=on`、PG `25006`、租户事实隔离、异常恢复是否均由**实际数据库断言**支持。
+5. 负向对照是否**仅还原 CHANGE 32 相关实现**、其余条件保持一致。
+6. 62 项测试、tsc、证据 JSON 与原始输出是否**都对应固定 HEAD**。
+7. 特别关注：① `AsyncLocalStorage` 不自动保证事务生命周期安全（事务回调结束后若有脱离生命周期的异步任务访问已失效事务，必须 fail-closed）；
+   ② 嵌套复用 ≠ 跨调用隔离（须同时证明同一调用链正确复用 + 不同调用链严格隔离 + 嵌套不绕过只读边界）。
+
+**授权边界（裁决原文）**：不要求重新设计 CHANGE 32、不要求新增功能；下一轮**只允许**恢复证据可访问性、核验固定 HEAD，
+并在核验发现真实缺陷时提交最小范围修复；U1 关闭前 `U2–U5` 不授权；`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+
+**通道事实（本轮再次确认）**：GitHub 读取在本轮对评审方不可用（连接器检索不到 23604dcb 与 R6 证据文件）。
+这意味着「评审方直读仓库」不足以稳定支撑核验；下一轮必须在**送审正文内**内联 CHANGE 33 所需的**最小充分原始材料**
+（`AsyncLocalStorage` 三处关键源码片段、U1-DB9 交错编排与断言源码、负对照 diff 片段、PG 探针原始行、退出码），
+并对每条核验要求给出**行号/字段路径**，使评审无需仓库访问即可逐条核对。
+
+```text
+MSG20_VERDICT = REVISE（逐字归档 FULL_COPY_OK 74/74；规范化 FNV1A 7caa6f09）
+CHANGE32_CONCURRENT_TRANSACTION_ISOLATION = REVISE_EVIDENCE_NOT_VERIFIED
+CHANGE32_CONCURRENCY_REGRESSION_TEST = REVISE_EVIDENCE_NOT_VERIFIED
+CHANGE32_NEGATIVE_CONTROL = REVISE_EVIDENCE_NOT_VERIFIED
+U1_READ_ONLY_BOUNDARY_PRESERVED = PASS_SCOPED_DECLARED_BOUNDARY_ONLY
+SCOPE_HONESTY = PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+REQUIRED_CHANGES = CHANGE33_P0_FIXED_HEAD_SOURCE_TEST_RAW_EVIDENCE_AND_NEGATIVE_CONTROL_VERIFICATION
+NEXT_UNIT = 在送审正文内内联 CHANGE 33 所需最小原始材料（含行号/字段路径）→ 送审 MSG-20261009-21
+NEXT_AUDIT = MSG-20261009-21
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```
