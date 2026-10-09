@@ -34,6 +34,11 @@ export interface CustomsUnlockSiPackDependencies {
    */
   matchesTask(task: RsiSafeTask): boolean;
   /**
+   * CHANGE 08：任务声明的案件身份引用。pack 用它把"任务 → 案件"绑定起来，
+   * 与事实里的 opportunityRef 强一致；返回 null/空 → BLOCK。
+   */
+  expectedOpportunityRef(task: RsiSafeTask): string | null;
+  /**
    * 只读事实加载：返回 null 表示事实不可用（→ BLOCK）。**不得**在此发起外写或付费调用。
    */
   loadFacts(task: RsiSafeTask): Promise<CustomsExecutionFacts | null> | CustomsExecutionFacts | null;
@@ -106,7 +111,37 @@ export function createCustomsUnlockSiPack(
         });
       }
 
-      // 3) 链路判定（纯函数）：任何门禁未满足 → BLOCK + 状态/原因码
+      // 3) CHANGE 08：任务租户 × 事实租户 × 机会归属 × 案件身份 四项强一致
+      const identityReasons: string[] = [];
+      if (facts.organizationId !== context.task.organizationId) {
+        identityReasons.push('FACT_TENANT_MISMATCH');
+      }
+      if (
+        facts.opportunity.ownerOrganizationId !== null &&
+        facts.opportunity.ownerOrganizationId !== facts.organizationId
+      ) {
+        identityReasons.push('OPPORTUNITY_OWNERSHIP_MISMATCH');
+      }
+      const expectedRef = dependencies.expectedOpportunityRef(context.task);
+      if (expectedRef === null || expectedRef.trim().length === 0) {
+        identityReasons.push('TASK_OPPORTUNITY_REF_MISSING');
+      } else if (
+        typeof facts.opportunityRef !== 'string' ||
+        facts.opportunityRef.length === 0 ||
+        facts.opportunityRef !== expectedRef
+      ) {
+        identityReasons.push('CASE_IDENTITY_MISMATCH');
+      }
+      if (identityReasons.length > 0) {
+        return blockEvidence({
+          task: context.task,
+          reasonCodes: identityReasons,
+          state: 'FREE_DISCOVERY',
+          guardDecision: 'DENY_HOLD',
+        });
+      }
+
+      // 4) 链路判定（纯函数）：任何门禁未满足 → BLOCK + 状态/原因码
       const chain = evaluateCustomsExecutionChain(facts);
       const chainReasonCodes = [
         `CHAIN_VERSION:${CUSTOMS_EXECUTION_CHAIN_VERSION}`,
@@ -123,7 +158,7 @@ export function createCustomsUnlockSiPack(
         });
       }
 
-      // 4) 全部门禁通过：本 pack 仍不自报外写；外写授权交由共享 Action Guard 裁决。
+      // 5) 全部门禁通过：本 pack 仍不自报外写；外写授权交由共享 Action Guard 裁决。
       return {
         status: 'PASS',
         evidenceRef: `customs-chain:${context.task.id}:${chain.state}`,

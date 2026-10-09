@@ -65,6 +65,8 @@ export type CustomsExecutionHoldReason =
 
 export interface CustomsExecutionFacts {
   organizationId: string;
+  /** 案件 / 机会身份引用（pack 层强制与任务声明一致；执行链本身不解释该字段）。 */
+  opportunityRef?: string | null;
   opportunity: { caseFound: boolean; ownerOrganizationId: string | null };
   customerDecision: { started: boolean };
   payment: { verifiedPaid: boolean; entitlementActive: boolean; quotaRemaining: number };

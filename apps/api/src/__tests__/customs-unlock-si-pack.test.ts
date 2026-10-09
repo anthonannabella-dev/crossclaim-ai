@@ -27,6 +27,7 @@ function task(overrides: Partial<RsiSafeTask> = {}): RsiSafeTask {
 function facts(overrides: Partial<CustomsExecutionFacts> = {}): CustomsExecutionFacts {
   return {
     organizationId: 'org-1',
+    opportunityRef: 'opp-1',
     opportunity: { caseFound: true, ownerOrganizationId: 'org-1' },
     customerDecision: { started: true },
     payment: { verifiedPaid: true, entitlementActive: true, quotaRemaining: 1 },
@@ -53,10 +54,13 @@ function facts(overrides: Partial<CustomsExecutionFacts> = {}): CustomsExecution
   };
 }
 
+const EXPECTED_REF = { expectedOpportunityRef: () => 'opp-1' };
+
 describe('V2-07 domain pack — 匹配规则', () => {
   it('不消费 task:recovery: 保留命名空间', () => {
     const pack = createCustomsUnlockSiPack({
       matchesTask: () => true,
+      ...EXPECTED_REF,
       loadFacts: () => facts(),
     });
     expect(pack.matches(task({ dedupeKey: 'task:recovery:abc' }))).toBe(false);
@@ -64,7 +68,11 @@ describe('V2-07 domain pack — 匹配规则', () => {
   });
 
   it('pack 身份与域正确', () => {
-    const pack = createCustomsUnlockSiPack({ matchesTask: () => true, loadFacts: () => facts() });
+    const pack = createCustomsUnlockSiPack({
+      matchesTask: () => true,
+      ...EXPECTED_REF,
+      loadFacts: () => facts(),
+    });
     expect(pack.packId).toBe(CUSTOMS_UNLOCK_PACK_ID);
     expect(pack.domain).toBe('CUSTOMS');
   });
@@ -74,6 +82,7 @@ describe('V2-07 domain pack — fail-closed', () => {
   it('缺可信租户绑定 → BLOCK（不报 PASS）', async () => {
     const pack = createCustomsUnlockSiPack({
       matchesTask: () => true,
+      ...EXPECTED_REF,
       loadFacts: () => facts(),
     });
     const evidence = await pack.run({ task: task({ organizationId: undefined }), packId: CUSTOMS_UNLOCK_PACK_ID });
@@ -86,6 +95,7 @@ describe('V2-07 domain pack — fail-closed', () => {
   it('事实读取抛错 / 返回 null → BLOCK', async () => {
     const throwing = createCustomsUnlockSiPack({
       matchesTask: () => true,
+      ...EXPECTED_REF,
       loadFacts: () => {
         throw new Error('boom');
       },
@@ -94,7 +104,11 @@ describe('V2-07 domain pack — fail-closed', () => {
     expect(thrown.status).toBe('BLOCK');
     expect(thrown.reasonCodes).toContain('FACTS_LOAD_FAILED');
 
-    const empty = createCustomsUnlockSiPack({ matchesTask: () => true, loadFacts: () => null });
+    const empty = createCustomsUnlockSiPack({
+      matchesTask: () => true,
+      ...EXPECTED_REF,
+      loadFacts: () => null,
+    });
     const missing = await empty.run({ task: task(), packId: CUSTOMS_UNLOCK_PACK_ID });
     expect(missing.status).toBe('BLOCK');
     expect(missing.reasonCodes).toContain('FACTS_UNAVAILABLE');
@@ -103,6 +117,7 @@ describe('V2-07 domain pack — fail-closed', () => {
   it('链路 HOLD → BLOCK，回传状态与原因码，guard 决策为 DENY_HOLD', async () => {
     const pack = createCustomsUnlockSiPack({
       matchesTask: () => true,
+      ...EXPECTED_REF,
       loadFacts: () => facts({ customerDecision: { started: false } }),
     });
     const evidence = await pack.run({ task: task(), packId: CUSTOMS_UNLOCK_PACK_ID });
@@ -115,7 +130,11 @@ describe('V2-07 domain pack — fail-closed', () => {
   });
 
   it('全门禁通过 → PASS，但仍不自报外写，guard 交由共享地基裁决', async () => {
-    const pack = createCustomsUnlockSiPack({ matchesTask: () => true, loadFacts: () => facts() });
+    const pack = createCustomsUnlockSiPack({
+      matchesTask: () => true,
+      ...EXPECTED_REF,
+      loadFacts: () => facts(),
+    });
     const evidence = await pack.run({ task: task(), packId: CUSTOMS_UNLOCK_PACK_ID });
     expect(evidence.status).toBe('PASS');
     expect(evidence.reasonCodes).toContain('STATE:SUCCESS_FEE_RECEIVABLE');
@@ -125,6 +144,58 @@ describe('V2-07 domain pack — fail-closed', () => {
       { action: CUSTOMS_UNLOCK_GUARD_ACTION, decision: 'REQUIRES_SHARED_GUARD_DECISION' },
     ]);
     expect(evidence.evidenceRef.startsWith('customs-chain:task-1:')).toBe(true);
+  });
+
+  // V2-R1 / CHANGE 08：四项身份强一致
+  it('事实租户与任务租户不一致（含恶意依赖注入）→ BLOCK(FACT_TENANT_MISMATCH)', async () => {
+    const pack = createCustomsUnlockSiPack({
+      matchesTask: () => true,
+      ...EXPECTED_REF,
+      loadFacts: () => facts({ organizationId: 'org-OTHER' }),
+    });
+    const evidence = await pack.run({ task: task(), packId: CUSTOMS_UNLOCK_PACK_ID });
+    expect(evidence.status).toBe('BLOCK');
+    expect(evidence.reasonCodes).toContain('FACT_TENANT_MISMATCH');
+  });
+
+  it('机会归属与事实租户不一致 → BLOCK(OPPORTUNITY_OWNERSHIP_MISMATCH)', async () => {
+    const pack = createCustomsUnlockSiPack({
+      matchesTask: () => true,
+      ...EXPECTED_REF,
+      loadFacts: () => facts({ opportunity: { caseFound: true, ownerOrganizationId: 'org-2' } }),
+    });
+    const evidence = await pack.run({ task: task(), packId: CUSTOMS_UNLOCK_PACK_ID });
+    expect(evidence.status).toBe('BLOCK');
+    expect(evidence.reasonCodes).toContain('OPPORTUNITY_OWNERSHIP_MISMATCH');
+  });
+
+  it('任务声明的案件身份缺失或与事实不符 → BLOCK', async () => {
+    const noRef = createCustomsUnlockSiPack({
+      matchesTask: () => true,
+      expectedOpportunityRef: () => null,
+      loadFacts: () => facts(),
+    });
+    expect(
+      (await noRef.run({ task: task(), packId: CUSTOMS_UNLOCK_PACK_ID })).reasonCodes,
+    ).toContain('TASK_OPPORTUNITY_REF_MISSING');
+
+    const mismatched = createCustomsUnlockSiPack({
+      matchesTask: () => true,
+      expectedOpportunityRef: () => 'opp-OTHER',
+      loadFacts: () => facts(),
+    });
+    expect(
+      (await mismatched.run({ task: task(), packId: CUSTOMS_UNLOCK_PACK_ID })).reasonCodes,
+    ).toContain('CASE_IDENTITY_MISMATCH');
+
+    const polluted = createCustomsUnlockSiPack({
+      matchesTask: () => true,
+      ...EXPECTED_REF,
+      loadFacts: () => facts({ opportunityRef: null }),
+    });
+    expect(
+      (await polluted.run({ task: task(), packId: CUSTOMS_UNLOCK_PACK_ID })).reasonCodes,
+    ).toContain('CASE_IDENTITY_MISMATCH');
   });
 });
 
