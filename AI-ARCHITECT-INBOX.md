@@ -184708,3 +184708,222 @@ PRODUCTION_READY=NO
 
 本裁决仅在当前对话生效，没有向仓库、Issue 或追踪系统写入任何内容。
 ```
+
+### [MSG-20261010-55] CrossClaim AI V2 第三轮独立审计裁决：PASS_WITH_REVISE（reviewed ref 7757d0cb）
+
+```text
+MSG-20261010-55｜CrossClaim AI V2 第三轮独立审计裁决
+DECISION：PASS_WITH_REVISE
+
+审计仓库： anthonannabella-dev/crossclaim-ai
+分支： feat/customs-opportunity-unlock-v2
+CODE_HEAD / EVIDENCE_HEAD： 6bfa9b18
+本轮 REVIEW_HEAD： 7757d0cb
+审计方式： GitHub 只读源码核验，无仓库写入。
+
+一、总体裁决
+
+本轮 CHANGE 10–13 的修复方向正确，前两轮的主要缺陷已大幅收敛。
+
+GitHub 已确认 955a1cb6 → 7757d0cb 前进 6 个提交，修改范围包含对应服务代码、Runtime Pack、测试和验收矩阵。
+
+但实际源码中仍存在几处未完全 fail-closed 的安全边界。尤其是收款认证预期参数的完整性、能力元数据的 getter，以及历史账目可信性。
+
+因此裁决为 PASS_WITH_REVISE，不要求重新设计 V2，但也不能宣布所有 CHANGE 全部 CLOSED。
+
+二、CHANGE 10–13 逐项核验
+
+CHANGE	原严重度	本轮裁决	依据
+10 收款事实认证	P0	PASS_WITH_REVISE	HMAC 验签和绑定已落地，但部分预期参数仍未强制非空
+11 Provider 元数据	P1	PASS_WITH_REVISE	原始引用泄露已大幅收敛，但 capabilities 拷贝仍可能触发 getter
+12 Pack 未知归属	P1	PASS / CLOSED	null、空串、纯空白归属已明确 BLOCK
+13 策略与历史账目	P1	PASS_WITH_REVISE	费率策略检查已落地，但历史金额仍依赖调用方声明的来源
+
+CHANGE 10 — P0｜基本修复有效，仍需最小修订
+
+文件： customs-success-fee-collection.ts
+函数： authenticateCollectionFact()
+
+已经确认 HMAC-SHA256 验签、时间戳窗口、载荷解析、交易与商户绑定均已实现。
+
+但代码显式检查非空的预期字段只有 expectedMerchantAccountId。
+
+以下预期值仍缺少独立非空验证：
+
+expectedReceivableId
+
+expectedCurrency
+
+即使接口类型是 string，也不代表运行时一定非空。
+
+另一个问题是 toleranceSeconds 没有严格检查有限、非负及最大允许值。传入异常值可能改变时间窗口判断。
+
+要求： 三个预期绑定均强制非空白，时间窗口必须有安全上限且拒绝非法数值。增加空白预期字段与非法时间窗口的负向测试。
+
+这属于原 P0 修复的剩余尾项，不另行扩大为新的架构设计。
+
+CHANGE 11 — P1｜仍有 getter 副作用
+
+文件： customs-paid-api-gate.ts
+函数： safeCapabilitiesCopy()
+
+已经确认 providerId、displayName 采用 getOwnPropertyDescriptor 安全读取，并且不再整体复制 Provider 数据对象。
+
+但 safeCapabilitiesCopy() 仍有：
+
+TypeScript
+for (const key of Object.keys(source)) {
+  if (source[key] === true) copy[key] = true;
+}
+
+这里的 source[key] 可能执行 getter。
+
+要求： capabilities 的每个键也通过 own data descriptor 读取；禁止 getter、setter、原型继承及未知能力键进入包装对象。
+
+完成后可正式关闭 CHANGE 04/11 的包装缺陷。
+
+CHANGE 12 — P1｜正式 CLOSED
+
+已独立确认：
+
+归属为 null → OPPORTUNITY_OWNERSHIP_UNKNOWN
+
+归属为空串或纯空白 → OPPORTUNITY_OWNERSHIP_UNKNOWN
+
+归属与事实租户不一致 → OPPORTUNITY_OWNERSHIP_MISMATCH
+
+身份检查失败后返回 BLOCK，不继续运行执行链。
+
+CHANGE 12 = CLOSED。
+
+不要求重复修改此项。
+
+CHANGE 13 — P1｜策略通过，历史账目来源仍不够可信
+
+已确认：
+
+policyId、version 非空校验；
+
+生效区间检查；
+
+0 < rateBps <= 10000 且必须为整数；
+
+币种一致性检查。
+
+这些属于有效修复。
+
+但是历史金额仍采用输入对象中的 ledger.source 字符串判定可信来源。调用方可以将来源声明为 LEDGER，而本函数不能仅据此证明数据来自真实可信账本。
+
+要求： 历史金额必须由可信账本读取层或经过验证的账目证据提供，不能只依赖来源枚举。无可信账目时不得将未知历史金额当作已核实的 0.00。
+
+需要区分“确实没有历史收款”和“历史收款记录不可读取”。
+
+三、前轮 CHANGE 03 / 04 是否 CLOSED
+
+CHANGE	裁决
+03 成功费可信支付事实	PASS_WITH_REVISE，暂不 CLOSED
+04 Provider 全出口封闭	PASS_WITH_REVISE，暂不 CLOSED
+
+两项主体漏洞均已被针对性修复，但仍依赖 CHANGE 10/11 的剩余边界收口。
+
+不要求重做原始设计。
+
+四、剩余 REQUIRED_CHANGES
+
+将本轮剩余工作限定为三个最小修订：
+
+编号	严重度	修订要求
+CHANGE 14	P1	收款认证预期值非空校验与安全时间窗口限制
+CHANGE 15	P1	capabilities descriptor-only 拷贝，消除 getter 副作用
+CHANGE 16	P1	历史收款金额绑定可信账目证据，区分未知与零值
+
+此外：
+
+CHANGE 06 P1 = BLOCKED，保持不变。
+
+数据库执行方案已纳入验收矩阵，但它目前仍是设计和执行计划，不是 PostgreSQL 并发验收通过的证据。
+
+五、NEXT_AUTHORIZED
+纯文本
+NEXT_AUTHORIZED =
+  V2_R3_FINAL_SCOPED_BOUNDARY_CLOSURE
+
+SCOPE =
+  CHANGE_14
+  CHANGE_15
+  CHANGE_16
+
+AUTHORIZED =
+  MINIMAL_CODE_REPAIR
+  NEGATIVE_UNIT_TESTS
+  TYPECHECK
+  ACCEPTANCE_MATRIX_UPDATE
+  GIT_COMMIT_PUSH_CURRENT_BRANCH
+  READ_ONLY_REAUDIT_PREPARATION
+
+CHANGE_06 =
+  BLOCKED_AWAITING_POSTGRESQL_16
+
+PROHIBITED =
+  PRODUCTION_DEPLOYMENT
+  REAL_PROVIDER_WRITE
+  REAL_PAYMENT_COLLECTION
+  PACK_REGISTRATION
+  UNAUTHORIZED_DB_MIGRATION
+
+本轮建议 Codex 直接完成三个尾项，然后形成单次复审包，不再循环扩展已封闭的纯函数设计。
+
+六、HOLD 边界
+
+项目	当前状态
+9 套件 / 195 测试	本机报告 PASS，审计方未重新运行
+API TypeScript	本机报告 0 error
+PostgreSQL 并发事务	BLOCKED
+真实 Payment Webhook E2E	NOT_VERIFIED
+真实 Provider	NOT_VERIFIED
+浏览器 E2E / 多设备视觉	NOT_VERIFIED
+Pack Registration	NOT_WIRED
+Entitlement-aware CTA	NOT_IMPLEMENTED
+Checkout Redirect	NOT_IMPLEMENTED
+自动成功费收款	HOLD
+真实 Provider 外写	HOLD
+生产上线	NO
+
+七、最终裁决记录
+纯文本
+AUDIT_ID=MSG-20261010-55
+DECISION=PASS_WITH_REVISE
+
+REVIEW_HEAD=7757d0cb
+CODE_HEAD=6bfa9b18
+EVIDENCE_HEAD=6bfa9b18
+
+CHANGE_10=PASS_WITH_REVISE
+CHANGE_11=PASS_WITH_REVISE
+CHANGE_12=CLOSED
+CHANGE_13=PASS_WITH_REVISE
+
+CHANGE_03=NOT_YET_CLOSED
+CHANGE_04=NOT_YET_CLOSED
+
+REQUIRED_CHANGES=14,15,16
+REQUIRED_P0=0
+REQUIRED_P1=3
+
+EXISTING_BLOCKED=CHANGE_06_P1
+
+NEXT_AUTHORIZED=V2_R3_FINAL_SCOPED_BOUNDARY_CLOSURE
+
+U1_REOPEN=NO
+U2_DESIGN_R21_REOPEN=NO
+AUTO_COLLECTION=HOLD
+REAL_PROVIDER_WRITE=HOLD
+PACK_REGISTRATION=HOLD
+PRODUCTION_READY=NO
+
+最终结论：第三轮有实质进展，但需要再收口 3 个明确且范围很小的信任边界问题。
+
+本裁决不改变 V2 的整体架构方向，也不扩大生产授权。CHANGE 06 和所有真实外部集成继续保持 HOLD。
+
+本次未写入任何仓库、Issue 或追踪系统。
+```
