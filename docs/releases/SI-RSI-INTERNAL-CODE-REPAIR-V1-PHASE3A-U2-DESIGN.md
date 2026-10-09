@@ -1,13 +1,17 @@
-# PHASE 3-A · U2 设计 R2（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R3（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-26 = REVISE` → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R2_READ_ONLY_CHANGES_1_TO_4`。
-> 本文件是 **U2 设计 R2** 送审材料（MSG-20261009-27），**不含任何产品代码改动**。
+> `MSG-20261009-26 = REVISE` → `MSG-20261009-27 = REVISE` →
+> `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R3_READ_ONLY_CHANGES_5_TO_8`。
+> 本文件是 **U2 设计 R3** 送审材料（MSG-20261009-28），**不含任何产品代码改动**。
+> **R3 的全部修订集中在 §11；§1–§10 为 R2 原文（保留历史），凡与 §11 冲突者以 §11 为准。**
 
 | 锚点 | 值 |
 | --- | --- |
 | U1 关闭锚点（封板代码，未被改动） | `9ee36837` |
-| U2 设计 R1 | `065f950e`（同一路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R1 | `065f950e` |
+| U2 设计 R2 | `5ae09e37` |
+| U2 设计 R3 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -241,3 +245,134 @@ U2 若要落库，须**先在隔离库**确认该批次可得并给出 `pg_dump 
 未生成任何候选或队列记录。`EXTERNAL_WRITE=HOLD`、`REAL_PROVIDER_EXECUTION=NOT_AUTHORIZED`、
 `AUTO_MERGE=FORBIDDEN`、`AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
 U1 封板锚点 `9ee36837` 保持不变。
+
+---
+
+## 11. R3 修订（对应 MSG-20261009-27 的 CHANGE 5–8）
+
+> 本节是 R3 的正式修订内容。§1–§10 保留 R2 原文以维持历史；**凡与本节冲突的，一律以本节为准。**
+
+### 11.1 R2 → R3 修订记录
+
+| 变更 | R2 遗留问题 | R3 处置 |
+| --- | --- | --- |
+| **CHANGE 5（P0）** | `@@unique([organizationId, platform, externalAccountId, identityVersion])` **允许 v1/v2 并存**，R2 未定义「哪个版本当前有效」 | §11.2：禁止调用方传入、禁止 U2 自行挑选；只接受既有可信身份验证产物并按完整四元组解析；**歧义即拒绝**；版本解析与 INSERT 同事务；U2-10 断言切换后旧版本**不会被重新确认为有效** |
+| **CHANGE 6（P0）** | `factsSnapshotRef.source` 只是声明，可伪造 | §11.3：U2 **自行调用 U1 只读适配器**取得事实，调用方 ref 视为不可信标签；校验 Incident/Task/作用域绑定、有效期、防重放；三类伪造负向验收；**不改 U1 契约、不引入新存储/密钥** |
+| **CHANGE 7（P0）** | 候选键未证明租户隔离，`Incident→Candidate→Task` 是间接关系 | §11.4：新增显式 `scope`（PLATFORM / ACCOUNT）；候选键显式携带作用域；作用域不符 ⇒ `SCOPE_MISMATCH` **拒绝且不返回既有 candidateId**；复用前校验关联链；明确「signalKey 全局唯一 ≠ 租户隔离」 |
+| **CHANGE 8（P1）** | U2-5 与 U2-7 冲突；U2-8 定义含混；digest 未规范化 | §11.5：U2-5 拆为三类（允许 U2 自身原子事务 / 禁止跨 U1 只读事务写 / 禁止未授权外部副作用）；U2-8 重定义为 `INPUT_KEY_MISMATCH`；`candidateDigest` 固定序列化/精度/NFC/测试向量；新增 U2-11..U2-13 |
+
+### 11.2 CHANGE 5 —— 「当前有效身份版本」的可信选择规则（P0）
+
+**已核实事实**：schema 中 `PlatformAccount` 的唯一键为
+`@@unique([organizationId, platform, externalAccountId, identityVersion])`，
+因此**同一账户可同时存在 v1 与 v2 两行**，该约束**不能**证明「哪个版本当前有效」。
+
+R3 规则：
+
+1. **不接受调用方版本**：`identityVersion` **不得**来自请求参数、消息体或模型输出；
+2. **不自行挑选**：U2 **禁止**以「最新 `createdAt`」「最大版本号」等启发式选择当前版本；
+3. **唯一可信来源**：只接受既有可信通道产物 —— `PlatformIdentityVerification`
+   （`apps/api/src/services/connectors/platform-identity-verifier.ts`，
+   `source ∈ { PROVIDER_OAUTH, PROVIDER_API, ADAPTER_MOCK }`，含 `evidenceRef` / `verifiedAt` / `identity.identityVersion`；
+   `ADAPTER_MOCK` 仅限 dev/test），并按 **完整四元组** 解析 `PlatformAccount`；
+4. **歧义即拒绝**：若同一 `(organizationId, platform, externalAccountId)` 存在 ≥2 行（不同版本）
+   且无唯一可信裁决 ⇒ `REJECTED`，`reason='IDENTITY_VERSION_AMBIGUOUS'`；**不得任选一行**；
+5. **并发一致性边界**：**身份解析与候选 INSERT 必须在同一 U2 数据库事务内**完成；
+   INSERT 前在**同一事务内重新读取**身份行确认版本未变；版本在窗口内变化 ⇒ 回滚并 `REJECTED`；
+6. **切换后不复归**：U2-10 必须断言「身份切换完成后，旧版本候选在**重用路径**上返回
+   `CANDIDATE_INVALIDATED`」——即旧版本**不会被重新确认为有效**，而不仅是"两个候选不重复"。
+
+### 11.3 CHANGE 6 —— 可信事实引用的不可伪造性（P0）
+
+R2 的 `factsSnapshotRef`（含 `source='U1_TRUSTED_FACTS_ADAPTER'` 字符串）**只是来源声明**，任何调用者都能构造同结构 ⇒ R3 改为：
+
+1. **U2 自行取得事实**：U2 服务在**服务端直接调用 U1 只读适配器**（依赖注入的 adapter 实例）取回事实；
+   调用方传入的任何 ref 结构一律视为**不可信标签**，仅用于审计标注；
+2. **绑定校验**：取回事实必须与本次输入一致 —— `incidentId`、`taskId`、作用域
+   （PLATFORM 时无租户字段；ACCOUNT 时 `organizationId`/`platform`/`externalAccountId`）；不一致 ⇒ `REJECTED`；
+3. **有效期**：以适配器返回的 `issuedAt` 与 U2 配置的 `maxAgeMs` 判定；超期 ⇒ `REJECTED`（**不做 TTL 延长**）；
+4. **防重放**：同一 `(factsSnapshotRef, candidateDedupeKey)` 组合在**同一事务内**最多推进一次候选写入；
+   重复消费不产生第二行（唯一约束 + 事务校验）；
+5. **负向验收**（三类各自 `REJECTED`）：① 伪造 `source`；② 跨租户 / 跨 Incident 引用；③ 已过期引用；
+6. **不改 U1 契约**：U1 封板文件与本设计**均不改动**；若将来需要「签名式引用」，
+   **必须单独设计并审批**；R3 **不引入新存储、不引入密钥材料、不新增 Runtime/Scheduler/Controller**。
+
+### 11.4 CHANGE 7 —— 作用域（租户隔离）与关联完整性（P0）
+
+**R3 新增的仓库证据**：
+
+- `RsiSignal.dedupeKey` 由 `apps/api/src/services/autonomy/rsi-observer.ts` 生成，
+  形如 `CI_FAIL:<head>:<runId>`、`TYPECHECK_FAILURE:<summary>`、`TEST_FAILURE:<summary>`、`BACKLOG_STALL:<headNow>`
+  ⇒ **纯平台级，不含租户/账户作用域**；
+- 该批 RSI 表按 `schema.prisma` 注释为 **PLATFORM_LEVEL**（无 `organizationId`/`tenantId`/`customerId`）；
+- `AutonomyCandidate.taskId → AutonomyTask.incidentId → AutonomyIncident.id` 为**间接关系**。
+
+R3 规则：
+
+1. **显式作用域**：`U2CandidateInput.scope` 改为判别联合
+   `{ kind: 'PLATFORM' } | { kind: 'ACCOUNT'; identity: ResolvedPlatformAccountIdentity }`；
+   `INTERNAL_FAULT` 的 RSI 信号一律 `PLATFORM`；**禁止**把 PLATFORM 候选当作租户作用域对象使用；
+2. **候选键显式携带作用域**：
+   `candidate:<scopeKind>:<scopeRef>#<identityVersion|NONE>#<baselineRef>`，
+   PLATFORM ⇒ `scopeRef='platform'`、`identityVersion='NONE'`；ACCOUNT ⇒ `scopeRef=<organizationId>/<platform>/<externalAccountId>`；
+3. **跨作用域冲突 = 拒绝**：同 `dedupeKey` 但作用域不同 ⇒ `REJECTED`，`reason='SCOPE_MISMATCH'`，
+   **绝不返回既有 `candidateId`**；
+4. **复用前校验关联链**：复用必须同时校验 `taskId`、`baselineRef`、（ACCOUNT 时）解析身份与 `Incident.kind`；
+   任一不符 ⇒ `REJECTED`；
+5. **明文声明**：**「signalKey 全局唯一」不等于租户隔离**；本设计的隔离性来自
+   "平台级 / 账户级" 的**显式作用域区分**与第 3、4 条的拒绝规则。
+
+### 11.5 CHANGE 8 —— 验收矩阵消歧与摘要规范化（P1）
+
+**U2-5 重新定义（消除与 U2-7 的冲突）** —— 必须区分三类：
+
+| 类别 | 允许性 | 断言 |
+| --- | --- | --- |
+| (a) U2 **自身**的独立原子数据库事务（单次 INSERT + 唯一冲突后校验复用） | **允许** | 正常路径成功 |
+| (b) 跨越 **U1 只读事务边界**执行写入 | **禁止** | 断言 ⇒ `BLOCK` / `NOT_AUTHORIZED` |
+| (c) 任何**未授权外部副作用** | **禁止** | 断言 ⇒ `BLOCK` / `NOT_AUTHORIZED` |
+
+**U2-8 重新定义**：键内已含 `baselineRef`/`identityVersion`/`scopeRef`，故「同键但字段不同」不再是普通去重冲突，
+应定义为 **`INPUT_KEY_MISMATCH`**（输入键与可信解析字段不一致，或恶意构造冲突）⇒ `REJECTED`，
+并断言**未写入任何行**。
+
+**`candidateDigest` 规范化（跨环境可独立复算）**：
+
+```text
+candidateDigest = sha256( "u2cd:v1\n" + canonicalJson(fields) )
+
+fields（固定顺序）:
+  scopeKind, scopeRef, identityVersion, baselineRef,
+  incidentDedupeKey, taskDedupeKey, faultClass, faultDetectedAtUtc, factsDigest
+
+canonicalJson:
+  · 键序固定为上述顺序；无多余空白；NFC 规范化；UTF-8
+  · 时间统一 UTC、毫秒精度、ISO-8601 形如 2026-10-09T05:00:00.000Z（输入精度高于毫秒时截断到毫秒）
+  · 前缀 u2cd:v1 用于未来演进
+```
+
+**固定测试向量（R3 写入，实施时以单测锁定）**：
+
+```text
+scopeKind=PLATFORM
+scopeRef=platform
+identityVersion=NONE
+baselineRef=refs/heads/main@<SEAL_COMMIT>
+incidentDedupeKey=incident:CI_FAIL:h:1
+taskDedupeKey=task:CI_FAIL:h:1
+faultClass=DATABASE_TRANSACTION_ERROR
+faultDetectedAtUtc=2026-10-09T05:00:00.000Z
+factsDigest=<由 U2 自行取回的事实按同一规范化计算>
+⇒ candidateDigest = <确定性常量，实施时填入并锁定>
+```
+
+**新增验收用例**：**U2-11**（U2-5 三类区分：(a) 通过 / (b)(c) `BLOCK`）、
+**U2-12**（U2-8 `INPUT_KEY_MISMATCH` + 零写入）、
+**U2-13**（digest 跨环境复算：同输入 ⇒ 同 digest；字段顺序/空白/时间精度变化 ⇒ 不同 digest）。
+
+### 11.6 R3 未变部分
+
+§1 功能与非目标、§3 调用关系（不新增 Runtime/Scheduler/Controller/Queue、不触发执行）、
+§5 四项声明（持久化=复用既有 `AutonomyCandidate`；写入=**仅 INSERT**；Runtime 接线=否；模型调用=否）、
+§8 隔离与审批边界、§9 回滚（停用入口 + 保留历史 + 禁止批量删除）、§10 未实施声明 —— **全部保持**；
+U1 封板锚点 `9ee36837` 不变。
