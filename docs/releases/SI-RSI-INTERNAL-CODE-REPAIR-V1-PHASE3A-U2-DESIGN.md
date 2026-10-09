@@ -1,11 +1,11 @@
-# PHASE 3-A · U2 设计 R9（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R10（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-31 = REVISE` → `MSG-20261009-32 = REVISE` → `MSG-20261009-33 = REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R9_READ_ONLY_CHANGES_26_TO_31`。
-> 本文件是 **U2 设计 R9** 送审材料（MSG-20261009-34），**不含任何产品代码改动**。
-> **R9 的修订集中在 §17（隔离证明可信链 / U2-20 拆分 / 并发复用闭环 / 事务边界 / 锁释放原子性 / 副作用契约）；
-> §1–§16 保留历史；凡冲突者以 §17 为准。**
+> `MSG-20261009-32 = REVISE` → `MSG-20261009-33 = REVISE` → `MSG-20261009-34 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R10_READ_ONLY_CHANGES_32_TO_35`。
+> 本文件是 **U2 设计 R10** 送审材料（MSG-20261009-35），**不含任何产品代码改动**。
+> **R10 的修订集中在 §18（锁释放原子性 / PG 并发失效防护 / 未知 COMMIT 对账语义 / 副作用报告）；
+> §1–§17 保留历史；凡冲突者以 §18 为准。**
 
 | 锚点 | 值 |
 | --- | --- |
@@ -18,7 +18,8 @@
 | U2 设计 R6 | `a12a9f36` |
 | U2 设计 R7 | `f6c6d677` |
 | U2 设计 R8 | `7a5d8058` |
-| U2 设计 R9 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R9 | `d9172daa` |
+| U2 设计 R10 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -1081,3 +1082,130 @@ U2-28/29/30）、§16.1 的 `CONTROLLED_FIXED_WORKTREE` 唯一模式与协作锁
 不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
 `SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
 本文件仍为**纯设计 R9**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+
+---
+
+## 18. R10 修订（对应 MSG-20261009-34 的 CHANGE 32–35，并收口 CHANGE 26/28 的遗留规范）
+
+### 18.1 CHANGE 32（P0）—— 锁释放的**可证明原子性**
+
+**承认**：`fstat(fd)` + 读 `ownerToken` + `rename` + `unlink` 仍有两处竞态：
+① 普通 `rename()` 可能**覆盖**已存在的目标；② **源路径**可能被其他进程替换（校验旧 fd 的 inode
+不等于随后按路径 `rename` 的对象）。
+
+**R10 规则**
+
+1. **不可覆盖改名**：Linux 上使用 `renameat2(..., RENAME_NOREPLACE)`（或等效的不可覆盖原语）；
+   平台不提供该原语 ⇒ **不释放**并告警（fail-closed）。
+2. **父目录纳入隔离保护**：锁目录（锁文件的父目录）必须属于 §17.1 受保护范围——
+   归属专用运行账户、非属主**不可写/不可改名**；否则非受信主体可替换锁路径。
+   **`RENAME_NOREPLACE` 只解决目标覆盖，不解决源路径替换⇒目录权限约束为必要条件。**
+3. **释放前后校验**：释放前从**同一 fd** 取 `(dev,inode)` 与 `ownerToken`；
+   改名后再对**新路径**（通过 `O_NOFOLLOW` 打开）校验 `(dev,inode)` 与内容一致；
+   任一不一致 ⇒ **不执行 `unlink`**、保留现场并告警。
+4. **失败留证**：`rename` 后源路径异常、目标冲突、校验失败 ⇒ 将现场
+   （路径、`(dev,inode)`、`ownerToken`、时间戳）写入既有证据工件，供人工调查；
+   **不**自动重试、**不**自动清理。
+5. **新增 U2-31**：真实并发场景下（①另一进程替换锁路径；②目标名冲突；③持锁进程被中断）
+   断言：候选零新增或如实上报、锁不被误删、现场证据存在。
+
+### 18.2 CHANGE 33（P0）—— PostgreSQL 并发失效防护
+
+**承认**：事务内读取**不等于**状态稳定（A 读 `DIAGNOSED` → B 改为不合格并提交 → A 仍提交候选）。
+
+**R10 规则**
+
+1. **对权威行加行锁**：在事务内以
+   `SELECT ... FROM "AutonomyIncident" WHERE id=$1 FOR UPDATE`（关联 `AutonomyTask` 同样加锁）读取，
+   再据此判定资格。该行锁会**阻止**其他事务在同一行上执行 `UPDATE` 直到本事务结束，
+   从而消除「读后被他方改状态再提交」的交错。
+2. **锁顺序固定以防死锁**：统一按 `Incident` → `Task`（按 `id` 升序）顺序取锁；禁止反向顺序。
+3. **超时与失败处置**：设置**锁等待超时**；捕获
+   `40001`（序列化失败）/`40P01`（死锁）⇒ 视为**可安全重试**（前提：本事务**未产生任何副作用**，
+   且重试后必须**重新**执行基线校验与权威资格判定）；重试上限固定（默认 1 次），超限 ⇒
+   `REJECTED`，reason=`CONCURRENT_CONFLICT`。
+4. **不可重试的情形**：已发出 `COMMIT`（结果可能未知）⇒ 走 §18.3 的对账路径，**不得重试插入**。
+5. **提交时刻语义（如实声明）**：候选在其提交时刻对**当时**的 `Incident` 状态是合法的；
+   此后 `Incident`/`Task` 状态若变化，由既有**逻辑失效**规则（§6/§12.4 语义）在**重用/消费前**
+   重新校验处置——**不**追认历史候选无效。
+6. **新增 U2-30（真实 PostgreSQL 双连接、可控交错）**：B 在 A 持锁期间尝试改 `Incident` 状态 ⇒
+   断言 B 被阻塞至 A 结束；断言最终**已提交状态与候选资格一致**（A 提交时资格成立），
+   且后续 B 的状态变更会被重用前重验捕获。
+
+### 18.3 CHANGE 34（P0）—— 未知 `COMMIT` 的对账语义（修正推论）
+
+**承认**：**查不到记录 ≠ 已回滚**（结果未定、数据库切换、副本延迟都可能造成「查不到」）。
+
+**R10 规则**
+
+1. **权威数据源**：对账**只**使用与写入同一连接字符串的**主库**（`DATABASE_URL`），
+   以 `READ COMMITTED` 读取；**不**使用只读副本；对账使用**新连接**。
+2. **结果确定性前提**：仅当满足「该事务已结束且结果可由主库判定」时，对账结论方可作为提交证据；
+   否则一律 `UNKNOWN`。
+3. **三分类（取代 R9 的二分类）**：
+   - 查到**完全匹配**的可见记录 ⇒ `COMMIT_CONFIRMED_BY_RECONCILE`，`commitState='COMMITTED'`；
+   - 未查到 ⇒ `COMMIT_NOT_CONFIRMED`，`commitState='UNKNOWN'`（**不得**判为 `NOT_COMMITTED`）；
+   - 对账查询失败 ⇒ `commitState='UNKNOWN'`。
+4. **唯一允许 `NOT_COMMITTED` 的情形**：本地驱动可**证明** `COMMIT` **未被发出**
+   （例如连接在发出 `COMMIT` 之前失败）⇒ `commitState='NOT_COMMITTED'`；此为「明确的未提交证据」。
+5. **禁止**在对账期间盲目重复 `INSERT`（避免重复副作用）。
+
+### 18.4 CHANGE 35（P1）—— 副作用报告的完整语义 + 收口 CHANGE 26/28 遗留规范
+
+**修订后的副作用报告**
+
+```ts
+interface U2SideEffectReport {
+  insertAttempted: boolean;          // 是否已尝试 INSERT
+  insertSucceededInTx: boolean;      // 事务内 INSERT 是否成功
+  newRowsCommitted: 0 | 1 | 'UNKNOWN'; // 最终已提交的**新**行数；无法判定时为 'UNKNOWN'
+  commitState: 'COMMITTED' | 'NOT_COMMITTED' | 'UNKNOWN';
+  lockReleaseFailed: boolean;
+  authoritativeReadInsideTx: boolean;
+  reconciled: boolean;               // 是否通过对账得出结论
+}
+```
+
+**完整状态表（取代 R9 的简化表）**
+
+| 场景 | outcome | reason | commitState | candidateId | newRowsCommitted |
+| --- | --- | --- | --- | --- | --- |
+| 新候选确认提交 | `CANDIDATE_INSERTED` | — | `COMMITTED` | 新候选 ID | 1 |
+| 合法既有候选复用 | `CANDIDATE_REUSED` | — | `NOT_COMMITTED`（本次无新提交） | 既有 ID | 0 |
+| 输入校验拒绝 | `REJECTED` | 输入类 reason | `NOT_COMMITTED` | `null` | 0 |
+| 插入失败且事务确认回滚 | `REJECTED` | `CANDIDATE_WRITE_FAILED` | `NOT_COMMITTED` | `null` | 0 |
+| `COMMIT` 结果未知且对账无定论 | `REJECTED` | `COMMIT_NOT_CONFIRMED` | `UNKNOWN` | `null` | `'UNKNOWN'` |
+| 对账确认已提交 | `CANDIDATE_INSERTED` | `COMMIT_CONFIRMED_BY_RECONCILE` | `COMMITTED` | 已确认 ID | 1 |
+| 提交成功但锁释放失败 | `CANDIDATE_INSERTED` | `LOCK_RELEASE_FAILED` | `COMMITTED` | 已确认 ID | 1 |
+
+> `NOT_COMMITTED` 的语义严格限定为「**本次调用没有提交新候选写入**」，**不**否认既有候选已持久化。
+> `COMMIT_CONFIRMED_BY_RECONCILE` / `LOCK_RELEASE_FAILED` 是 **reason**（不是 outcome），
+> `outcome` 枚举仍为 `{ CANDIDATE_INSERTED | CANDIDATE_REUSED | REJECTED }`，避免与 §13.1 冲突。
+
+**CHANGE 26 遗留收口 —— `protectedRefsDigest` 的字节级规范**
+
+```text
+输入 = for-each-ref 输出 与 packed-refs 原始字节 的确定性拼接
+  ① git for-each-ref --format='%(refname)%1F%(objectname)%1F%(objecttype)' | 按 refname 码点升序排序
+  ② 每行以 0x0A 结尾；字段以 0x1F 分隔；空值以零长度表示（不加占位符）
+  ③ 追加 packed-refs 文件**原始字节**（若不存在则追加零长度）
+protectedRefsDigest = sha256( utf8("u2refs:v1" + "\n" + 上述字节) )
+范围 = git rev-parse --git-common-dir 与 worktree 专属 gitdir **同时**覆盖（worktree 场景两者都校验）
+```
+
+**证明签发者的认证机制（如实要求）**：隔离证明**只能**通过受信通道送达 ——
+① 由编排器在**进程启动时注入**的环境变量/挂载（运行期**不得**从工作树内可篡改文件读取），
+或 ② 经认证的控制面调用；若环境中**只有**本地可篡改配置文件作为来源 ⇒ 视为 `NOT_ATTESTED`，
+U2 **拒绝**（`EXCLUSIVE_WINDOW_UNAVAILABLE`）。**R10 不引入密钥材料、不新增表**。
+
+**CHANGE 28 遗留收口**：`ON CONFLICT ... DO NOTHING` 返回**零行**时**不得**视为插入成功，
+必须进入 §17.3 的重读+逐项比对路径；重开事务后必须**重复**基线校验与权威资格判定。
+
+### 18.5 R10 未变部分
+
+§12 候选键 v2 与 digest、§13.1 接口（本节点增补副作用字段）、§13.2 矩阵（另加 U2-31）、
+§16.1 `CONTROLLED_FIXED_WORKTREE` 唯一模式、§17.1 隔离证明框架、§17.2 U2-20A/B/C、
+§17.3 冲突复用路径、`builderRef` 固定常量、仅 INSERT、无 UPDATE/DELETE、不新增 schema/migration、
+不接 Runtime/Queue、不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
+`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+本文件仍为**纯设计 R10**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
