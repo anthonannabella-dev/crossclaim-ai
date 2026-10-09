@@ -3346,3 +3346,109 @@ NEXT = 等待独立审计重新裁决（不自动进入实施阶段）
 ```
 
 **停止条件（已遵守）**：交付后立即停止，未自动进入实施阶段；未恢复任何循环心跳或 OS 定时任务。
+
+---
+
+### 2.52 MSG-20261009-47 裁决归档 = **PASS WITH REVISE**（准备包有条件通过；F-01 = OPEN P0；新增 CHANGE 86–90、缺失证据 E-08~E-16、实验 S9–S11）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-47] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（319/319，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=7450 / NORM_LINES=319 / FNV=abbed57c`。
+> 锚点：`BASELINE=e57468d1`、`REVIEWED_HEAD=f3952664`、`U1_CODE_HEAD=9ee36837`。
+
+**审计方独立核验**：`e57468d1..f3952664` = **1 提交 / 2 文档**、**无 `apps/api` 产品代码变更**、
+`READINESS_PACK_STRUCTURE=VERIFIED`、`READINESS_PACK_GIT_BLOB_SHA=7017490f…` 匹配、
+`READINESS_PACK_SHA256_VERIFICATION=NOT_INDEPENDENTLY_VERIFIED`（未独立复算 SHA-256、未运行测试、未连接生产库）。
+并确认 `crossclaim-rsi.service` **确实声明以 durable lease 执行跨实例协调**，准备包已把 U2 的 `flock` 方案登记为 **F-01**。
+
+**逐项裁决**：范围与提交边界 = PASS；**F-01 风险识别 = PASS**；P1 数据库能力申请 = PASS WITH REVISE；P2 环境证据清单 = PASS WITH REVISE；
+P3 隔离实验方案 = PASS WITH REVISE；证据矩阵及申请报告 = PASS WITH REVISE；`EXCLUSION_PROOF_STATUS=NOT_PROVEN`、
+`COMMIT_ATTRIBUTION_PROOF=NOT_AVAILABLE_IN_CURRENT_CONFIGURATION`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`PRODUCTION_WRITE_AUTHORIZED=NO`。
+
+#### 2.52.1 F-01（锁协议一致性缺口）裁决与路线建议
+
+F-01 = **PASS，且必须作为实施授权前的 P0 前置条件**。审计方强调三者**不是天然等价**：
+**①任务领取互斥**（防止两个执行器同时认领同一任务）／**②候选写入互斥**（防止对同一受保护资源产生不允许写入）／**③提交时 fencing**（防止失去所有权的旧执行器在接管后继续成功提交）。
+「已有 lease」**不等于**候选写入已受 lease 完整保护；`flock` 也**不会**自动与 PostgreSQL lease 形成共同互斥域。
+
+| 路线 | 裁决 | 原因 |
+| --- | --- | --- |
+| **A 统一到 durable lease** | **优先评审** | 复用既有数据库持久化语义，避免同时维护两套互斥协议 |
+| **B 统一到 flock** | 暂不推荐 | 涉及既有执行器迁移、文件系统依赖与整体回归 |
+| **C 证明写入域不相交** | 保留备选 | 需严格的资源、主体及因果依赖证明（**仅证明"用不同表"或"dedupeKey 唯一"不足以认定互不相交**） |
+
+**路线 A 成立还需证明六项**：同一受保护资源身份定义；lease 领取/续租/到期/接管/版本变更的**数据库事务语义**；
+受保护写入携带**可验证执行身份与 fencing generation**；**旧持有者失效后不能在新持有者接管之后提交陈旧写入**；
+所有写入入口遵守统一协议且应用**无权旁路**；中断/超时/重连/进程崩溃下不变量仍成立。
+
+#### 2.52.2 新增 REQUIRED_CHANGES（含 P0 四项）
+
+- **CHANGE 86（P0）锁协议统一决策与写入域证明**：新增只读 `LOCK_DOMAIN_AND_WRITER_INVENTORY`，至少列明
+  任务领取者 / U2 候选写入者 / 现有 RSI 写入者 / 保护资源（`taskId`·`dedupeKey`·`candidateId` 关系）/ 锁的作用域（全局·租户·任务·候选）/
+  失效行为（旧持有者何时及如何失去写入权）/ 统一协议（选定路线 + 未选路线的停用或隔离证明）。
+- **CHANGE 87（P0）F-A 的单语句条件检查并非充分证明**：普通 MVCC 可见性下，一条语句观察到有效 owner
+  **并不排除**另一事务随后将其失效并提交 ⇒ 必须补充：栅栏验证与受保护写入**共享事务约束**；
+  栅栏失效与接管操作与上述事务存在**可证明的串行化关系**（可考虑行锁 `SELECT ... FOR UPDATE`、受控状态迁移、
+  受约束的数据库写入接口或其他等价方案）；**使用 `SERIALIZABLE` 时必须证明读写依赖能产生所需序列化约束并正确处理 `40001`**
+  （不得仅凭设置隔离级别就宣布安全）；证明须**覆盖提交时刻**，而非仅 `INSERT` 执行时刻。
+- **CHANGE 88（P0）区分排他、去重与提交归因**：`dedupeKey UNIQUE` 只证明该唯一键范围内不能同时保留两条同键记录，
+  **不能**独立证明「哪个执行器获得排他权／旧持有者失效后不能写入／本次执行是否真正完成提交／其他写入者是否执行了相同业务动作」；
+  且 **F-C 是提交归因机制，不是 fencing 的替代方案** ⇒ 证明结果必须拆成三个**互不推导**的字段：
+  `DEDUPE_PROOF` / `EXCLUSION_PROOF` / `COMMIT_ATTRIBUTION_PROOF`。
+- **CHANGE 89（P0）加强 S3/S7/S8 的确定性故障注入**：**S3** 必须区分四个阶段——旧事务已开始未提交 → 旧持有者 fencing token 失效 →
+  新持有者成功接管并提交 → 旧事务随后尝试提交；**通过条件**：不得出现**违反既定 fencing 顺序的陈旧写入提交**（不得仅凭杀进程、观察到一条记录或事后检查 dedupeKey 判定成功）。
+  **S7** 必须覆盖「两实例分别持有 lease 与文件锁，却同时认为自己具备写入资格」。**S8** 必须分别覆盖旧事务**尚未开始**与**已经开始**两种情况。
+- **CHANGE 90（P1）新增三个实验**：**S9** 数据库主从切换与连接池重连（通过条件：无未经证明的自动重放或陈旧提交）；
+  **S10** 特权角色与旁路写入（通过条件：所有**非豁免**入口均受保护；特权豁免必须登记并受独立运维控制）；
+  **S11** 故障注入与阻断恢复（通过条件：未重新取得有效授权与栅栏前**保持只读或停止**）。
+
+#### 2.52.3 新增缺失证据 E-08 ~ E-16（E-08/E-10/E-11/E-12/E-14 为实施授权前必要证据）
+
+| 编号 | 内容 | 优先级 |
+| --- | --- | --- |
+| **E-08** | 数据库实际权限及对象所有权（表/schema/sequence/函数/默认权限/role membership/`BYPASSRLS`/`SUPERUSER`/触发器修改权限） | **P0** |
+| **E-09** | 真实数据库拓扑（主库、只读副本、代理、连接池、故障切换、复制与写入路由） | **P0** |
+| **E-10** | lease 实际状态转移（claim/renew/expire/takeover/commit 的实现路径与事务边界） | **P0** |
+| **E-11** | 生产版本对应关系（当前部署 SHA、迁移状态、实际 unit 内容与仓库 HEAD 的差异） | **P0** |
+| **E-12** | 写入行为与触发器覆盖（INSERT/UPDATE/DELETE、`ON CONFLICT`、`TRUNCATE`、trigger disable、复制模式等绕过路径） | **P0** |
+| **E-13** | 文件锁身份与生命周期（目录与 inode 稳定性、文件替换/删除、FD 继承、进程崩溃、重启） | P1 |
+| **E-14** | 提交结果取证能力（提交回执、事务关联、审计记录、断连后只读对账能力） | **P0** |
+| **E-15** | 实际配置生效证据（systemd 配置覆盖、环境变量优先级、实际生效权限与运行身份） | P1 |
+| **E-16** | 监测与冻结能力（阻断传播、告警、人工接管、停止写入的时延与验证方法） | P1 |
+
+**两点特别强调**：**仓库中声明的 systemd 硬化 ≠ 目标服务器上已生效**；**migration 文件中的触发器定义 ≠ 目标数据库已部署该迁移，也 ≠ 拥有特权的操作者无法停用触发器**。
+
+**P3 判据修订**：S2 须明确「数据库是否已接收 `COMMIT`」（未确认前**不能统一判为 `NOT_COMMITTED`**）；S4 默认 `UNKNOWN`（可在可信对账证据存在时细分）；
+并说明 **P3 的 ≤60 分钟仅作单次实验资源边界——超时未完成须记 `INCONCLUSIVE`，不得为按时结束而宣布通过**。
+
+#### 2.52.4 下一步授权与宿主优先顺序
+
+```text
+NEXT_AUTHORIZED = PHASE3_A_U2_PRECONDITION_R2_READ_ONLY（只读：完成 CHANGE 86–90 文档修订、
+                  锁协议方案比较、宿主能力申请与缺失证据登记）
+下一轮只提交四项：①F-01 锁协议决策建议与写入域清单 ②P1 fencing 与提交归因机制修订
+                  ③E-08~E-16 缺失证据登记与宿主采集清单 ④P3 S1–S11 修订后实验矩阵
+无需重新进行 R1–R21 完整设计审计；仅检查本轮新增与修改的前置条件。
+
+宿主优先顺序（审计方建议，不必一开始申请完整生产权限）：
+  第一优先：只读证据 E-01/E-02/E-03/E-08/E-10/E-11/E-12（不需要生产数据库密码，也不开放生产写入）
+  第二优先：在 fencing 方案经只读评审后，由宿主提供隔离 PostgreSQL 16 实验环境 + 最小权限账号 + 单独实验执行授权
+硬要求：任何测试账号、数据库连接串或敏感凭据【不得】出现在送审文本、Git 提交或原始日志中。
+```
+
+```text
+MSG-20261009-47_FINAL_VERDICT = PASS_WITH_REVISE
+MSG-20261009-47_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 319/319；FNV1A abbed57c）
+P1_DELIVERABLE=PASS_WITH_REVISE · P2_DELIVERABLE=PASS_WITH_REVISE · P3_PLAN=PASS_WITH_REVISE · EVIDENCE_MATRIX=PASS_WITH_REVISE
+F01_GAP_IDENTIFICATION=PASS · F01_STATUS=OPEN_P0 · PREFERRED_LOCK_ROUTE=LEASE_REVIEW_FIRST · LOCK_PROTOCOL_UNIFORMITY=NOT_PROVEN
+DEDUPE_PROOF=DESIGN_EVIDENCE_ONLY · EXCLUSION_PROOF_STATUS=NOT_PROVEN
+COMMIT_ATTRIBUTION_PROOF=NOT_AVAILABLE_IN_CURRENT_CONFIGURATION
+REQUIRED_CHANGES=86,87,88,89,90 · MISSING_EVIDENCE_ADDED=E08_TO_E16 · EXPERIMENT_PLAN_ADDED=S9,S10,S11
+U1_CODE_CLOSURE=UNCHANGED · U2_DESIGN_R21=NOT_REOPENED
+P3_EXPERIMENT_AUTHORIZED=NO · U2_IMPLEMENTATION_AUTHORIZED=NO · PRODUCTION_WRITE_AUTHORIZED=NO
+MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED
+NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R2_READ_ONLY · NEXT_AUDIT=MSG-20261009-48
+SCHEMA_MIGRATION=HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD · AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN · PRODUCTION_READY=NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
