@@ -1275,3 +1275,58 @@ R5_CODE_COMMIT = e4c2f27d（已 push）
 R5_DOCS_EVIDENCE_COMMIT = fac55b02（已 push）
 NEXT_UNIT = 继续投递 MSG-20261009-19（M1–M7），随后等待裁决
 ```
+
+---
+
+### 2.20 停止心跳：审计通道无法承载字节级证据（HOST 阻断，需用户决定）
+
+**结论**：MSG-20261009-19 在本机**无法以可核对的方式送达**，据此按心跳规则 8 停止本心跳。
+本机代码与证据均已固化并推送；后续恢复取决于通道决策（见下）。
+
+**已完成并推送（可继续复核）**
+
+- `e4c2f27d`：R5 代码 —— `SCOPE_DIMENSION_NOT_DECLARED`（策略未覆盖维度 fail-closed、重复声明 Set 语义等价）、
+  七张表内容级 `count:md5(string_agg(row_to_json ORDER BY …))` 快照。
+- `fac55b02`：`tools/verification/self-repair/phase3a-u1-final-r5-evidence.json`（147,846 bytes，
+  含三文件完整内容 `uFileContents`、`fingerprintMethod`、61 项用例、6 条 `U1_EVIDENCE`）+ 原始 vitest/tsc 输出 + checkpoint §2.19。
+- `ddd46646`：§2.19b 通道问题与误发记录。
+- 本机实测：端口级 53/53 + 真实 PG 8/8 = 61/61、`api tsc --noEmit` 0。
+
+**阻断事实（三次投递尝试，均已实测）**
+
+1. `tab.paste(index, text)` 可靠，但要求正文以 JS 字面量内联：本轮需内联 3 个 U1 文件 + 证据 JSON 核心 + 原始输出
+   ≈ 105 KB，且含 56+ 反引号与模板插值符号，手工转义存在实体错误风险 —— 一旦出错即污染「固定 HEAD 内容」这一待证事实，
+   与心跳规则 9「不得伪造证据」冲突。
+2. OS 剪贴板 → 浏览器 `Ctrl+V`：实测本机自动化下**浏览器剪贴板与 OS 剪贴板不是同一个**，粘入的是上一条内容
+   （因此产生 1 条 MSG-18 材料副本的误发，已在 §2.19b 记录）。
+3. 评审侧要求「可访问的 Git blob」：远端为**私有库**，网页评审无读取路径；本地 REPL 亦无宿主文件服务
+   （`nodeRepl.rpc` 返回 Trusted RPC service is not configured）。
+
+**需要用户决定（三选一）**
+
+- **A（推荐，最省往返）**：给评审方一个**只读访问入口**（例如把 `feat/si-rsi-internal-code-repair-v1` 推送到评审方可读的位置，
+  或提供只读快照/附件）。此后 CHANGE 29–31 可在一轮内闭合。
+- **B**：人工把 3 个 U1 文件与 `phase3a-u1-final-r5-evidence.json` 作为**附件**贴入审计会话（人机动作一次），随后我继续按裁决推进。
+- **C**：调整证据口径 —— 改为「完整 diff + 每段源码摘要 digest（可复算）+ 工具生成的原始输出」，
+  不再要求整文件哈希（需评审方明确同意此口径变更）。
+
+**暂停期间的状态（不得误解为已完成）**
+
+- U1 实施仍未关闭：`PHASE3_U1_IMPLEMENTATION_CLOSED = NO`（MSG-18 裁决）；U2–U5 未授权。
+- MSG-20261009-19 **未送审**，因此不存在任何针对 R5 的裁决；`AI-ARCHITECT-INBOX.md` 未新增段。
+- 未验证项照旧：Linux / systemd 实机、真实浏览器端到端、真实 Provider / 模型调用（HOLD）、CI、生产环境 = **NOT VERIFIED**。
+
+```text
+HEARTBEAT_STATUS = STOPPED_BY_RULE_8（HOST 阻断：审计通道无法承载字节级证据；无 automation 工具可自行删除，请用户在应用侧移除 crossclaim-si-rsi-dev-executor-180s）
+OS_CHECKER = DISABLED（schtasks /change /tn CrossClaim-SI-RSI-ContinuousCheck /disable）
+MSG19_DELIVERY = NOT_SENT
+R5_CODE_COMMIT = e4c2f27d（已 push）
+R5_DOCS_EVIDENCE_COMMIT = fac55b02（已 push）
+R5_STATE_NOTE_COMMIT = ddd46646（已 push）
+U1_IMPLEMENTATION_CLOSED = NO
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+PENDING_USER_DECISION = A（给评审方只读访问）/ B（人工附件投递）/ C（调整证据口径）
+```
