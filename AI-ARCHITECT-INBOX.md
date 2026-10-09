@@ -178331,3 +178331,478 @@ PRODUCTION_READY=NO
 
 本次只读取了仓库，没有修改任何文件、提交或分支。
 ```
+
+### [MSG-20261009-40] U2 设计 R15 = **REVISE**（`U2_DESIGN_R15_ACCEPTED=NO`；本轮 **4 项 PASS**（54/56/58/59）+ **2 项 PASS WITH REVISE**（57/60）+ **1 项 REVISE**（55），仅新增 **CHANGE 61（P0）/62（P1）/63（P1）**，明确不重复已闭合项）—— **独立核验 PASS 项**：固定提交存在、比较区间 `54e14e66..52308673`、提交数 1、文件数 1（仅 U2 设计文档）、+204/−9、`apps/api` 产品代码变更 0、**Git blob SHA `4039241295d5a3e3a03a9d53473bbdf7564342ba` 匹配**、`U2 已实施=NO`、`U2 实施授权=NO`；审计方同时强调**三个状态不可互相推出**（`U2_DESIGN_ACCEPTED` / `U2_IMPLEMENTATION_AUTHORIZED` / `PRODUCTION_READY`）；**CHANGE 55 = REVISE（本轮最重要新增问题）**：`P2` 收到 `EWOULDBLOCK` **只证明存在冲突锁，不证明该锁由本实例持有**——反例：本实例 `T1` 取锁 → 本实例**误释放锁但未关闭 FD** → **另一进程取得同一锁** → 本实例执行 `P2` 得到 `EWOULDBLOCK` 且 FD 扫描未及时发现 → `P2` 通过但本实例已失去所有权，故 R15 §23.2.5「误释放后 `P2` 必然成功取锁」**不能作为无条件结论**；**新增 CHANGE 61（P0）**：①把 `P2_EWOULDBLOCK` 定义为**必要但非充分**证据 ②锁所有权须由**可信 FD/OFD 生命周期保证 + 持锁状态证据**共同支持 ③`P2` 失败原因必须区分 `EWOULDBLOCK` 与权限错误、无效 FD 等其他错误 ④`P2` **意外取得锁**时必须确保探针 FD 及其获得的锁**安全释放**并拒绝本次业务写入 ⑤新增「本实例提前释放、第三方随后取锁」的**多进程反例测试**（要求零候选写入）⑥建议错误码 `LOCK_OWNERSHIP_UNPROVEN` / `EXCLUSIVE_WINDOW_UNAVAILABLE` ⑦跨进程 FD 扫描只能在明确支持并可验证的 Linux 隔离环境内作**辅助检测**，不能作为锁所有权的**权威来源**；**新增 CHANGE 62（P1）**：`COMMITTED` 归因需证明**执行身份**——相同主键/候选内容/时间窗口**不必然等于同一次执行提交**，须补充独立执行身份关联（受信任、不可变的 `executionRef` 或等价事务关联证据）并说明其来源与可否被其他写入者伪造；若现有 schema 不支持该归因，**不得**因重读到匹配行就宣称当前事务 `COMMITTED`，并须区分 `CANDIDATE_EXISTS` 与 `THIS_EXECUTION_COMMITTED`；**新增 CHANGE 63（P1）**：nonce 消费状态必须有 **UNKNOWN 分支**——①数据库明确确认消费事务回滚 ⇒ 可报告未成功消费 ②**消费事务提交结果不可知 ⇒ 必须报告 `CONSUMPTION_UNKNOWN`**，不得报 `UNCONSUMED`、也不得擅自报 `CONSUMED` ③`CONSUMPTION_UNKNOWN` 下当前执行应**终止**、旧 nonce **不可重试**、后续只能**重新签发授权** ④若消费事务实际已提交，旧 nonce **仍须保持已消费**（即使业务候选记录尚未写入，也不得释放旧授权）；审计方另确认已读取 Prisma schema 相关片段（唯一键与消费者交付幂等结构），**接受**「模式先例不代表可复用」的表述，但不由此推导 U2 nonce 消费存储已存在/可直接复用/已获写入授权；**授权结论**：`U1_FINAL_CLOSURE=YES`（沿用封板）、`U2_DESIGN_R15_ACCEPTED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`U2_NONCE_CONSUMPTION_STORE=NOT_VERIFIED`、`SCHEMA_MIGRATION=HOLD`、`RUNTIME_WIRING=FORBIDDEN`、`MODEL_CALL/PROVIDER_CALL=FORBIDDEN`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`；`REQUIRED_CHANGES=CHANGE_61_P0,CHANGE_62_P1,CHANGE_63_P1`、`NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R16_READ_ONLY_CHANGES_61_TO_63` / `NEXT_AUDIT=MSG-20261009-41`；reviewed ref `52308673d10f571e74f4bca29bc2b4fd5435a5d5`
+
+```text
+MSG-20261009-40｜CrossClaim AI · U2 设计 R15 独立审计裁决
+REVISE · 暂不授权实施
+
+审计对象： SI/RSI INTERNAL CODE REPAIR V1 · PHASE 3-A · U2 设计 R15
+固定 HEAD： 52308673d10f571e74f4bca29bc2b4fd5435a5d5
+审计方式： GitHub 连接器只读核验 + 设计契约审查
+仓库写入： 无
+
+一、已完成的独立核验
+
+通过 GitHub 连接器读取固定提交并比较 54e14e66..52308673，确认：
+
+核验项目
+
+
+
+独立核验结果
+
+
+
+
+固定提交存在
+
+
+
+PASS
+
+
+
+
+比较区间
+
+
+
+PASS
+
+
+
+
+提交数量
+
+
+
+1
+
+
+
+
+变更文件数量
+
+
+
+1
+
+
+
+
+变更文件
+
+
+
+U2 设计文档
+
+
+
+
+新增 / 删除行
+
+
+
++204 / −9
+
+
+
+
+apps/api 产品代码变更
+
+
+
+0（本次比较区间）
+
+
+
+
+Git blob SHA
+
+
+
+PASS，匹配 4039241295d5a3e3a03a9d53473bbdf7564342ba
+
+
+
+
+U2 已实施
+
+
+
+NO
+
+
+
+
+U2 实施授权
+
+
+
+NO
+
+提交及内容证据：
+查看固定提交
+。
+
+初步结论： R15 已实质回应 CHANGE 54–60，并纠正 R14 的若干关键问题。但设计中的锁所有权归因与 nonce 消费边界仍需要进一步收口。当前不能将设计文本的完整性等同于实施安全性。
+
+尤其需要保留三个独立状态：
+
+U2_DESIGN_ACCEPTED：设计是否达到通过标准。
+
+U2_IMPLEMENTATION_AUTHORIZED：是否允许开发新的 U2 代码。
+
+PRODUCTION_READY：是否具备生产部署条件。
+
+三者不能互相推出。
+
+二、CHANGE 54–60 逐项裁决
+
+CHANGE
+
+
+
+裁决
+
+
+
+审计意见
+
+
+
+
+54 · P0
+
+
+
+PASS
+
+
+
+T0/T1/T2 时序矛盾已消除；L0/L1、inode 与 OFD 的区别及失败码已明确
+
+
+
+
+55 · P0
+
+
+
+REVISE
+
+
+
+P2 可以检测锁冲突，但尚不能单独证明冲突来自本实例的锁
+
+
+
+
+56 · P1
+
+
+
+PASS
+
+
+
+检测与保证的职责已区分，扫描的竞态和局限已承认
+
+
+
+
+57 · P1
+
+
+
+PASS WITH REVISE
+
+
+
+四类结果分流合理，但 COMMITTED 归因仍需防止其他写入者造成假阳性
+
+
+
+
+58 · P1
+
+
+
+PASS
+
+
+
+仓库证据与运行库事实分离，未越界声称生产数据库已验证
+
+
+
+
+59 · P1
+
+
+
+PASS
+
+
+
+原始字节、排序和摘要使用规则已明确；此项为设计通过，不是解析器测试通过
+
+
+
+
+60 · P0
+
+
+
+PASS WITH REVISE
+
+
+
+持久化及实施范围边界已写明，但未确认提交后的授权状态还需进一步明确
+
+本轮结果：4 项 PASS、2 项 PASS WITH REVISE、1 项 REVISE。
+
+其中 CHANGE 54、56、58、59 可以按本轮设计文字闭合；CHANGE 55、57、60 仍有需要修正或收紧的条件。
+
+三、必须补充的修订
+CHANGE 61（P0）—— P2 不能直接证明锁归本实例所有
+
+这是本轮最重要的新增问题。
+
+R15 §23.2 规定：P2 独立打开锁对象，尝试非阻塞排他锁，期望收到 EWOULDBLOCK。
+
+但这个结果只证明存在冲突锁，不证明该锁一定由本实例持有。
+
+考虑如下反例：
+
+本实例 T1 成功取锁。
+
+本实例错误释放锁，但没有关闭 FD。
+
+另一进程取得同一锁对象的排他锁。
+
+本实例执行 P2，得到 EWOULDBLOCK。
+
+FD 扫描未及时发现另一进程。
+
+此时 P2 可以通过，但本实例已经失去锁所有权。
+
+因此 §23.2.5 的“误释放后 P2 必然成功取锁”不能作为无条件结论。只有确认不存在其他冲突锁持有者时，该断言才成立。
+
+要求修改：
+
+把 P2_EWOULDBLOCK 定义为必要但非充分证据。
+
+锁所有权必须由可信 FD/OFD 生命周期保证及持锁状态证据共同支持。
+
+P2 失败原因必须区分 EWOULDBLOCK 与权限错误、无效 FD 等其他错误。
+
+P2 意外取得锁时，必须确保探针 FD 及其获得的锁安全释放，并拒绝本次业务写入。
+
+新增“本实例提前释放、第三方随后取锁”的多进程反例测试，要求零候选写入。
+
+建议错误码：
+
+LOCK_OWNERSHIP_UNPROVEN 或既有 EXCLUSIVE_WINDOW_UNAVAILABLE。
+
+另外，跨进程 FD 扫描只能在明确支持并可验证的 Linux 隔离环境内作为辅助检测，不能作为锁所有权的权威来源。
+
+CHANGE 62（P1）—— COMMITTED 归因需证明执行身份
+
+R15 对 UNKNOWN 的保护是正确的。
+
+但 §23.4 的升级规则还应明确：
+
+相同主键、相同候选内容、相同时间窗口，不必然等于同一次执行提交。
+
+建议补充独立的执行身份关联，例如受信任、不可变的 executionRef 或等价事务关联证据，并明确这些字段从何而来、是否能被其他写入者伪造。
+
+如果现有 schema 不能支持这种归因，则不能因为重读到匹配行就宣称当前事务 COMMITTED。
+
+这不会阻止识别“候选记录已经存在”，但应区分：
+
+CANDIDATE_EXISTS
+
+THIS_EXECUTION_COMMITTED
+
+两者不是同一个结论。
+
+CHANGE 63（P1）—— nonce 消费状态必须具有 UNKNOWN 分支
+
+R15 §23.7 已正确禁止未确认持久化时继续写入。
+
+但需要进一步区分两种情况：
+
+数据库明确确认消费事务回滚：可以报告没有成功消费。
+
+消费事务的提交结果不可知：必须报告 CONSUMPTION_UNKNOWN，不能报告 UNCONSUMED，也不能擅自报告 CONSUMED。
+
+在 CONSUMPTION_UNKNOWN 下，当前执行应终止，旧 nonce 不可重试，后续只能重新签发授权。
+
+如果消费事务实际上已经提交，旧 nonce 必须仍保持已消费。即使业务候选记录尚未写入，也不得释放旧授权。
+
+这能同时保证安全性和状态报告真实性。
+
+关于你特别询问的两张既有表，我已读取固定提交下的 Prisma schema 相关片段，确认其中声明了相应唯一键与消费者交付幂等结构。
+
+“模式先例不代表可复用”这一表述足够保守，予以接受。
+
+但不能借此推导 U2 nonce 消费存储已经存在、可以直接复用或获得写入授权。
+
+四、实施授权裁决
+
+U2 设计 R15 最终裁决
+
+REVISE
+
+授权项目
+
+
+
+裁决
+
+
+
+
+U1_FINAL_CLOSURE
+
+
+
+YES（沿用前次封板）
+
+
+
+
+U2_DESIGN_R15_ACCEPTED
+
+
+
+NO
+
+
+
+
+U2_PLATFORM_ONLY_INSERT_SUBSET
+
+
+
+NOT_AUTHORIZED
+
+
+
+
+U2_IMPLEMENTATION_AUTHORIZED
+
+
+
+NO
+
+
+
+
+U2_NONCE_CONSUMPTION_STORE
+
+
+
+NOT_VERIFIED
+
+
+
+
+SCHEMA_MIGRATION
+
+
+
+HOLD
+
+
+
+
+RUNTIME_WIRING
+
+
+
+FORBIDDEN
+
+
+
+
+MODEL_CALL / PROVIDER_CALL
+
+
+
+FORBIDDEN
+
+
+
+
+EXTERNAL_WRITE
+
+
+
+HOLD
+
+
+
+
+AUTO_MERGE / AUTO_DEPLOY
+
+
+
+FORBIDDEN
+
+
+
+
+PRODUCTION_READY
+
+
+
+NO
+
+R15 仍停留在设计审计阶段。没有证据证明数据库权限、运行时锁机制、全局不可变性、生产安全或 Linux 多进程测试已经通过。
+
+本次 GitHub 只读访问确认了提交及 Git blob SHA；但未独立复算文档 SHA-256，也未实际执行 PostgreSQL、Vitest、TSC、CI 或生产环境验证。上述状态继续为 NOT_VERIFIED。
+
+五、下一轮授权与机器可读裁决
+
+为避免设计审查无限扩散，下一轮只要求处理三项实质问题，不重复已闭合的 CHANGE 54、56、58、59。
+
+MSG-20261009-40 · 审计结果
+
+复制裁决
+
+可直接交给 Codex / OpenClaw，作为下一轮只读设计修订的审计边界。
+
+AUDIT_ID=MSG-20261009-40
+REVIEWED_HEAD=52308673d10f571e74f4bca29bc2b4fd5435a5d5
+DECISION=REVISE
+
+CHANGE_54=PASS
+CHANGE_55=REVISE
+CHANGE_56=PASS
+CHANGE_57=PASS_WITH_REVISE
+CHANGE_58=PASS
+CHANGE_59=PASS
+CHANGE_60=PASS_WITH_REVISE
+
+REQUIRED_CHANGES=CHANGE_61_P0,CHANGE_62_P1,CHANGE_63_P1
+
+U2_DESIGN_R15_ACCEPTED=NO
+U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED
+U2_IMPLEMENTATION_AUTHORIZED=NO
+
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R16_READ_ONLY_CHANGES_61_TO_63
+NEXT_AUDIT=MSG-20261009-41
+
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终裁决：R15 = REVISE。 允许进入 R16 的只读设计修订和证据复核，但不允许实施 U2_PLATFORM_ONLY_INSERT_SUBSET。下一轮重点是消除 P2 锁归属假阳性、COMMIT 执行归因假阳性，以及 nonce 消费终态不确定时的状态误报。
+```

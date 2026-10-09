@@ -2786,3 +2786,67 @@ EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READ
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 DB_RUNTIME_PRIVILEGE_VERIFICATION / GLOBAL_IMMUTABILITY_PROOF = NOT_VERIFIED
 ```
+
+---
+
+### 2.44 MSG-20261009-40 裁决归档 = **REVISE**（R15：4 项 PASS / 2 项 PASS WITH REVISE / 1 项 REVISE；只新增 CHANGE 61–63）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-40] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（166/166，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=4039 / NORM_LINES=166 / FNV=d1af5162`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R14=b57e5cb8`、`REVIEWED_HEAD=52308673`。
+
+**审计方独立核验（本轮全部 PASS）**：固定提交存在、比较区间 `54e14e66..52308673`、**提交数 1 / 文件数 1**（仅 U2 设计文档）、
+`+204 / −9`、`apps/api` 产品代码变更 **0**、**Git blob SHA `4039241295d5a3e3a03a9d53473bbdf7564342ba` 匹配**、
+`U2 已实施 = NO`、`U2 实施授权 = NO`；并强调**三个状态不可互相推出**：
+`U2_DESIGN_ACCEPTED` / `U2_IMPLEMENTATION_AUTHORIZED` / `PRODUCTION_READY`。
+（**上一轮的送审范围误述已不再出现**：本轮双口径 `AUDIT_SCOPE` 与 `SINGLE_COMMIT_SCOPE` 一致，均为 1 提交 / 1 文件。）
+
+**逐项裁决**：`CHANGE 54 = PASS`（T0/T1/T2 时序矛盾已消除；L0/L1、inode 与 OFD 的区别及失败码已明确）、
+`CHANGE 55 = REVISE`、`CHANGE 56 = PASS`（检测与保证的职责已区分，扫描竞态与局限已承认）、
+`CHANGE 57 = PASS WITH REVISE`（四类结果分流合理，但 `COMMITTED` 归因仍需防止其他写入者造成假阳性）、
+`CHANGE 58 = PASS`（仓库证据与运行库事实分离，未越界声称生产数据库已验证）、
+`CHANGE 59 = PASS`（原始字节、排序与摘要使用规则已明确；**此项为设计通过，不是解析器测试通过**）、
+`CHANGE 60 = PASS WITH REVISE`（持久化与实施范围边界已写明，但未确认提交后的授权状态还需进一步明确）。
+`U2_DESIGN_R15_ACCEPTED = NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED`。
+
+**CHANGE 55 为何仍 REVISE（本轮最重要新增问题）**：`P2` 收到 `EWOULDBLOCK` **只证明存在冲突锁，不证明该锁由本实例持有**。
+反例：本实例 `T1` 取锁 → 本实例**误释放锁但未关闭 FD** → **另一进程取得同一锁对象的排他锁** →
+本实例执行 `P2` 得到 `EWOULDBLOCK`，且 FD 扫描未及时发现另一进程 ⇒ `P2` 通过，但本实例**已失去锁所有权**。
+因此 R15 §23.2.5 的「误释放后 `P2` 必然成功取锁」**不能作为无条件结论**（仅在确认不存在其他冲突持有者时才成立）。
+
+**新增 REQUIRED_CHANGES（下一轮 MSG-20261009-41 只做这三项；不重复已闭合的 CHANGE 54/56/58/59）**
+
+- **CHANGE 61（P0）`P2` 不能直接证明锁归本实例所有**：①`P2_EWOULDBLOCK` 定义为**必要但非充分**证据；
+  ②锁所有权须由**可信 FD/OFD 生命周期保证**与**持锁状态证据**共同支持；③`P2` 的失败原因必须区分 `EWOULDBLOCK` 与权限错误、无效 FD 等其他错误；
+  ④`P2` **意外取得锁**时，必须确保探针 FD 及其获得的锁**安全释放**，并**拒绝本次业务写入**；
+  ⑤新增「**本实例提前释放、第三方随后取锁**」的多进程反例测试，要求**零候选写入**；
+  ⑥建议错误码 `LOCK_OWNERSHIP_UNPROVEN` 或既有 `EXCLUSIVE_WINDOW_UNAVAILABLE`；
+  ⑦跨进程 FD 扫描只能在**明确支持并可验证的 Linux 隔离环境**内作为**辅助检测**，**不能**作为锁所有权的**权威来源**。
+- **CHANGE 62（P1）`COMMITTED` 归因需证明执行身份**：相同主键、相同候选内容、相同时间窗口**不必然**等于同一次执行提交
+  ⇒ 须补充**独立执行身份关联**（受信任、不可变的 `executionRef` 或等价事务关联证据），并说明其来源与**可否被其他写入者伪造**；
+  若现有 schema **不支持**该归因，**不得**因重读到匹配行就宣称当前事务 `COMMITTED`；
+  且必须区分 `CANDIDATE_EXISTS` 与 `THIS_EXECUTION_COMMITTED`（两者不是同一结论）。
+- **CHANGE 63（P1）nonce 消费状态必须具有 UNKNOWN 分支**：①数据库明确确认消费事务**回滚** ⇒ 可报告没有成功消费；
+  ②消费事务**提交结果不可知** ⇒ 必须报告 `CONSUMPTION_UNKNOWN`，**不得**报告 `UNCONSUMED`，也**不得**擅自报告 `CONSUMED`；
+  ③`CONSUMPTION_UNKNOWN` 下当前执行应**终止**、旧 `nonce` **不可重试**，后续只能**重新签发授权**；
+  ④若消费事务**实际已提交**，旧 `nonce` **必须仍保持已消费**——**即使业务候选记录尚未写入，也不得释放旧授权**。
+
+**审计方对上一轮两处询问的回应**：已读取固定提交下 Prisma schema 相关片段，确认其中声明了相应唯一键与消费者交付幂等结构；
+**接受**「模式先例不代表可复用」的表述，但**不**由此推导 U2 `nonce` 消费存储已存在、可直接复用或已获写入授权。
+
+```text
+MSG-20261009-40_FINAL_VERDICT = REVISE
+MSG-20261009-40_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 166/166；FNV1A d1af5162）
+CHANGE_54=PASS · CHANGE_55=REVISE · CHANGE_56=PASS · CHANGE_57=PASS_WITH_REVISE · CHANGE_58=PASS ·
+CHANGE_59=PASS · CHANGE_60=PASS_WITH_REVISE
+U1_FINAL_CLOSURE = YES（沿用封板）· U2_DESIGN_R15_ACCEPTED = NO
+U2_IMPLEMENTATION_AUTHORIZED = NO · U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED
+U2_NONCE_CONSUMPTION_STORE = NOT_VERIFIED
+REQUIRED_CHANGES = CHANGE_61_P0 ; CHANGE_62_P1 ; CHANGE_63_P1
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R16_READ_ONLY_CHANGES_61_TO_63
+NEXT_AUDIT = MSG-20261009-41
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
