@@ -183384,3 +183384,374 @@ MSG-20261009-50 = PASS WITH REVISE。
 
 审计到此结束。本会话未对仓库执行任何写入、合并或部署操作。
 ```
+
+### [MSG-20261009-51] U2 前置条件 R5 只读收口 = **PASS WITH REVISE**（`R5_DOCUMENT_CLOSURE=ACCEPTED_WITH_FINDINGS`；逐项 `CHANGE 94 = PASS_WITH_REVISE`、`95 = PASS`、`96 = PASS`、`97 = PASS_WITH_REVISE`；**新增 CHANGE 98（P0）/99（P1）/100（P1）**；`CARRIER_DECISION=HOLD`、`F01_STATUS=OPEN_P0`、`HOST_EVIDENCE_RECEIVED=NONE`、`P3_EXPERIMENT_AUTHORIZED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED`、`PRODUCTION_READY=NO`）—— **独立核验**：`bbc7536e → 7739eacf` 确为 **1 提交 / 4 文件**、变更**仅在 `docs/releases/`**（三个审计材料 + 一个 checkpoint）、**无产品代码文件变更**、**三份送审文档 Git blob SHA 与申报值一致**、CHANGE 94–97 核心更正均已体现在仓库文档中、R5 新增路线 A/B 比较与 S12/S13 设计及禁止越权声明均已落地；审计方强调以上确认的是**文档内容与 Git 对象的一致性，不是 PostgreSQL 运行时正确性的证明**，并划出关键分界：`DOCUMENT_CLOSURE=ACCEPTED`、**`FENCING_PROTOCOL=NOT_PROVEN`**、`CARRIER_DECISION=HOLD`、`U2_IMPLEMENTATION_AUTHORIZED=NO`；**CHANGE 94 PASS WITH REVISE 并发现新的 P0 证据**：源码复核确认 `fail()` 使用显式 `$transaction`（先验证 lease/task 再两次 CAS）、`renew()` 确为**事务外读取 + 一次 `updateMany` CAS**、`rsi-restart-reconcile` 由注入式 Store 收敛且**未定义 generation**、`fault-incident-intake.ts` **直接使用 `$queryRaw` 执行 `INSERT ... ON CONFLICT DO UPDATE ... WHERE ... RETURNING`**（原「无原始 SQL 写入」的绝对断言已被源码证伪）；审计方建议定稿描述为「仓库已确认存在通过 Prisma `$queryRaw` 承载的 PostgreSQL 原生写入 SQL，包括 `fault-incident-intake.ts` 的原子 UPSERT；**`$queryRaw` 的 API 名称不能作为 SQL 只读属性的证明**；仓库写入者清单**尚未穷举**」；**新增 CHANGE 98（P0）事务内负结果不得造成部分提交**——`reclaimExpired()`（`leaseCas.count !== 1 → return false`；`return taskCas.count === 1`）、`settle()` 与 `fail()` 存在同类模式：**当第一步 CAS 成功而第二步失败时，事务回调正常返回 `false`/`{applied:false}`，而 Prisma 交互式事务中「正常返回」并不会自动回滚** ⇒ 第一步（`ACTIVE → EXPIRED` / 租约 `RELEASED`）**可能已经提交**而第二步未完成 ⇒ 这与我方文档「失败路径不产生部分写入」的**无条件表述不一致**（**并不证明生产实际发生了不一致**，但构成源码层面可构造的反例，必须进入下一轮**负例验收**）；要求区分「事务尚未发生任何写入的正常拒绝」与「已经发生写入后的业务失败」，后者必须保证**整体回滚**，不能仅依赖 `return false`/`{applied:false}`；只读阶段先完成**源码路径与反例矩阵**，**不得在本轮直接实施修复**，并纳入 **S13** 提供真实 PostgreSQL 隔离测试验收条件（验收关键：任何未完整成功的「租约+任务」双状态转换都不得留下未定义的部分提交状态）；**新增 CHANGE 99（P1）Reconcile 状态保护需要跨对象一致性证明**——`runRsiRestartReconcile()` 先读任务与租约快照，再分别调用 `markLeaseStatus()` → `requeueTask()`，**Store 接口只要求状态前置条件，未把租约 generation/owner/到期时间与任务重新入队绑定为同一原子协议** ⇒ 单项可幂等 **≠** 并发接管过程中两项操作整体安全；R6 须明确场景：**旧快照认定租约已过期，但执行 `requeue` 前该任务已被新执行尝试接管 ⇒ 旧 reconcile 不得仅凭任务仍是 `IN_PROGRESS` 就把新执行尝试的任务改回 `READY`**（作为 S13 的并发子场景，无须另起设计循环）；**新增 CHANGE 100（P1）数据库锁先例不得直接等同于正式载体**——`invoice-issue.ts` 的 advisory lock 存在已被核实，但须保留两项限制：①`hashtext(...)::bigint` **不提供业务键与锁键之间严格的一一对应关系，存在哈希碰撞可能** ②advisory lock **仅约束遵循相同锁协议的参与者**，未接入协议的写入入口不会自动受保护 ⇒ **路线 A 可优先评估，但不能因为 Billing 采用过 advisory lock 就直接视作 U2 fencing 的充分实现**；**R5 载体与实验裁决**：`路线 A 作为优先研究方向 = ACCEPTED`、`隔离实验方案草案作为申请材料 = ACCEPTED`、**`立即执行隔离实验 = NOT AUTHORIZED`**；同意在 `HOST_EVIDENCE_RECEIVED=NONE` 情况下以 **`CARRIER_DECISION=HOLD` 结束 R5**，且明确「这属于**正确的风险控制，不属于审计失败**」，但「结束」**仅表示 R5 只读文档任务完成**，**不表示 F-01 闭合**，更不意味着可恢复多实例自动写入；**下一步授权**：**`NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R6_READ_ONLY_NEGATIVE_PATH_CLOSURE`**（仅处理 CHANGE 98–100 并完成隔离实验申请的提交前检查；允许：读取固定提交下源码、检查事务分支、编写失败矩阵与验收断言、修正文档、准备宿主证据申请；**禁止**：修改产品代码、数据库迁移、连接生产数据库、运行 P3 实验、恢复调度器、调用模型或 Provider、自动部署）；**完成条件**：CHANGE 98–100 的文档与可验收标准收口，尚需运行时证明的项目保持 `NOT_PROVEN`；**若无新增实质性证据，应停止只读循环并转为等待宿主证据与独立实验授权**；隔离实验可单独提出正式授权申请，**批准前仍不得执行**；审计方最终意见：**R5 文档修订通过、载体选型不放行**，新增 CHANGE 98–100 纳入**一次有界**的 R6 只读收口，并指出「**这比重复修改已有设计更有价值：先把已发现的事务失败风险写成明确、可复现的验收条件，然后通过单独授权的隔离实验验证**」；本次审计**只读取了仓库，没有写入、提交、推送或更改任何文件**；reviewed ref `7739eacfcf8ee107318be00732919d5377e81480`
+
+```text
+MSG-20261009-51｜独立审计裁决
+PASS WITH REVISE · 限定范围通过
+
+审计对象： CrossClaim AI · SI/RSI INTERNAL CODE REPAIR V1
+阶段： PHASE 3-A · U2 前置条件 R5 只读收口
+审计锚点： 7739eacfcf8ee107318be00732919d5377e81480
+审计日期： 2026-10-09
+审计方式： GitHub 连接器只读核验 + 技术协议审查
+
+一、正式裁决
+
+同意 R5 文档收口，同意维持 CARRIER_DECISION=HOLD，不同意据此进入 U2 实施或生产写入。
+
+独立读取 GitHub 后，已确认：
+
+bbc7536e → 7739eacf 确为 1 个提交、4 个文件。
+
+变更仅涉及 docs/releases/ 下的三个审计材料文件和一个 checkpoint 文件，未出现产品代码文件变更。
+
+三份送审文档的 Git blob SHA 与申报值一致。
+
+CHANGE 94–97 所要求的核心更正均已体现在仓库文档中。
+
+R5 新增的路线 A/B 比较、S12/S13 实验设计和禁止越权声明均已落地。
+
+以上确认的是文档内容与 Git 对象的一致性，不是 PostgreSQL 运行时正确性的证明。
+
+本次裁决的关键分界：
+
+DOCUMENT_CLOSURE = ACCEPTED
+FENCING_PROTOCOL = NOT_PROVEN
+CARRIER_DECISION = HOLD
+U2_IMPLEMENTATION_AUTHORIZED = NO
+
+因此，R5 可以结束，但 F-01 仍须保持 P0 开放状态。
+
+二、CHANGE 94–97 逐项裁决
+
+项目
+
+
+
+裁决
+
+
+
+审计意见
+
+
+
+
+CHANGE 94
+
+
+
+PASS WITH REVISE
+
+
+
+三条路径已补，原生 SQL 更正准确；但发现事务负结果处理风险
+
+
+
+
+CHANGE 95
+
+
+
+PASS
+
+
+
+七维分级与必要条件准确
+
+
+
+
+CHANGE 96
+
+
+
+PASS
+
+
+
+双层证据分级合理
+
+
+
+
+CHANGE 97
+
+
+
+PASS WITH REVISE
+
+
+
+U-11/U-12 定义正确，须补充可复现的负例验收
+
+
+
+
+R5 路线比较
+
+
+
+ACCEPTED
+
+
+
+A 可优先评估，但并未获准实施
+
+
+
+
+R5 实验申请
+
+
+
+DRAFT ACCEPTED
+
+
+
+S12/S13 合理，执行尚未获授权
+
+1. CHANGE 94：核心修订接受，但发现新的 P0 证据
+
+直接复核源码后：
+
+fail() 确实使用显式 Prisma $transaction，先验证 lease/task，再进行两次 CAS。
+
+renew() 确实是事务外读取，随后执行一次 updateMany CAS。
+
+rsi-restart-reconcile 确实由注入式 Store 执行收敛，未定义 generation。
+
+fault-incident-intake.ts 直接使用 $queryRaw 执行 INSERT ... ON CONFLICT DO UPDATE ... WHERE ... RETURNING。因此原先“不存在原始 SQL 写入”的绝对断言已被源码证伪。
+
+对于最后一点，建议采用更精确的定稿描述：
+
+仓库已确认存在通过 Prisma $queryRaw 承载的 PostgreSQL 原生写入 SQL，包括 fault-incident-intake.ts 中的原子 UPSERT。$queryRaw 的 API 名称不能作为 SQL 只读属性的证明。仓库写入者清单尚未穷举。
+
+另一个关键发现是 reclaimExpired() 的实际逻辑：
+
+TypeScript
+const leaseCas = await tx.autonomyLease.updateMany(...);
+if (leaseCas.count !== 1) return false;
+
+const taskCas = await tx.autonomyTask.updateMany(...);
+return taskCas.count === 1;
+
+这里存在一个值得明确记录的事务语义问题：
+
+当 leaseCas.count === 1，但 taskCas.count === 0 时，事务回调正常返回 false。
+
+Prisma 交互式事务中，正常返回 false 并不会自动触发回滚。因此第一步 ACTIVE → EXPIRED 可能已经提交，而第二步 IN_PROGRESS → READY 未完成。
+
+settle() 和 fail() 也有类似模式：释放租约成功后，任务 CAS 失败时，回调正常返回 {applied:false}。
+
+这与 R5 文档中“失败路径不产生部分写入”的无条件表述不完全一致。
+
+这并不证明生产环境实际发生了不一致，但它提供了一个源码层面可以构造的反例，必须进入下一轮负例验收。
+
+裁决：CHANGE 94 的补录与更正目标已经达到，但其事务失败语义不得认定为已证明安全。
+
+2. CHANGE 95：通过
+
+七维评估的主要改进是将三个不同层次分开：
+
+存在 CAS 模式；
+
+CAS 是否等价于数据库级互斥或可串行化保护；
+
+保护是否覆盖写入事务的提交时刻。
+
+三者不能相互推出。
+
+同时，将 E-08 数据库权限闭环、E-09 主节点切换语义确认为载体获批必要条件是正确的。
+
+特别说明：仓库中现有 pg_advisory_xact_lock 用法证明的是存在可参考的数据库事务锁实现先例，不是 RSI/U2 已获得相同保护。
+
+建议保留：
+
+CAS_PATTERN=CODE_VERIFIED
+COMMIT_TIME_FENCING=NOT_PROVEN
+
+3. CHANGE 96：通过
+
+E-01、E-02、E-03 等区分了仓库配置与实际部署；E-10 区分源码逻辑与运行时验证；E-12 区分迁移文件和实际生效的数据库对象。
+
+这种分级足以防止把“文件存在”误判为“生产具备相应能力”。
+
+尤其认可：
+
+E10_REPO=CODE_VERIFIED_PARTIAL
+E10_RUNTIME=NOT_PROVEN
+E12_REPO=MIGRATION_TEXT_VERIFIED
+E12_RUNTIME=NOT_PROVEN
+
+4. CHANGE 97：不变量定义通过，运行时验收保留
+
+**U-11（ABA 防护）**应至少证明：执行尝试 A 被执行尝试 B 接管后，即便 B 使用相同 ownerRef，A 也不能通过身份校验继续提交。
+
+仅比较 owner 字符串不能证明这个性质。
+
+**U-12（部分失败与负结果）**应分别验证：
+
+CAS 影响零行不会误报协议成功；
+
+已完成第一步写入、第二步失败时具有明确整体回滚策略；
+
+事务异常与回滚可以归因到具体执行尝试；
+
+false 与异常具有不同且明确的协议含义；
+
+提交结果未知时，不重新触发不可证明幂等的外部副作用。
+
+U-11/U-12 作为规范性定义可以接受；二者都不应标记为实现验收通过。
+
+三、新增审计发现与必要修订
+
+R5 不需要重新打开 R21 设计，但下一轮必须对以下三个问题形成证据化结论。
+
+CHANGE 98（P0）：事务内负结果不得造成部分提交
+
+发现位置： rsi-durable-task-source.ts 的 reclaimExpired()、settle()、fail()。
+
+要求：
+
+区分“事务尚未发生任何写入的正常拒绝”和“已经发生写入后的业务失败”。
+
+后者必须保证整体回滚，不能仅依赖返回 false 或 {applied:false}。
+
+只读阶段先完成源码路径与反例矩阵；不得在本轮直接实施修复。
+
+将此问题纳入 S13，提供真实 PostgreSQL 隔离测试验收条件。
+
+验收关键是：任何未完整成功的租约与任务双状态转换，都不能留下未定义的部分提交状态。
+
+CHANGE 99（P1）：Reconcile 状态保护需要跨对象一致性证明
+
+源码中 runRsiRestartReconcile() 首先读取任务与租约快照，随后分别调用：
+
+markLeaseStatus() → requeueTask()
+
+其 Store 接口只要求状态前置条件，没有把租约的 generation、owner、到期时间与任务重新入队操作绑定为同一原子协议。
+
+因此，单项操作可幂等，不代表并发接管过程中两项操作整体安全。
+
+要求在 R6 中明确以下场景的验收条件：
+
+旧快照认定租约已过期，但执行 requeue 前，该任务已被新执行尝试接管。这时旧 reconcile 不能仅凭任务仍是 IN_PROGRESS，就将新执行尝试的任务改回 READY。
+
+建议将此作为 S13 的并发子场景，无须另起一轮设计循环。
+
+CHANGE 100（P1）：数据库锁先例不得直接等同于正式载体
+
+invoice-issue.ts 中数据库 advisory lock 的存在已经核实，但需要保留两项限制：
+
+hashtext(...)::bigint 不提供业务键与锁键之间严格的一一对应关系，存在哈希碰撞可能。
+
+advisory lock 仅约束遵循相同锁协议的参与者；未接入协议的写入入口不会自动受到保护。
+
+因此，路线 A 可以优先评估，但不能因为 Billing 采用过 advisory lock，就直接将其视作 U2 fencing 的充分实现。
+
+四、R5 载体与隔离实验裁决
+
+正式决定：继续优先评估路线 A，暂不批准任何载体。
+
+R5 新增路线比较文件可作为隔离实验的申请基础。S12/S13 已覆盖本轮最重要的两项遗漏：执行身份复用和负结果处理。
+
+但必须区分以下三个决定：
+
+决定事项
+
+
+
+裁决
+
+
+
+
+路线 A 作为优先研究方向
+
+
+
+ACCEPTED
+
+
+
+
+隔离实验方案草案作为申请材料
+
+
+
+ACCEPTED
+
+
+
+
+立即执行隔离实验
+
+
+
+NOT AUTHORIZED
+
+同意在 HOST_EVIDENCE_RECEIVED=NONE 的情况下以 CARRIER_DECISION=HOLD 结束 R5。
+
+这属于正确的风险控制，不属于审计失败。
+
+但这里的“结束”仅表示 R5 只读文档任务已经完成，不表示 F-01 闭合，更不意味着系统可以恢复多实例自动写入。
+
+五、下一步授权
+
+建议授权一次有界的 R6 只读证据收口，不再启动无限的设计修订循环。
+
+建议授权名称
+
+READ ONLY
+
+PHASE3_A_U2_PRECONDITION_R6_READ_ONLY_NEGATIVE_PATH_CLOSURE
+
+本轮仅处理 CHANGE 98–100，并完成隔离实验申请的提交前检查。
+
+允许： 读取固定提交下的源码、检查事务分支、编写失败矩阵与验收断言、修正文档、准备宿主证据申请。
+
+禁止： 修改产品代码、数据库迁移、连接生产数据库、运行 P3 实验、恢复调度器、调用模型或 Provider、自动部署。
+
+完成条件：CHANGE 98–100 的文档和可验收标准收口；尚需运行时证明的项目保持 NOT_PROVEN。若无新增实质性证据，应停止只读循环并转为等待宿主证据与独立实验授权。
+
+隔离实验可以单独提出正式授权申请，但申请获得批准以前仍不得执行。下一阶段真正有价值的是隔离 PostgreSQL 环境中的并发及回滚实证，而不是持续增加只读设计轮次。
+
+六、可直接归档的机器裁决
+
+以下内容可复制给 Codex。其状态仅代表本次审计，不代表已经写入仓库。
+
+MSG-20261009-51
+
+复制裁决
+
+AUDIT_DECISION=PASS_WITH_REVISE
+R5_DOCUMENT_CLOSURE=ACCEPTED_WITH_FINDINGS
+CHANGE_94=PASS_WITH_REVISE
+CHANGE_95=PASS
+CHANGE_96=PASS
+CHANGE_97=PASS_WITH_REVISE
+
+CHANGE_98=P0_TRANSACTION_NEGATIVE_RESULT_RISK
+CHANGE_99=P1_RECONCILE_CROSS_OBJECT_RACE
+CHANGE_100=P1_ADVISORY_LOCK_LIMITATIONS
+
+CARRIER_DECISION=HOLD
+F01_STATUS=OPEN_P0
+HOST_EVIDENCE_RECEIVED=NONE
+
+NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R6_READ_ONLY_NEGATIVE_PATH_CLOSURE
+P3_EXPERIMENT_AUTHORIZED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED
+PRODUCTION_READY=NO
+
+最终结论：R5 文档修订通过，载体选型不放行，新增 CHANGE 98–100 纳入一次有界的 R6 只读收口。
+
+这是比重复修改已有设计更有价值的下一步：先把已经发现的事务失败风险写成明确的、可复现的验收条件，然后通过单独授权的隔离实验验证。
+
+本次只读取了仓库，没有写入、提交、推送或更改任何文件。
+```

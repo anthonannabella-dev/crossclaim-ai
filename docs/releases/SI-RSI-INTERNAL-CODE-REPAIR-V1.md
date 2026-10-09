@@ -3906,3 +3906,86 @@ AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · U1_CODE_CLOSURE = UNCHANGED · U2_DESIGN
 BUSINESS_HEARTBEAT_RESTORED = NO · OS_TIMER_RESTORED = NO · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.60 MSG-20261009-51 裁决归档 = **PASS WITH REVISE**（R5 文档收口通过；**新增 CHANGE 98（P0）**：现有事务负结果可能导致部分提交；`CARRIER_DECISION=HOLD`；下一轮 R6 有界只读收口）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-51] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（166/166，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=5433 / NORM_LINES=166 / FNV=003a5fe9`。
+> 锚点：`BASELINE=bbc7536e`、`REVIEWED_HEAD=7739eacf`、`U1_CODE_HEAD=9ee36837`。
+
+**独立核验**：`bbc7536e → 7739eacf` 确为 **1 提交 / 4 文件**、变更**仅在 `docs/releases/`**、**无产品代码文件变更**、
+**三份送审文档 Git blob SHA 与申报值一致**、CHANGE 94–97 核心更正均已入库、R5 路线 A/B 比较与 S12/S13 及禁止越权声明均已落地。
+审计方强调：以上确认的是**文档与 Git 对象的一致性**，不是 PostgreSQL 运行时正确性。
+关键分界：`DOCUMENT_CLOSURE=ACCEPTED` / **`FENCING_PROTOCOL=NOT_PROVEN`** / `CARRIER_DECISION=HOLD` / `U2_IMPLEMENTATION_AUTHORIZED=NO`。
+
+**逐项**：`CHANGE 94 = PASS_WITH_REVISE`、`95 = PASS`、`96 = PASS`、`97 = PASS_WITH_REVISE`；`R5 路线比较 = ACCEPTED`、`R5 实验申请 = DRAFT ACCEPTED`（执行未获授权）。
+
+#### 2.60.1 CHANGE 98（P0）—— 事务内负结果不得造成部分提交（**对现有产品代码的 P0 发现**）
+
+审计方直接复核源码后指出：`reclaimExpired()` / `settle()` / `fail()` 存在同类模式——
+**第一步 CAS 成功、第二步 CAS 失败时，事务回调「正常返回」`false`/`{applied:false}`；
+而 Prisma 交互式事务中「正常返回」并不会自动回滚** ⇒ 第一步写入（如租约 `ACTIVE → EXPIRED`、租约 `→ RELEASED`）**可能已经提交**，而第二步（任务状态）未完成。
+
+```text
+reclaimExpired():
+  const leaseCas = await tx.autonomyLease.updateMany(...);
+  if (leaseCas.count !== 1) return false;
+  const taskCas = await tx.autonomyTask.updateMany(...);
+  return taskCas.count === 1;      // ← 非抛出式失败：不会自动回滚第一步
+```
+
+**影响**：这与我方 R5 文档「**失败路径不产生部分写入**」的**无条件表述不一致**。
+**注意（如实）**：**并不证明生产环境实际发生过不一致**，但构成**源码层面可构造的反例**。
+
+**R6 要求**：①区分「事务尚未发生任何写入的正常拒绝」与「已经发生写入后的业务失败」；②后者必须保证**整体回滚**，不能仅依赖 `return false` / `{applied:false}`；
+③只读阶段先完成**源码路径与反例矩阵**，**不得在本轮直接实施修复**；④纳入 **S13**，给出真实 PostgreSQL 隔离测试的验收条件
+（验收关键：**任何未完整成功的「租约 + 任务」双状态转换，都不得留下未定义的部分提交状态**）。
+
+#### 2.60.2 CHANGE 99（P1）—— Reconcile 跨对象一致性
+
+`runRsiRestartReconcile()` 先读任务与租约快照，再分别调用 `markLeaseStatus()` → `requeueTask()`；
+**Store 接口只要求状态前置条件，未把租约 generation/owner/到期时间与任务重新入队绑定为同一原子协议**
+⇒ 单项幂等 **≠** 并发接管中两项操作整体安全。
+
+**R6 须明确的场景**：旧快照认定租约已过期，但执行 `requeue` 前该任务**已被新执行尝试接管**
+⇒ **旧 reconcile 不得仅凭任务仍为 `IN_PROGRESS` 就把新执行尝试的任务改回 `READY`**（作为 S13 的并发子场景）。
+
+#### 2.60.3 CHANGE 100（P1）—— advisory lock 先例的边界
+
+`invoice-issue.ts` 的 advisory lock 存在已被核实，但须保留两项限制：
+① `hashtext(...)::bigint` **不提供业务键与锁键之间严格的一一对应关系，存在哈希碰撞可能**；
+② advisory lock **仅约束遵循相同锁协议的参与者**，未接入协议的写入入口不会自动受保护。
+⇒ **路线 A 可优先评估，但不得因 Billing 用过 advisory lock 就视其为 U2 fencing 的充分实现**。
+
+#### 2.60.4 裁决与下一步
+
+```text
+R5_DOCUMENT_CLOSURE=ACCEPTED_WITH_FINDINGS
+路线 A 作为优先研究方向 = ACCEPTED ；隔离实验方案草案作为申请材料 = ACCEPTED ；立即执行隔离实验 = NOT AUTHORIZED
+同意在 HOST_EVIDENCE_RECEIVED=NONE 下以 CARRIER_DECISION=HOLD 结束 R5（属正确的风险控制，非审计失败）
+但「结束」仅表示 R5 只读文档任务完成，不表示 F-01 闭合，也不意味着可恢复多实例自动写入
+
+NEXT_AUTHORIZED = PHASE3_A_U2_PRECONDITION_R6_READ_ONLY_NEGATIVE_PATH_CLOSURE
+  仅处理 CHANGE 98–100 + 隔离实验申请的提交前检查
+  允许：读取固定提交下源码 / 检查事务分支 / 编写失败矩阵与验收断言 / 修正文档 / 准备宿主证据申请
+  禁止：修改产品代码 / 数据库迁移 / 连接生产数据库 / 运行 P3 / 恢复调度器 / 调用模型或 Provider / 自动部署
+  完成条件：CHANGE 98–100 文档与可验收标准收口；尚需运行时证明者保持 NOT_PROVEN
+  【若无新增实质性证据，应停止只读循环，转为等待宿主证据与独立实验授权】
+  隔离实验须单独提出正式授权申请，批准前不得执行
+```
+
+```text
+MSG-20261009-51_FINAL_VERDICT = PASS_WITH_REVISE
+MSG-20261009-51_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 166/166；FNV1A 003a5fe9）
+CHANGE_94=PASS_WITH_REVISE · CHANGE_95=PASS · CHANGE_96=PASS · CHANGE_97=PASS_WITH_REVISE
+CHANGE_98=P0_TRANSACTION_NEGATIVE_RESULT_RISK · CHANGE_99=P1_RECONCILE_CROSS_OBJECT_RACE · CHANGE_100=P1_ADVISORY_LOCK_LIMITATIONS
+CARRIER_DECISION=HOLD · F01_STATUS=OPEN_P0 · HOST_EVIDENCE_RECEIVED=NONE
+NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R6_READ_ONLY_NEGATIVE_PATH_CLOSURE
+P3_EXPERIMENT_AUTHORIZED=NO · U2_IMPLEMENTATION_AUTHORIZED=NO · MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED · PRODUCTION_READY=NO
+SCHEMA_MIGRATION=HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL=FORBIDDEN · EXTERNAL_WRITE=HOLD
+AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN · U1_REOPEN=NO · U2_DESIGN_R21_REOPEN=NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
