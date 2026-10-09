@@ -328,3 +328,83 @@
 未改动 Runtime / 队列 / Action Guard / Prisma / migration / 封板分支、未开启任何外部副作用。
 `EXTERNAL_WRITE = HOLD`、`REAL_PROVIDER_EXECUTION = NOT_AUTHORIZED`、`AUTO_MERGE = FORBIDDEN`、`AUTO_DEPLOY = FORBIDDEN`、`PRODUCTION_READY = NO`。
 
+
+---
+
+## 15. PHASE 3-A · U1 实施规格（MSG-20261009-14 前置条件 ②）
+
+> 授权：`PHASE3_A_MINIMAL_SCOPE_AUTHORIZED = YES`，授权单元 = `U1_READ_ONLY_SUBSET`。
+> 设计评审锚点：`46e9cd9d`（实施采用独立可追溯提交，本次提交即该独立提交）。
+
+### 15.1 文件白名单（本次 U1 实施仅新增以下文件，**未修改任何既有文件**）
+
+| 文件 | 类型 | 说明 |
+| --- | --- | --- |
+| `apps/api/src/services/self-repair/trusted-facts-adapter.ts` | 新增 | 只读适配器 + 只读 Prisma 端口 + 边界声明 |
+| `apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts` | 新增 | 端口级（纯函数）验收 12 用例 |
+| `apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts` | 新增 | 真实 PostgreSQL 只读验收 4 用例 |
+| `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3-DESIGN.md` | 文档 | 追加本节（§15）与 U1 记录 |
+| `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1.md` | 文档 | checkpoint 更新 |
+
+**未触碰**：Prisma schema / migration、既有任务队列（`prisma-task-queue-port`）、`rsi-durable-task-source`、runtime 控制流、封板分支。
+
+### 15.2 接口签名（不可伪造的输入面）
+
+```ts
+createTrustedFactsAdapter(input: {
+  readPort: TrustedFactsReadPort;          // 只读端口（仅 findOrganization / findStandingAuthorization）
+  executionContext: TrustedExecutionContext; // 运行时注入：subjectRef + operationRecheck
+  now?: () => Date;
+}): TrustedFactsAdapter
+
+TrustedFactsAdapter.resolve(input: {
+  organizationId: string;   // 必须来自服务端会话/授权上下文（非候选载荷）
+  actionType: string;
+  amountUsd?: string;
+}): Promise<
+  | { ok: true; facts: TriageTrustedFacts; provenance: TrustedFactsProvenance }
+  | { ok: false; reason: TrustedFactsFailureReason; provenance: TrustedFactsProvenance | null }
+>
+```
+
+关键点：`resolve` **没有** payload / request / model 参数 ⇒ 候选载荷、请求体、模型输出在**类型层面**无法成为可信身份或可信事实。
+输出 `facts` 与既有 `TriageTrustedFacts` 同构，可直接喂给既有 `triageFaultIncident`。
+
+### 15.3 可信数据来源
+
+| 事实 | 来源 | 实现 |
+| --- | --- | --- |
+| `organizationIdResolved` | `TRUSTED_PERSISTED_IDENTITY` | `Organization.findUnique`（SELECT）；`identityVersion` 取该行 `updatedAt`（不新增列） |
+| `authorizationActive` | `SERVER_AUTHORIZATION_STATE` | `StandingAuthorization.findFirst`（SELECT，取最高 `authorizationVersion`）；校验撤销状态 / 生效期 / 动作类型 / 金额上限 |
+| `operationRecheck` | `TRUSTED_EXECUTION_CONTEXT` | 由运行时注入的 `executionContext`（`NOT_CONFIRMED` ⇒ 直接 fail-closed） |
+
+provenance 记录：`source` / `resolvedFrom` / `subjectRef` / `identityVersion` / `authorizationVersion` / `scopeDigest` / `resolvedAt`，
+并给出 `factVersion = org:<identityVersion>|auth:<authorizationVersion>`（供快照作废判定；**每次调用重新读取**，不缓存）。
+
+**fail-closed 原因码**：`TENANT_CONTEXT_REQUIRED` / `ORGANIZATION_NOT_FOUND` / `AUTHORIZATION_NOT_FOUND` /
+`AUTHORIZATION_REVOKED` / `AUTHORIZATION_NOT_EFFECTIVE` / `ACTION_TYPE_NOT_ALLOWED` / `MONETARY_LIMIT_EXCEEDED` /
+`OPERATION_RECHECK_NOT_CONFIRMED`。无法解析的金额（非十进制）视为**超限**（fail-closed）。
+
+### 15.4 非目标（本轮明确不做）
+
+- 不写任何业务表 / 不创建候选记录或任务 / 不获取租约 / 不调用运行时 / 不产生外部副作用；
+- **不**接入 `rsi-run` 或其控制流；**不**修改队列认领语义；**不**实现 U2–U5；
+- 不新增 Scheduler / Controller / Runtime；不改 schema / migration；不改封板分支；
+- `runtimeSourceIsolationImplemented` 仍为 **false**（继续作为阻断执行接线的硬门）。
+
+### 15.5 U1 验收证据（本次实测）
+
+| 项目 | 命令 | 结果 |
+| --- | --- | --- |
+| 端口级（纯函数） | `vitest run src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts` | **12/12 PASS** |
+| 真实 PostgreSQL（只读端口） | `vitest run src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts` | **4/4 PASS**（隔离库 `crossclaim_p3r2_iso`） |
+| 类型检查 | `apps/api tsc --noEmit` | **0 error** |
+
+真实 PostgreSQL 覆盖：有效授权解析成功（provenance + `factVersion` 形如 `org:…|auth:3`）；
+组织不存在 / 授权撤销 / 授权过期 / 动作类型不允许 / 超限额 逐项 fail-closed；
+**只读副作用断言**：调用前后 `AutonomyTask` / `AutonomyLease` / `AutonomyIncident` 计数不变。
+静态断言：适配器源码不含 `.create(` / `.update(` / `.delete(` / `.upsert(` / `$executeRaw` / `$queryRaw`，
+且不含候选载荷/模型输入字段。
+
+**未宣称**：U1 **实施审计尚未通过**（`PHASE3_U1_IMPLEMENTATION_CLOSED = NO`）；U2–U5 未授权；自动代码修复仍禁止。
+
