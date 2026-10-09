@@ -46,6 +46,7 @@ export type CustomsOpportunityProjectionReason =
   | 'ELIGIBILITY_INDETERMINATE'
   | 'ESTIMATE_ESTIMATED'
   | 'ESTIMATE_NOT_ESTIMATED'
+  | 'AMOUNT_WITHHELD_PENDING_ELIGIBILITY'
   | 'NO_DISCLOSABLE_AMOUNT'
   | 'NO_CROSS_CURRENCY_TOTAL'
   | 'DUPLICATE_ECONOMIC_BENEFIT_EXCLUDED'
@@ -292,19 +293,22 @@ export function projectCustomsOpportunity(
     return emptyProjection('NOT_ELIGIBLE', {});
   }
 
-  // 6) 金额：仅 C5 ESTIMATED 时才可展示；否则一律空（不得虚构）
+  // 6) 金额：必须 C4 = ELIGIBLE **且** C5 = ESTIMATED 才可展示；否则一律空
+  //    （V2-R1 / CHANGE 01：此前只看 C5，导致 C4 INDETERMINATE 时仍暴露金额）
   const estimateIsEstimated = input.estimate?.status === 'ESTIMATED';
-  const { byCurrency, excluded } = selectAmounts(input.amountCandidates, estimateIsEstimated);
+  const eligibilityEligible = input.eligibility.status === 'ELIGIBLE';
+  const amountsAllowed = eligibilityEligible && estimateIsEstimated;
+  const { byCurrency, excluded } = selectAmounts(input.amountCandidates, amountsAllowed);
   if (!estimateIsEstimated) {
     reasons.push('ESTIMATE_NOT_ESTIMATED');
   } else {
     reasons.push('ESTIMATE_ESTIMATED');
+    if (!eligibilityEligible) reasons.push('AMOUNT_WITHHELD_PENDING_ELIGIBILITY');
   }
   if (excluded.length > 0) reasons.push('DUPLICATE_ECONOMIC_BENEFIT_EXCLUDED');
-  if (byCurrency.length === 0 && estimateIsEstimated) reasons.push('NO_DISCLOSABLE_AMOUNT');
+  if (byCurrency.length === 0 && amountsAllowed) reasons.push('NO_DISCLOSABLE_AMOUNT');
   if (byCurrency.length > 0) reasons.push('NO_CROSS_CURRENCY_TOTAL');
 
-  const eligibilityEligible = input.eligibility.status === 'ELIGIBLE';
   const readyToUnlock = eligibilityEligible && estimateIsEstimated && byCurrency.length > 0;
 
   // 7) 状态收敛

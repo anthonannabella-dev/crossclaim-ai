@@ -134,15 +134,33 @@ describe('V2-03 六态投影 — 顺序与 fail-closed', () => {
     }
   });
 
-  it('C4 INDETERMINATE + C5 ESTIMATED → FREE_ESTIMATED，入口不可见但金额可见', () => {
+  it('C4 INDETERMINATE + C5 ESTIMATED → FREE_ESTIMATED，入口不可见且金额必须扣留（CHANGE 01）', () => {
     const result = projectCustomsOpportunity(
       input({ eligibility: { status: 'INDETERMINATE', reasonCodes: ['OTHER_KIND_LINES_PRESENT'] } }),
     );
     expect(result.state).toBe('FREE_ESTIMATED');
     expect(result.unlockEntryVisible).toBe(false);
-    expect(result.disclosableByCurrency).toEqual([
-      { currency: 'USD', dutyCorrection: '1200', drawback: null },
-    ]);
+    expect(result.disclosableByCurrency).toEqual([]);
+    expect(result.reasonCodes).toContain('AMOUNT_WITHHELD_PENDING_ELIGIBILITY');
+  });
+
+  it('组合矩阵：仅 C4=ELIGIBLE 且 C5=ESTIMATED 才输出金额（C4 三态 × C5 全状态）', () => {
+    for (const eligibilityStatus of ['ELIGIBLE', 'INDETERMINATE', 'NOT_ELIGIBLE'] as const) {
+      for (const estimateStatus of ['ESTIMATED', 'NOT_ESTIMATED', 'INDETERMINATE'] as const) {
+        const result = projectCustomsOpportunity(
+          input({
+            eligibility: { status: eligibilityStatus, reasonCodes: [] },
+            estimate: { status: estimateStatus },
+          }),
+        );
+        const amountsShown = result.disclosableByCurrency.length > 0;
+        const expectedAmounts = eligibilityStatus === 'ELIGIBLE' && estimateStatus === 'ESTIMATED';
+        expect(amountsShown).toBe(expectedAmounts);
+        if (!expectedAmounts) {
+          expect(result.unlockEntryVisible).toBe(false);
+        }
+      }
+    }
   });
 
   it('已取得付费权益 → UNLOCKED', () => {
