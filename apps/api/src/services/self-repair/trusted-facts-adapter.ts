@@ -3,7 +3,17 @@
  * ---------------------------------------------------------------
  * 授权依据（历史）：MSG-20261009-14 `PHASE3_A_MINIMAL_SCOPE_AUTHORIZED = YES`，授权单元 = `U1_READ_ONLY_SUBSET`。
  * 修订依据：MSG-20261009-15 → **CHANGE 17–20**（设计文档 §17）；
- *           MSG-20261009-16 → **CHANGE 24–25**（U1 FINAL-R3，设计文档 §18）。
+ *           MSG-20261009-16 → **CHANGE 24–25**（U1 FINAL-R3，设计文档 §18）；
+ *           MSG-20261009-17 → **CHANGE 26–28**（U1 FINAL-R4：可独立复核的原始材料 + 范围声明链核验）。
+ *
+ * **CHANGE 27 要点（范围不给「没传」留放大口子）**
+ *   - 必需维度：必须由可信上下文提供，缺失 / 空串 / 声明为不适用 ⇒ fail-closed；
+ *   - 可选维度：**必须二选一** —— 要么提供具体值，要么由服务端**显式声明「不适用」**；
+ *     两者皆无 ⇒ `OPTIONAL_SCOPE_UNDECLARED`（fail-closed）。
+ *     即：**不能仅凭「字段没传」来放大授权匹配面**；省略必须是一次显式的服务端决定。
+ *   - 同一维度既提供又声明不适用 ⇒ `SCOPE_DECLARATION_CONFLICT`（fail-closed）。
+ *   - `resourceScope` / `notApplicableScopeDimensions` 均只能来自**可信执行上下文**，
+ *     请求入参中不存在这两个字段；请求侧夹带同名属性不会改变匹配结果（有用例证明）。
  *
  * **只读边界（硬约束）**
  *   - 只执行 SELECT：读取 Organization 身份 + 该组织**全部** StandingAuthorization 行；
@@ -111,6 +121,11 @@ export interface TrustedExecutionContext {
   operationRecheck: 'CONFIRMED_READ_ONLY' | 'CONFIRMED_IDEMPOTENT_NOT_APPLIED' | 'NOT_CONFIRMED';
   /** CHANGE 24：**可信资源范围**（服务端解析注入；策略要求的维度必须齐备）。 */
   resourceScope?: TrustedFactsResourceScope;
+  /**
+   * CHANGE 27：服务端对**可选维度**的显式「不适用」声明。
+   * 可选维度若既不提供值、也不在此声明，则解析 fail-closed（防止用「没传」放大授权范围）。
+   */
+  notApplicableScopeDimensions?: readonly TrustedFactsScopeDimension[];
 }
 
 export interface TrustedFactsProvenance {
@@ -144,6 +159,8 @@ export interface TrustedFactsProvenance {
     required: readonly TrustedFactsScopeDimension[];
     optional: readonly TrustedFactsScopeDimension[];
     providedDimensions: readonly TrustedFactsScopeDimension[];
+    /** CHANGE 27：服务端显式声明「不适用」的可选维度（省略即此处留痕，而非静默放宽）。 */
+    notApplicableDimensions: readonly TrustedFactsScopeDimension[];
     resolvedAt: string;
   };
   operationRecheck: {
@@ -174,6 +191,8 @@ export type TrustedFactsFailureReason =
   | 'ACTION_TYPE_NOT_ALLOWED'
   | 'SCOPE_POLICY_NOT_DEFINED'
   | 'REQUIRED_SCOPE_MISSING'
+  | 'OPTIONAL_SCOPE_UNDECLARED'
+  | 'SCOPE_DECLARATION_CONFLICT'
   | 'MONETARY_INPUT_INVALID'
   | 'MONETARY_LIMIT_EXCEEDED'
   | 'STALE_FACT_VERSION'
@@ -263,17 +282,55 @@ function parseMonetaryInput(request: {
 }
 
 /**
- * CHANGE 24：校验策略要求的**必需范围维度**是否齐备（缺失 / 空串 / 非法类型 ⇒ fail-closed）。
+ * CHANGE 24 + CHANGE 27：校验范围**声明**是否完整且自洽。
+ *   必需维度：必须提供且不得声明不适用；
+ *   可选维度：必须「提供值」或「显式声明不适用」二选一（两者皆无 ⇒ OPTIONAL_SCOPE_UNDECLARED）；
+ *   同一维度既提供又声明不适用 ⇒ SCOPE_DECLARATION_CONFLICT。
  * 注意：范围值来自**可信执行上下文**，而不是请求；调用者无法通过省略维度放大匹配面。
  */
-export function missingRequiredScopeDimensions(
-  policy: { required: readonly TrustedFactsScopeDimension[] },
+export type ScopeDeclarationCheck =
+  | {
+      ok: true;
+      providedDimensions: readonly TrustedFactsScopeDimension[];
+      notApplicableDimensions: readonly TrustedFactsScopeDimension[];
+    }
+  | {
+      ok: false;
+      reason: 'REQUIRED_SCOPE_MISSING' | 'OPTIONAL_SCOPE_UNDECLARED' | 'SCOPE_DECLARATION_CONFLICT';
+    };
+
+export function checkScopeDeclaration(
+  policy: { required: readonly TrustedFactsScopeDimension[]; optional: readonly TrustedFactsScopeDimension[] },
   scope: TrustedFactsResourceScope | undefined,
-): readonly TrustedFactsScopeDimension[] {
-  return policy.required.filter((dimension) => {
+  notApplicable: readonly TrustedFactsScopeDimension[] | undefined,
+): ScopeDeclarationCheck {
+  const isProvided = (dimension: TrustedFactsScopeDimension): boolean => {
     const value = scope === undefined ? undefined : scope[dimension];
-    return typeof value !== 'string' || value.trim() === '';
-  });
+    return typeof value === 'string' && value.trim() !== '';
+  };
+  const isNotApplicable = (dimension: TrustedFactsScopeDimension): boolean =>
+    (notApplicable ?? []).includes(dimension);
+
+  for (const dimension of TRUSTED_FACTS_SCOPE_DIMENSIONS) {
+    if (isProvided(dimension) && isNotApplicable(dimension)) {
+      return { ok: false, reason: 'SCOPE_DECLARATION_CONFLICT' };
+    }
+  }
+  for (const dimension of policy.required) {
+    if (!isProvided(dimension) || isNotApplicable(dimension)) {
+      return { ok: false, reason: 'REQUIRED_SCOPE_MISSING' };
+    }
+  }
+  for (const dimension of policy.optional) {
+    if (!isProvided(dimension) && !isNotApplicable(dimension)) {
+      return { ok: false, reason: 'OPTIONAL_SCOPE_UNDECLARED' };
+    }
+  }
+  return {
+    ok: true,
+    providedDimensions: TRUSTED_FACTS_SCOPE_DIMENSIONS.filter((dimension) => isProvided(dimension)),
+    notApplicableDimensions: TRUSTED_FACTS_SCOPE_DIMENSIONS.filter((dimension) => isNotApplicable(dimension)),
+  };
 }
 
 /** CHANGE 17：资源范围匹配（未提供的维度不构成约束；提供了但为空串 = 不匹配）。 */
@@ -357,11 +414,12 @@ export function createTrustedFactsAdapter(input: {
         return fail('OPERATION_RECHECK_NOT_CONFIRMED');
       }
 
-      // ③ CHANGE 24：服务端动作策略决定必需范围维度；必需维度必须由可信上下文提供
+      // ③ CHANGE 24 + 27：服务端动作策略决定范围维度；省略必须是一次显式声明，不能靠「没传」放宽
       const policy = TRUSTED_FACTS_ACTION_SCOPE_POLICY[trimOrEmpty(request.actionType)];
       if (policy === undefined) return fail('SCOPE_POLICY_NOT_DEFINED');
       const trustedScope = input.executionContext.resourceScope;
-      if (missingRequiredScopeDimensions(policy, trustedScope).length > 0) return fail('REQUIRED_SCOPE_MISSING');
+      const declaration = checkScopeDeclaration(policy, trustedScope, input.executionContext.notApplicableScopeDimensions);
+      if (!declaration.ok) return fail(declaration.reason);
 
       // ④ CHANGE 18：金额 / 币种显式规则（先做形态校验，再进只读事务）
       const monetary = parseMonetaryInput(request);
@@ -392,11 +450,6 @@ export function createTrustedFactsAdapter(input: {
           if (trimOrEmpty(request.expectedFactVersion) !== factVersion) return fail('STALE_FACT_VERSION');
         }
 
-        const providedDimensions = TRUSTED_FACTS_SCOPE_DIMENSIONS.filter((dimension) => {
-          const value = trustedScope === undefined ? undefined : trustedScope[dimension];
-          return typeof value === 'string' && value.trim() !== '';
-        });
-
         const provenance: TrustedFactsProvenance = {
           organizationIdResolved: {
             source: 'TRUSTED_PERSISTED_IDENTITY',
@@ -425,7 +478,8 @@ export function createTrustedFactsAdapter(input: {
             actionType: trimOrEmpty(request.actionType),
             required: policy.required,
             optional: policy.optional,
-            providedDimensions,
+            providedDimensions: declaration.providedDimensions,
+            notApplicableDimensions: declaration.notApplicableDimensions,
             resolvedAt: at.toISOString(),
           },
           operationRecheck: {
@@ -565,4 +619,7 @@ export const TRUSTED_FACTS_ADAPTER_BOUNDARY = {
   requiresServerScopePolicy: true,
   requiresTrustedResourceScope: true,
   scopeValuesFromTrustedContextOnly: true,
+  /** CHANGE 27 */
+  requiresExplicitNotApplicableDeclaration: true,
+  scopeOmissionCannotWidenMatch: true,
 } as const;

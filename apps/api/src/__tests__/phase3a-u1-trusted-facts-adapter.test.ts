@@ -17,12 +17,13 @@ import {
   TRUSTED_FACTS_ADAPTER_BOUNDARY,
   TRUSTED_FACTS_CALLERS,
   TRUSTED_FACTS_SCOPE_DIMENSIONS,
+  checkScopeDeclaration,
   createTrustedFactsAdapter,
   exceedsMonetaryLimit,
-  missingRequiredScopeDimensions,
   type StandingAuthorizationRecord,
   type TrustedFactsReadPort,
   type TrustedFactsResourceScope,
+  type TrustedFactsScopeDimension,
 } from '../services/self-repair/trusted-facts-adapter';
 
 const AT = new Date('2026-10-09T03:00:00.000Z');
@@ -90,6 +91,7 @@ const adapter = (
     caller?: string;
     recheck?: 'CONFIRMED_READ_ONLY' | 'NOT_CONFIRMED';
     scope?: TrustedFactsResourceScope;
+    notApplicable?: readonly TrustedFactsScopeDimension[];
   } = {},
 ) =>
   createTrustedFactsAdapter({
@@ -99,6 +101,7 @@ const adapter = (
       caller: options.caller ?? 'RUNTIME_MEMBER',
       operationRecheck: options.recheck ?? 'CONFIRMED_READ_ONLY',
       resourceScope: 'scope' in options ? options.scope : TRUSTED_SCOPE,
+      notApplicableScopeDimensions: options.notApplicable,
     },
     now: () => AT,
   });
@@ -113,6 +116,7 @@ interface FailureCase {
   caller?: string;
   recheck?: 'CONFIRMED_READ_ONLY' | 'NOT_CONFIRMED';
   scope?: TrustedFactsResourceScope;
+  notApplicable?: readonly TrustedFactsScopeDimension[];
   reason: string;
 }
 
@@ -131,6 +135,31 @@ const failureCases: FailureCase[] = [
     request: base,
     scope: { platformAccountId: 'acct-1', provider: '   ' },
     reason: 'REQUIRED_SCOPE_MISSING',
+  },
+  {
+    label: 'CHANGE 27：可选维度整体省略且未声明不适用（不得靠「没传」放大范围）',
+    request: base,
+    scope: { platformAccountId: 'acct-1', provider: 'AMAZON' },
+    reason: 'OPTIONAL_SCOPE_UNDECLARED',
+  },
+  {
+    label: 'CHANGE 27：仅省略一个可选维度（jurisdiction）且未声明不适用',
+    request: base,
+    scope: { platformAccountId: 'acct-1', provider: 'AMAZON', domain: 'LOGISTICS' },
+    reason: 'OPTIONAL_SCOPE_UNDECLARED',
+  },
+  {
+    label: 'CHANGE 27：必需维度被声明为不适用',
+    request: base,
+    scope: { platformAccountId: 'acct-1' },
+    notApplicable: ['provider'],
+    reason: 'REQUIRED_SCOPE_MISSING',
+  },
+  {
+    label: 'CHANGE 27：同一维度既提供又声明不适用（声明冲突）',
+    request: base,
+    notApplicable: ['jurisdiction'],
+    reason: 'SCOPE_DECLARATION_CONFLICT',
   },
   { label: '组织不存在', request: { ...base, organizationId: 'missing' }, overrides: { org: null }, reason: 'ORGANIZATION_NOT_FOUND' },
   { label: '该组织无任何授权行', request: base, overrides: { auths: [] }, reason: 'AUTHORIZATION_NOT_FOUND' },
@@ -159,10 +188,10 @@ const failureCases: FailureCase[] = [
     reason: 'AUTHORIZATION_NOT_FOUND',
   },
   {
-    label: '可选维度提供了空串',
+    label: '可选维度提供了空串（视为未提供且未声明不适用）',
     request: base,
     scope: { ...TRUSTED_SCOPE, jurisdiction: '  ' },
-    reason: 'AUTHORIZATION_NOT_FOUND',
+    reason: 'OPTIONAL_SCOPE_UNDECLARED',
   },
   { label: '授权已撤销', request: base, overrides: { auths: [auth({ revocationState: 'REVOKED' })] }, reason: 'AUTHORIZATION_REVOKED' },
   {
@@ -253,6 +282,7 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）
       required: ['platformAccountId', 'provider'],
       optional: ['domain', 'jurisdiction'],
       providedDimensions: ['provider', 'platformAccountId', 'domain', 'jurisdiction'],
+      notApplicableDimensions: [],
       resolvedAt: AT.toISOString(),
     });
     expect(result.provenance.operationRecheck).toMatchObject({
@@ -278,13 +308,41 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）
     expect(exact.ok).toBe(true);
   });
 
-  it('仅提供策略要求的必需维度（省略可选维度）⇒ 通过；期望事实版本一致 ⇒ 通过', async () => {
+  it('CHANGE 27：可选维度省略但由服务端显式声明不适用 ⇒ 通过，且 provenance 留痕', async () => {
     const matched = await adapter(makePort().readPort, {
       scope: { platformAccountId: 'acct-1', provider: 'AMAZON' },
+      notApplicable: ['domain', 'jurisdiction'],
     }).resolve({ ...base, expectedFactVersion: 'org:idv-1|auth:7' });
     expect(matched.ok).toBe(true);
     if (!matched.ok) throw new Error('expected ok');
     expect(matched.provenance.scopePolicy.providedDimensions).toEqual(['provider', 'platformAccountId']);
+    expect(matched.provenance.scopePolicy.notApplicableDimensions).toEqual(['domain', 'jurisdiction']);
+    expect(matched.provenance.scopePolicy.required).toEqual(['platformAccountId', 'provider']);
+  });
+
+  it('CHANGE 27：请求侧夹带 resourceScope 不影响结果（范围只取可信上下文）', async () => {
+    const smuggled = await adapter(makePort().readPort).resolve({
+      ...base,
+      resourceScope: { provider: 'SHOPIFY', platformAccountId: 'acct-attacker' },
+    } as never);
+    expect(smuggled.ok).toBe(true);
+    if (!smuggled.ok) throw new Error('expected ok');
+    // 实际参与匹配的仍是可信上下文提供的维度与值（provider=AMAZON / acct-1），请求夹带被忽略
+    expect(smuggled.provenance.scopePolicy.providedDimensions).toEqual([
+      'provider',
+      'platformAccountId',
+      'domain',
+      'jurisdiction',
+    ]);
+    expect(smuggled.provenance.authorizationActive?.authorizationId).toBe('auth-1');
+
+    // 请求夹带也不能替代可信上下文的必需维度：可信范围缺失时依旧 fail-closed
+    const missing = await adapter(makePort().readPort, { scope: { provider: 'AMAZON' } }).resolve({
+      ...base,
+      resourceScope: { platformAccountId: 'acct-1' },
+    } as never);
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.reason).toBe('REQUIRED_SCOPE_MISSING');
   });
 
   it.each(failureCases)('$label ⇒ fail-closed（$reason）', async (testCase) => {
@@ -293,6 +351,7 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）
       caller: testCase.caller,
       recheck: testCase.recheck,
       ...('scope' in testCase ? { scope: testCase.scope } : {}),
+      ...('notApplicable' in testCase ? { notApplicable: testCase.notApplicable } : {}),
     }).resolve(testCase.request as never);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
@@ -330,19 +389,36 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）
     expect(exceedsMonetaryLimit('1e3', '100.0000')).toBe(true);
   });
 
-  it('CHANGE 24：策略与必需维度检查（未知动作 ⇒ 无策略；缺失 / 空串 ⇒ 报告缺失）', () => {
+  it('CHANGE 24/27：策略与范围声明检查（缺失 / 空串 / 未声明省略 / 声明冲突）', () => {
     expect(TRUSTED_FACTS_ACTION_SCOPE_POLICY['recovery.read']?.required).toEqual(['platformAccountId', 'provider']);
+    expect(TRUSTED_FACTS_ACTION_SCOPE_POLICY['recovery.read']?.optional).toEqual(['domain', 'jurisdiction']);
     expect(TRUSTED_FACTS_SCOPE_DIMENSIONS).toEqual(['provider', 'platformAccountId', 'domain', 'jurisdiction']);
-    expect(missingRequiredScopeDimensions({ required: ['platformAccountId', 'provider'] }, undefined)).toEqual([
-      'platformAccountId',
-      'provider',
-    ]);
+    const policy = { required: ['platformAccountId', 'provider'] as const, optional: ['domain', 'jurisdiction'] as const };
+
+    expect(checkScopeDeclaration(policy, undefined, undefined)).toEqual({ ok: false, reason: 'REQUIRED_SCOPE_MISSING' });
     expect(
-      missingRequiredScopeDimensions({ required: ['platformAccountId', 'provider'] }, { platformAccountId: '', provider: 'AMAZON' }),
-    ).toEqual(['platformAccountId']);
+      checkScopeDeclaration(policy, { platformAccountId: '', provider: 'AMAZON' }, ['domain', 'jurisdiction']),
+    ).toEqual({ ok: false, reason: 'REQUIRED_SCOPE_MISSING' });
+    // 可选维度省略且未声明不适用 ⇒ 拒绝（不得靠「没传」放大范围）
     expect(
-      missingRequiredScopeDimensions({ required: ['platformAccountId', 'provider'] }, { platformAccountId: 'acct-1', provider: 'AMAZON' }),
-    ).toEqual([]);
+      checkScopeDeclaration(policy, { platformAccountId: 'acct-1', provider: 'AMAZON' }, undefined),
+    ).toEqual({ ok: false, reason: 'OPTIONAL_SCOPE_UNDECLARED' });
+    // 显式声明不适用 ⇒ 通过并留痕
+    expect(
+      checkScopeDeclaration(policy, { platformAccountId: 'acct-1', provider: 'AMAZON' }, ['domain', 'jurisdiction']),
+    ).toEqual({
+      ok: true,
+      providedDimensions: ['provider', 'platformAccountId'],
+      notApplicableDimensions: ['domain', 'jurisdiction'],
+    });
+    // 既提供又声明不适用 ⇒ 冲突
+    expect(
+      checkScopeDeclaration(
+        policy,
+        { platformAccountId: 'acct-1', provider: 'AMAZON', jurisdiction: 'US' },
+        ['jurisdiction'],
+      ),
+    ).toEqual({ ok: false, reason: 'SCOPE_DECLARATION_CONFLICT' });
   });
 
   it('接口不接受候选载荷 / 模型输出；唯一原生 SQL 是只读事务语句', () => {
@@ -377,6 +453,8 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）
       requiresServerScopePolicy: true,
       requiresTrustedResourceScope: true,
       scopeValuesFromTrustedContextOnly: true,
+      requiresExplicitNotApplicableDeclaration: true,
+      scopeOmissionCannotWidenMatch: true,
     });
   });
 });

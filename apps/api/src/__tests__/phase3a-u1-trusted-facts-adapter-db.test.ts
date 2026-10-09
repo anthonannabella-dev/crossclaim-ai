@@ -21,6 +21,7 @@ import {
   runInReadOnlyTransaction,
   type TrustedFactsReadPort,
   type TrustedFactsResourceScope,
+  type TrustedFactsScopeDimension,
 } from '../services/self-repair/trusted-facts-adapter';
 
 import { testDatabaseMarker } from './si-rsi-test-db.helper';
@@ -43,6 +44,7 @@ const adapter = (
   options: {
     caller?: string;
     scope?: TrustedFactsResourceScope;
+    notApplicable?: readonly TrustedFactsScopeDimension[];
     wrapPort?: (port: TrustedFactsReadPort) => TrustedFactsReadPort;
   } = {},
 ) => {
@@ -55,6 +57,7 @@ const adapter = (
       caller: options.caller ?? 'RUNTIME_MEMBER',
       operationRecheck: 'CONFIRMED_READ_ONLY',
       resourceScope: 'scope' in options ? options.scope : SCOPE,
+      notApplicableScopeDimensions: options.notApplicable,
     },
     now: () => AT,
   });
@@ -336,5 +339,59 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat
     const after = await snapshot();
     expect(after).toEqual(before);
     evidence({ kind: 'TABLE_SNAPSHOT', before, after, identical: JSON.stringify(before) === JSON.stringify(after) });
+  });
+
+  it('U1-DB8（CHANGE 27）范围声明链：省略可选维度必须显式声明不适用；请求侧夹带 resourceScope 无效', async () => {
+    await seedAuthorization();
+    const observed: Record<string, string> = {};
+
+    // ① 省略可选维度且未声明不适用 ⇒ fail-closed（不得靠「没传」放大范围）
+    const undeclared = await adapter({ scope: { platformAccountId: 'acct-u1', provider: 'AMAZON' } }).resolve({
+      organizationId: ORG,
+      actionType: 'recovery.read',
+      monetaryAction: false,
+    });
+    observed.omittedOptionalWithoutDeclaration = undeclared.ok ? 'OK' : undeclared.reason;
+    expect(!undeclared.ok && undeclared.reason).toBe('OPTIONAL_SCOPE_UNDECLARED');
+
+    // ② 同一省略 + 服务端显式声明不适用 ⇒ 通过，且 provenance 留痕
+    const declared = await adapter({
+      scope: { platformAccountId: 'acct-u1', provider: 'AMAZON' },
+      notApplicable: ['domain', 'jurisdiction'],
+    }).resolve({ organizationId: ORG, actionType: 'recovery.read', monetaryAction: false });
+    expect(declared.ok).toBe(true);
+    if (declared.ok) {
+      observed.explicitNotApplicable = 'OK';
+      observed.providedDimensions = declared.provenance.scopePolicy.providedDimensions.join('+');
+      observed.notApplicableDimensions = declared.provenance.scopePolicy.notApplicableDimensions.join('+');
+      expect(declared.provenance.scopePolicy.providedDimensions).toEqual(['provider', 'platformAccountId']);
+      expect(declared.provenance.scopePolicy.notApplicableDimensions).toEqual(['domain', 'jurisdiction']);
+    }
+
+    // ③ 请求侧夹带 resourceScope：既不改变匹配结果，也不能替代可信上下文的必需维度
+    const smuggled = await adapter().resolve({
+      organizationId: ORG,
+      actionType: 'recovery.read',
+      monetaryAction: false,
+      resourceScope: { provider: 'SHOPIFY', platformAccountId: 'acct-other' },
+    } as never);
+    expect(smuggled.ok).toBe(true);
+    observed.requestSideScopeIgnored = smuggled.ok ? 'IGNORED_OK' : 'NOT_OK';
+
+    const smuggledCannotSatisfyRequired = await adapter({ scope: { provider: 'AMAZON' } }).resolve({
+      organizationId: ORG,
+      actionType: 'recovery.read',
+      monetaryAction: false,
+      resourceScope: { platformAccountId: 'acct-u1' },
+    } as never);
+    expect(!smuggledCannotSatisfyRequired.ok && smuggledCannotSatisfyRequired.reason).toBe('REQUIRED_SCOPE_MISSING');
+    observed.requestSideScopeCannotSatisfyRequired = 'REQUIRED_SCOPE_MISSING';
+
+    evidence({
+      kind: 'SCOPE_DECLARATION_CHAIN',
+      scopeSource: 'executionContext.resourceScope（服务端注入）；请求入参无该字段',
+      notApplicableSource: 'executionContext.notApplicableScopeDimensions（服务端显式声明）',
+      results: observed,
+    });
   });
 });
