@@ -3298,3 +3298,51 @@ SCHEMA_MIGRATION=HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL=FORBIDDEN
 EXTERNAL_WRITE=HOLD · AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN · PRODUCTION_READY=NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.51 `U2-PRECONDITION-READINESS-PACK` 交付（授权 `PHASE3_A_U2_PRECONDITION_PREPARATION_READ_ONLY`）
+
+> 交付物：`docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-PRECONDITION-READINESS-PACK.md`
+> （SHA-256 `687299e5dd0044a6f5d012e6ca94698160c48f9fce924e52387a52d6770e53e6`，19,834 字节）
+> 基线 `e57468d1`；U1 封板 `9ee36837` **未改动**；U2 设计 **PASS / CLOSED**、实施 **NOT_AUTHORIZED**（不变）。
+> 本轮**仅**编制申请/证据/实验方案：未实施产品代码、未启动 U3–U5、未连接或修改生产数据库、未执行外部写入、
+> 未启用多实例自动写入、**未恢复心跳或 OS 定时任务**、未新增 schema/migration。
+
+**包内结构**：§0 结论摘要 → §1 **P1 数据库安全能力申请清单**（版本/角色与最小权限/事务与锁能力/栅栏与归因候选 F-A~F-C/故障注入测试要求）
+→ §2 **P2 环境证据清单**（仓库内已可读事实 + 需宿主补充 E-01~E-07 + **协议一致性缺口 F-01**）
+→ §3 **P3 隔离实验方案**（S1–S8 场景、证据留存要求、安全退出与回滚、验收矩阵；**未执行**）
+→ §4 证据矩阵 → §5 风险清单 R-01~R-07 → §6 最终报告块。
+
+#### 2.51.1 本轮只读勘验得到的**关键事实**（均可在仓库复核）
+
+1. **协议一致性缺口 F-01（最重要）**：`deploy/systemd/crossclaim-rsi.service` 明确「跨实例互斥由 **durable lease**（`ownerRef` = 进程启动 UUID + pid，租约到期才可被接管）承担」，
+   且 `apps/api/src/services/autonomy/rsi-continuation-engine.ts` 以 **lease + `dedupeKey`** 保证 exactly-once；
+   而 U2 设计选定的生产协议是 **`flock` 整文件锁** ⇒ **二者是不同互斥域**，若并存将违反 CHANGE 68/74/84 的统一协议要求。
+   **已登记为实施授权前的显式前置**（三选一：统一到 lease / 统一到 flock / 证明写入域不相交）。
+2. **仓库内无任何 `flock`/`LOCK_EX`/`O_CLOEXEC`/`SCM_RIGHTS` 代码** ⇒ U2 设计的文件锁协议**当前不存在于产品代码**（属新引入能力）。
+3. **无 `docker-compose`/`compose*.yml`** ⇒ 数据库供给**不在仓库内**，与既有裁决一致：**等待宿主提供非生产 `DATABASE_URL`**。
+4. 运行栈契约：**PostgreSQL 16**、Node 22.x、systemd、`/opt/crossclaim`（`deploy/release-manifest.json`）；
+   应用必需变量仅 `DATABASE_URL`，生产另需 `RSI_RECONCILE_REQUIRED=true`（缺失即 **fail-closed 拒绝启动**）。
+5. 单元级最小权限已具备（专用用户 `crossclaim-rsi`、`ProtectSystem=strict`、`ProtectHome`、`PrivateTmp`、空 `CapabilityBoundingSet`、`StateDirectory`）。
+6. **部署分支白名单**：`feat/*` 与 `main` **均为禁用部署分支**（本 U2 工作分支不可部署）——实施/发布须走 `release/rc-20261008-linux-deploy-v1` 通道且另行授权。
+7. 既有数据库不变量可复用：`AutonomyCandidate.dedupeKey` **UNIQUE 索引**、`cc_append_only__*` 触发器（证据表）、builder/judge 分离触发器（migration `:146`、`:297-332`）。
+
+#### 2.51.2 交付时的状态字段（与包内 §6 一致）
+
+```text
+P1_STATUS = PACK_COMPLETE_AWAITING_HOST_CAPABILITY
+P2_STATUS = PACK_COMPLETE_PARTIAL
+P3_EXPERIMENT_AUTHORIZED = NO
+U2_IMPLEMENTATION_AUTHORIZED = NO
+PRODUCTION_WRITE_AUTHORIZED = NO
+EXCLUSION_PROOF_STATUS = NOT_PROVEN
+COMMIT_ATTRIBUTION_PROOF = NOT_AVAILABLE_IN_CURRENT_CONFIGURATION
+MULTI_INSTANCE_AUTOMATED_WRITE = NOT_AUTHORIZED
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+NEXT = 等待独立审计重新裁决（不自动进入实施阶段）
+```
+
+**停止条件（已遵守）**：交付后立即停止，未自动进入实施阶段；未恢复任何循环心跳或 OS 定时任务。
