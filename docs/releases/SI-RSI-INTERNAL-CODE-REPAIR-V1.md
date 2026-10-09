@@ -478,6 +478,52 @@ PHASE 3 自动代码修复的错误传播（P0 未来）。
 - 历史登记的 P2E-DB5 隔离债与 broker hook 超时债本轮**未复现**；仍**不视为关闭**。
 - 未验证（如实声明）：Linux/systemd 实机、真实 Provider/模型联调（HOLD）、生产环境、GitHub Actions（本记录仅代表本机隔离库证据）。
 
+### 2.7 最终关闭裁决（MSG-20261009-11 = PASS；**PHASE 2 CLOSED = YES**）
+
+**裁决原文**：`AI-ARCHITECT-INBOX.md` → `### [MSG-20261009-11]`（逐字归档，FNV1A `5fcdf8e3`，`FULL_COPY_OK`：134 行 / 缺失 0 / 多出 0）。
+会话：`https://chatgpt.com/c/6ac84c23-b340-83ec-95d5-a76fc12f270d`。
+
+| 审计项 | 裁决 |
+| --- | --- |
+| CHANGE4_GATE1_AT_FINAL_HEAD | **PASS** |
+| CHANGE5_DECLARATION_IS_NOT_AUTHORIZATION | **PASS** |
+| CHANGE6_SOURCE_SPOOFING_NEGATIVE_ASSERTIONS | **PASS** |
+| PHASE2_FINAL_EVIDENCE_SUFFICIENCY | **PASS** |
+| SCOPE_HONESTY | **PASS** |
+
+机器裁决：**`FINAL VERDICT = PASS`**、**`PHASE2_CLOSED = YES`**、`PHASE3_DESIGN_AUTHORIZED = YES · READ ONLY`、
+`PHASE3_IMPLEMENTATION_AUTHORIZED = NO`、`AUTONOMOUS_CODE_REPAIR_AUTHORIZED = NO`；**PHASE 2 关闭修订：NONE**。
+
+**归档 SHA 口径（审计明确要求，必须严格遵守）**：`REVIEWED_HEAD = 841b9c54`（文档/证据提交）与
+**代码与回归证据 HEAD = `c5d05fd4`** 必须作为**两枚不同 SHA** 保留，**禁止**把 `841b9c54` 写成实际执行测试的代码 HEAD。
+（审计同时明确：因 841b9c54 相对 c5d05fd4 仅含文档与证据更新，**不要求**仅为此重跑 4956 个测试。）
+
+**PHASE 3 强制前置条件（P3-01..06，不追溯阻断本次关闭）**：
+
+| 编号 | 级别 | 条件 |
+| --- | --- | --- |
+| P3-01 | **P0** | 可信事实只能通过**经审查的服务端适配器**取得，禁止模型或客户载荷伪装 |
+| P3-02 | **P0** | 每次执行前重新读取授权、组织身份、操作上下文及故障状态 |
+| P3-03 | **P0** | 授权撤销、租户切换、过期快照、事实不一致必须 **fail-closed** |
+| P3-04 | **P0** | 候选**不得直接触发执行**，必须进入既有 runtime 的受控检查路径 |
+| P3-05 | **P0** | 代码修复必须具备隔离工作区、受控变更范围、测试、独立 Judge 与失败回退设计 |
+| P3-06 | P1 | 建立**真实服务端来源**的负向测试（而非仅检查来源声明字符串） |
+
+**NEXT_AUTHORIZED = PHASE3_DESIGN_READ_ONLY**：允许（仅阅读现有实现 / 设计契约 / 编写测试计划 / 形成审计材料）
+① 可信服务端适配器设计（来源证明、可信事实读取入口、租户隔离、不可信载荷边界）；
+② 执行前重验设计（组织身份、授权有效期、撤销状态、操作上下文、故障状态的重新检查时序）；
+③ 候选消费路径设计（A 路径候选如何由既有 ONE SI Runtime 安全消费；**禁止新增第二运行时**）；
+④ 代码修复权限模型设计（允许/禁止修改范围、审批、Judge、回滚、隔离测试、外部写阻断）；
+⑤ 失败矩阵与门禁设计（伪装来源、过期授权、跨租户、竞态撤销、重放、错误修复、重复执行、Judge 拒绝）。
+`NEXT_AUDIT = MSG-20261009-12 · PHASE 3 DESIGN REVIEW`。
+
+**暂不授权（照录）**：直接实施或运行自主代码修复；生产接线；创建自动修复执行器或开放执行权限。
+
+**RISKS（原文）**：可信适配器包装客户端伪造值（**P0**，PHASE 3 实施前必须解决）/ 授权在候选登记后撤销（**P0**，执行时强制重新验证）/
+A 路径接入导致绕过运行时门禁（**P0**，尚未授权接线）/ AI 代码修复产生错误变更（**P0**，尚未授权创建或执行代理）/
+历史故障载荷残留敏感字段（P1，另行开展保留策略与泄漏面审计）/ P2E-DB5 与 broker hook 历史测试债（P1，**保留未关闭状态**）/
+Linux·CI·真实模型·Provider 未验证（发布门禁，不计入本轮关闭；**生产状态保持 NO**）。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -568,14 +614,16 @@ GATE1_FULL_REGRESSION = PASS（490/490 文件、4926/4926 用例、exit 0；隔�
 GATE4_PHASE2_LAYER = PASS（重复分流幂等 / 并发扫描 / 状态竞争登记保护；运行时层 fencing 与断连由既有运行时门禁覆盖）
 PHASE2_REVIEW_VERDICT = MSG-20261009-09 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A 1d735f7f）
 PHASE2_SAFE_SCOPE_ACCEPTED = YES
-PHASE2_CLOSED = NO（待 CHANGE 4–6 后最终关闭复审 MSG-20261009-11）
+PHASE2_STATUS = CLOSED（MSG-20261009-11 = PASS；关闭修订 NONE）
+PHASE2_CLOSE_VERDICT = MSG-20261009-11 = PASS（逐字归档 FULL_COPY_OK / FNV1A 5fcdf8e3）
+SHA_POLICY = REVIEWED_HEAD 841b9c54（文档/证据）与代码/回归 HEAD c5d05fd4 必须分列，禁止混写
 PHASE3_DESIGN_AUTHORIZED = YES_READ_ONLY（仅只读方案设计；实现授权 NO）
 PHASE2_FINAL_R2_PROGRESS = CHANGE 1 ✅ + CHANGE 2 ✅ + CHANGE 3 ✅（三项 P1 修订全部完成）
 PHASE2_REVIEW_VERDICT = MSG-20261009-10 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A 83707404）
 PHASE2_FINAL_CLOSURE_PROGRESS = CHANGE 4 ✅ / CHANGE 5 ✅ / CHANGE 6 ✅（三项 P1 全部完成）
 GATE1_AT_FINAL_HEAD = PASS（c5d05fd4：491/491 文件、4956/4956 用例、exit 0；证据 tools/verification/self-repair/phase2-final-closure-gate1-full-regression.json）
 PHASE3_IMPLEMENTATION_PREREQUISITE = TRUSTED_ADAPTER_SOURCE_PROVENANCE_EXECUTION_TIME_RECHECK（如实登记，未实现）
-NEXT_UNIT = 整理并投递 PHASE 2 最终关闭复审（MSG-20261009-11）
+NEXT_UNIT = PHASE 3 只读设计（可信适配器/执行前重验/候选消费路径/修复权限模型/失败矩阵）→ 送 MSG-20261009-12 · PHASE 3 DESIGN REVIEW
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
