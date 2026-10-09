@@ -169,6 +169,20 @@ describe('V2-07 domain pack — fail-closed', () => {
     expect(evidence.reasonCodes).toContain('OPPORTUNITY_OWNERSHIP_MISMATCH');
   });
 
+  // V2-R2 / CHANGE 12：归属未知（null / 空串）必须立即 BLOCK
+  it('机会归属为 null 或空串 → BLOCK(OPPORTUNITY_OWNERSHIP_UNKNOWN)', async () => {
+    for (const owner of [null, '', '   ']) {
+      const pack = createCustomsUnlockSiPack({
+        matchesTask: () => true,
+        ...EXPECTED_REF,
+        loadFacts: () => facts({ opportunity: { caseFound: true, ownerOrganizationId: owner } }),
+      });
+      const evidence = await pack.run({ task: task(), packId: CUSTOMS_UNLOCK_PACK_ID });
+      expect(evidence.status).toBe('BLOCK');
+      expect(evidence.reasonCodes).toContain('OPPORTUNITY_OWNERSHIP_UNKNOWN');
+    }
+  });
+
   it('任务声明的案件身份缺失或与事实不符 → BLOCK', async () => {
     const noRef = createCustomsUnlockSiPack({
       matchesTask: () => true,

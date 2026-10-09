@@ -116,10 +116,11 @@ export function createCustomsUnlockSiPack(
       if (facts.organizationId !== context.task.organizationId) {
         identityReasons.push('FACT_TENANT_MISMATCH');
       }
-      if (
-        facts.opportunity.ownerOrganizationId !== null &&
-        facts.opportunity.ownerOrganizationId !== facts.organizationId
-      ) {
+      // V2-R2 / CHANGE 12：归属**无法确定**必须立即 BLOCK，不得继续进入执行链。
+      const owner = facts.opportunity.ownerOrganizationId;
+      if (owner === null || owner.trim().length === 0) {
+        identityReasons.push('OPPORTUNITY_OWNERSHIP_UNKNOWN');
+      } else if (owner !== facts.organizationId) {
         identityReasons.push('OPPORTUNITY_OWNERSHIP_MISMATCH');
       }
       const expectedRef = dependencies.expectedOpportunityRef(context.task);
