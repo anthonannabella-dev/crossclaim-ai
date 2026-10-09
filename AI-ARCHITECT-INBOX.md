@@ -174367,3 +174367,290 @@ PRODUCTION_READY=NO
 
 最终结论：U2 的隔离设计方向成立，但身份版本可信性、候选失效、关联原子性和并发验收尚未形成闭合契约。修订这四项即可申请下一轮设计复审，不需要重做 U1，也不得提前进入 U3–U5。
 ```
+
+### [MSG-20261009-27] U2 设计 R2 = **REVISE**（CHANGE 1–4 方向获认可，新增 CHANGE 5–8；实施仍不授权）—— 九项：`CHANGE1/2/3/4_..._FIXED = PASS_WITH_REVISE`、`U2_IMPLEMENTATION_BOUNDARY=PASS`、`SCOPE_HONESTY=PASS`、`U2_INPUT_OUTPUT_CONTRACT=REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE`、`U2_DESIGN_APPROVED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`；独立核验：R1 065f950e→R2 5ae09e37 共 2 提交/3 文件（全在文档与审计记录范围）、`9ee36837→R2` 的 apps/api **0 变更**、`PRODUCT_CODE_UNCHANGED_IN_COMPARED_RANGE=YES`，但 `RUNTIME_TESTS_VERIFIED=NO` 且文档 sha256 仍未独立复算（`U2_DESIGN_DOC_SHA256_VERIFIED=NO`）；**CHANGE 5（P0）**：`@@unique([organizationId, platform, externalAccountId, identityVersion])` 允许 v1/v2 并存，须定义「当前有效身份版本」的可信选择规则、多版本并存处理（无法唯一确定必须拒绝）、版本选择与候选 INSERT 的并发一致性边界，且 U2-10 须证明旧版本在切换完成后不会被重新确认为有效；**CHANGE 6（P0）**：`factsSnapshotRef.source='U1_TRUSTED_FACTS_ADAPTER'` 只是声明、可被伪造，须补服务端不可伪造签发/解析路径或可信持久化引用、与 Incident/Task/租户/事实范围的绑定、有效期与防重放、伪造/跨租户/过期引用的负向验收，且不得改 U1 封板契约；**CHANGE 7（P0）**：候选去重与关联须证明租户隔离（signalKey 是否含可信租户/账户作用域、跨租户同键冲突、Task/Incident/PlatformAccount 同作用域、复用时比对 taskId+baselineRef+身份与关联链、冲突必须 REJECTED 而非返回他人 candidateId）；**CHANGE 8（P1）**：U2-5 与 U2-7 语义冲突须区分「U2 自身允许的独立原子事务 / 不得跨 U1 只读事务写 / 不得未授权外部副作用」，U2-8 须定义为「输入键与可信解析字段不一致/恶意冲突」并补断言，`candidateDigest` 须固定字段顺序、时间精度、Unicode 序列化与测试向量；`REQUIRED_CHANGES=CHANGE_5..8`；NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R3_READ_ONLY_CHANGES_5_TO_8 / NEXT_AUDIT=MSG-20261009-28；reviewed ref 5ae09e37
+
+```text
+MSG-20261009-27｜U2 设计 R2 独立审计裁决
+REVISE · 设计修订基本成立，暂不授权实施
+仓库： anthonannabella-dev/crossclaim-ai
+审计提交： 5ae09e37e8cdb1417ecc1366b2806befba919015
+审计范围： PHASE 3-A / U2 DESIGN R2 / CHANGE 1–4
+审计日期： 2026-10-09
+
+一、仓库独立核验结果
+
+本轮已通过 GitHub 连接器直接读取指定提交下的 U2 R2 设计文档，并检查提交差异，不仅依据送审摘要作出判断。
+
+核验确认：
+
+R2 文档可读取，路径与提交锚点一致。
+
+R1 065f950e 至 R2 5ae09e37 之间有 2 个提交，累计修改 3 个文件，全部位于文档与审计记录范围。
+
+U1 9ee36837 至 R2 的提交比较显示 apps/api 下没有文件变更。
+
+R2 保持纯设计范围，未在上述提交比较中发现新增产品代码。
+
+这不等于已经验证实际数据库结构、并发运行行为或产品功能。
+
+证据结论： 设计文档及提交差异已独立读取；文件 SHA-256 尚不能仅凭 GitHub 返回的 Git blob SHA 判定一致，需单独按原始 UTF-8 字节复算。
+
+二、初步逐项裁决
+
+审计项目
+
+裁决
+
+1. CHANGE1 身份来源与可信性
+
+PASS WITH REVISE
+
+2. CHANGE2 逻辑失效契约
+
+PASS WITH REVISE
+
+3. CHANGE3 关联原子性与回滚
+
+PASS WITH REVISE
+
+4. CHANGE4 并发与负向验收
+
+PASS WITH REVISE
+
+5. U2 输入输出契约
+
+REVISE
+
+6. U2 验收矩阵与 fail-closed
+
+REVISE
+
+7. U2 实施边界
+
+PASS
+
+8. 范围真实性
+
+PASS
+
+9. U2_DESIGN_APPROVED
+
+NO
+
+10. U2_IMPLEMENTATION_AUTHORIZED
+
+NO
+
+CHANGE 1–4 的主要设计方向已经得到修正，但要批准可实施的设计，还需要确认几个涉及实际安全性的契约细节，尤其是身份版本切换期间的一致性、可信引用的真实性，以及现有候选数据模型能否承载所声明的关联。
+
+三、必须修订的设计问题
+
+CHANGE 5（P0）：身份版本切换没有明确的唯一当前版本
+
+我进一步读取了仓库中的 apps/api/prisma/schema.prisma，确认：
+
+PlatformAccount 的唯一键确实是：
+
+prisma
+
+@@unique([
+
+organizationId,
+
+platform,
+
+externalAccountId,
+
+identityVersion
+
+])
+
+但是，这个约束允许同一账户同时存在 v1 和 v2 两条记录。
+
+因此，R2 §2 和 §6 尚不能仅凭该唯一约束证明“哪个版本当前有效”。
+
+必须补充：
+
+定义当前有效身份版本的可信选择规则，不能直接采用调用方传入的版本。
+
+定义同一逻辑账户多个版本并存时的处理方式。若无法唯一确定当前版本，必须拒绝。
+
+定义版本选择与候选 INSERT 之间的并发一致性边界。
+
+U2-10 应证明旧版本不会在身份切换完成后被重新确认为有效，而不仅仅证明两个候选没有重复。
+
+裁决：P0，实施前必须解决。
+
+CHANGE 6（P0）：可信事实引用尚未证明不可伪造
+
+R2 §7.3 要求：
+
+TypeScript
+
+factsSnapshotRef.source =
+
+'U1_TRUSTED_FACTS_ADAPTER'
+
+并验证 issuedAt 和 expiresAt。
+
+这能表达来源声明，但不能单独证明来源真实。任意调用者如果能构造相同结构，也可能伪造这些字段。
+
+必须补充可信引用验证机制：
+
+服务端内部不可伪造的签发与解析路径，或可信持久化引用；
+
+引用与 Incident、Task、租户及事实范围的绑定；
+
+有效期及防重放判定；
+
+对伪造引用、跨租户引用、已过期引用增加负向验收。
+
+不得通过修改 U1 封板契约解决，应在 U2 侧复用既有可信能力或提出单独设计。
+
+裁决：P0。
+
+CHANGE 7（P0）：候选去重与关联必须明确租户隔离
+
+已核实 AutonomyCandidate 当前具有：
+
+prisma
+
+taskId     String
+
+baselineRef String
+
+dedupeKey  String
+
+@@unique([dedupeKey])
+
+它通过 taskId 关联 AutonomyTask，再通过 incidentId 关联 Incident。
+
+因此，R2 中的 Incident → Candidate → Task 属于间接关系，不是三表直接外键关联。
+
+目前候选键：
+
+纯文本
+
+candidate:<signalKey>#<identityVersion>#<baselineRef>
+
+需要补充以下安全证明：
+
+signalKey 是否已经包含可信租户及账户作用域；
+
+跨租户相同 signalKey 是否可能发生 dedupe 冲突；
+
+Task、Incident 和 PlatformAccount 是否确属同一可信作用域；
+
+复用现有候选时，是否比对 taskId、baselineRef、解析身份及关联链；
+
+冲突校验失败时是否严格 REJECTED，而不是返回其他租户的 candidateId。
+
+不能默认 signalKey 全局唯一就代表租户隔离成立。
+
+裁决：P0。
+
+CHANGE 8（P1）：验收矩阵需要消除两处歧义
+
+第一处：U2-5。 当前定义“跨事务/外部副作用 ⇒ BLOCK”，但 U2-7 明确需要两个并发事务完成写入与冲突后复用。因此应区分：
+
+U2 自己允许的独立原子数据库事务；
+
+不允许跨越 U1 只读事务边界执行写入；
+
+不允许未经授权的外部副作用。
+
+第二处：U2-8。 同一 dedupeKey 内已经包含 baselineRef 和 identityVersion，所以不同版本或基线却具有同一键，应被明确定义为“输入键与可信解析字段不一致”或“恶意冲突”，并补充对应断言。
+
+此外，candidateDigest 应规定确切字段顺序、时间精度、Unicode 序列化规则及固定测试向量，确保不同运行环境可独立复算。
+
+裁决：P1。
+
+四、实施与关闭条件
+
+本轮认可以下设计成果：
+
+U2 使用既有 AutonomyCandidate，不扩展 schema。
+
+仅 INSERT 候选，不改写既有 Task 或 Incident。
+
+将失效语义限定为实时逻辑判定。
+
+唯一冲突必须经过关联校验才能复用。
+
+保留旧记录，禁止通过批量删除实现回滚。
+
+不新增第二套 Runtime、Scheduler 或 Controller。
+
+不开放模型调用、外写、自动合并或部署。
+
+但由于上述 P0 尚未解决，不授权 U2 写库实现。
+
+下一轮最小授权范围为：
+
+PHASE3_A_U2_DESIGN_R3_READ_ONLY_CHANGES_5_TO_8
+
+允许只读核查现有 schema、身份解析器、U1 可信事实引用、现有 signalKey 生成规则，并修订 U2 设计文档与测试规格。
+
+不要求推翻 R2 的整体设计，也不要求重新实施 U1。
+
+五、机器可读审计裁决
+
+以下采用 PASS_WITH_REVISE 表示修订方向成立但仍有待关闭的问题；它不构成实施许可。
+
+YAML
+
+AUDIT_ID: MSG-20261009-27
+REPO: anthonannabella-dev/crossclaim-ai
+BRANCH: feat/si-rsi-internal-code-repair-v1
+
+U1_CODE_HEAD: 9ee36837
+U2_DESIGN_COMMIT_R1: 065f950e
+U2_DESIGN_COMMIT_R2: 5ae09e37
+U2_DESIGN_DOC_SHA256: f447288cc799d7322ff492c015870b6254d46bafe44a74a11e47e1ea9fe14cb7
+U2_DESIGN_DOC_SHA256_VERIFIED: NO
+
+GITHUB_DOCUMENT_READ: PASS
+GITHUB_COMMIT_COMPARISON: PASS
+PRODUCT_CODE_UNCHANGED_IN_COMPARED_RANGE: YES
+RUNTIME_TESTS_VERIFIED: NO
+
+FINAL_VERDICT: REVISE
+
+CHANGE1_IDENTITY_SOURCE_AND_TRUST_FIXED: PASS_WITH_REVISE
+CHANGE2_INVALIDATION_CONTRACT_FIXED: PASS_WITH_REVISE
+CHANGE3_ASSOCIATION_ATOMICITY_AND_ROLLBACK_FIXED: PASS_WITH_REVISE
+CHANGE4_CONCURRENCY_AND_NEGATIVE_TESTS_FIXED: PASS_WITH_REVISE
+
+U2_INPUT_OUTPUT_CONTRACT: REVISE
+U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED: REVISE
+U2_IMPLEMENTATION_BOUNDARY: PASS
+SCOPE_HONESTY: PASS
+
+U2_DESIGN_APPROVED: NO
+U2_IMPLEMENTATION_AUTHORIZED: NO
+PHASE3_A_U3_TO_U5_AUTHORIZED: NO
+
+REQUIRED_CHANGES:
+  - CHANGE_5_P0_CURRENT_IDENTITY_VERSION_AND_CONCURRENCY
+  - CHANGE_6_P0_TRUSTED_FACT_REFERENCE_PROVENANCE
+  - CHANGE_7_P0_TENANT_SCOPE_AND_ASSOCIATION_INTEGRITY
+  - CHANGE_8_P1_ACCEPTANCE_MATRIX_AND_DIGEST_CANONICALIZATION
+
+NEXT_AUTHORIZED: PHASE3_A_U2_DESIGN_R3_READ_ONLY_CHANGES_5_TO_8
+NEXT_AUDIT: MSG-20261009-28
+
+SCHEMA_MIGRATION: HOLD
+RUNTIME_WIRING: FORBIDDEN
+MODEL_CALL: FORBIDDEN
+EXTERNAL_WRITE: HOLD
+AUTO_MERGE: FORBIDDEN
+AUTO_DEPLOY: FORBIDDEN
+PRODUCTION_READY: NO
+
+最终结论： MSG-20261009-27 = REVISE。
+
+R2 已实质修正上一轮指出的四类设计问题，但仍不能证明身份版本一致性、可信事实引用真实性和跨租户关联安全性。下一轮仅要求关闭 CHANGE 5–8，不扩大实施范围。
+
+以上为基于指定 GitHub 文档、提交比较及现有 Prisma schema 的独立静态审计。未运行 PostgreSQL 并发测试、CI 或生产验证，也未向仓库写入任何内容。
+```

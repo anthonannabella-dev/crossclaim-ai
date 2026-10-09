@@ -1964,3 +1964,68 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.31 MSG-20261009-27 裁决归档 = **REVISE**（U2 设计 R2 方向获认可，新增 CHANGE 5–8）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-27] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（158/158，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=4700 / NORM_LINES=158 / FNV=75156997`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R1=065f950e`、`U2_DESIGN_COMMIT_R2=5ae09e37`。
+
+**审计方独立核验**：R2 文档可读且路径/锚点一致；`065f950e→5ae09e37` 共 2 个提交、3 个文件（全部在文档与审计记录范围）；
+`9ee36837→R2` 比较显示 **apps/api 0 变更** ⇒ `PRODUCT_CODE_UNCHANGED_IN_COMPARED_RANGE=YES`。
+保留项：`RUNTIME_TESTS_VERIFIED=NO`；`U2_DESIGN_DOC_SHA256_VERIFIED=NO`（GitHub 返回的是 Git blob SHA，
+要按原始 UTF-8 字节单独复算）。
+
+**逐项**：`CHANGE1/2/3/4_..._FIXED = PASS_WITH_REVISE`、`U2_IMPLEMENTATION_BOUNDARY=PASS`、`SCOPE_HONESTY=PASS`、
+`U2_INPUT_OUTPUT_CONTRACT=REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE`、
+`U2_DESIGN_APPROVED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`PHASE3_A_U3_TO_U5_AUTHORIZED=NO`。
+
+**新增 REQUIRED_CHANGES（下一轮 MSG-20261009-28 仅关闭这四项）**
+
+- **CHANGE 5（P0）当前有效身份版本与并发**：`@@unique([organizationId, platform, externalAccountId, identityVersion])`
+  **允许同一账户同时存在 v1 与 v2**，故不能凭该约束证明「哪个版本当前有效」。须定义：① 当前有效版本的
+  **可信选择规则**（不得采用调用方传入的版本）；② 多版本并存的处理方式（**无法唯一确定当前版本必须拒绝**）；
+  ③ 版本选择与候选 INSERT 之间的**并发一致性边界**；④ U2-10 须证明**旧版本在身份切换完成后不会被重新确认为有效**，
+  而不只是证明两个候选没有重复。
+- **CHANGE 6（P0）可信事实引用的不可伪造性**：`factsSnapshotRef.source='U1_TRUSTED_FACTS_ADAPTER'` 只是**声明**，
+  任意调用者可构造同结构伪造。须补：服务端内部**不可伪造的签发与解析路径**（或可信持久化引用）；
+  引用与 `Incident` / `Task` / 租户 / 事实范围的**绑定**；**有效期与防重放**判定；对**伪造 / 跨租户 / 已过期**引用的
+  负向验收。**不得通过修改 U1 封板契约解决**，应在 U2 侧复用既有可信能力或单独设计。
+- **CHANGE 7（P0）租户隔离与关联完整性**：`Incident → Candidate → Task` 是**间接关系**
+  （`AutonomyCandidate.taskId → AutonomyTask.incidentId → AutonomyIncident.id`），候选键
+  `candidate:<signalKey>#<identityVersion>#<baselineRef>` 需证明：`signalKey` 是否已含**可信租户与账户作用域**；
+  跨租户相同 `signalKey` 是否可能 dedupe 冲突；`Task`/`Incident`/`PlatformAccount` 是否确属**同一可信作用域**；
+  复用候选时是否比对 `taskId`、`baselineRef`、解析身份与关联链；冲突校验失败是否**严格 `REJECTED`**
+  而非返回其他租户的 `candidateId`。**不得默认 signalKey 全局唯一就等于租户隔离**。
+- **CHANGE 8（P1）验收矩阵与摘要规范化**：① U2-5 与 U2-7 语义冲突须区分「U2 **自身允许的独立原子数据库事务** /
+  **不得跨越 U1 只读事务边界写入** / 不得未授权外部副作用」；② U2-8 因键内已含 `baselineRef`+`identityVersion`，
+  须重定义为「**输入键与可信解析字段不一致**或**恶意冲突**」并补断言；③ `candidateDigest` 须固定
+  **字段顺序、时间精度、Unicode 序列化规则与固定测试向量**，保证跨环境可独立复算。
+
+**审计方认可的设计成果（保持）**：使用既有 `AutonomyCandidate` 不扩展 schema；仅 INSERT 候选、不改写既有 Task/Incident；
+失效语义限定为实时逻辑判定；唯一冲突必须经关联校验才复用；保留旧记录、禁止批量删除回滚；
+不新增第二套 Runtime/Scheduler/Controller；不开放模型调用/外写/自动合并/部署。
+
+```text
+MSG-20261009-27_FINAL_VERDICT = REVISE
+MSG-20261009-27_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 158/158；FNV1A 75156997）
+U1_FINAL_CLOSURE = YES（保持；9ee36837 未被改动）
+U2_DESIGN_APPROVED = NO
+U2_IMPLEMENTATION_AUTHORIZED = NO
+PHASE3_A_U3_TO_U5_AUTHORIZED = NO
+REQUIRED_CHANGES = CHANGE_5_P0_CURRENT_IDENTITY_VERSION_AND_CONCURRENCY ;
+                   CHANGE_6_P0_TRUSTED_FACT_REFERENCE_PROVENANCE ;
+                   CHANGE_7_P0_TENANT_SCOPE_AND_ASSOCIATION_INTEGRITY ;
+                   CHANGE_8_P1_ACCEPTANCE_MATRIX_AND_DIGEST_CANONICALIZATION
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R3_READ_ONLY_CHANGES_5_TO_8
+NEXT_AUDIT = MSG-20261009-28
+RUNTIME_TESTS_VERIFIED = NO
+SCHEMA_MIGRATION = HOLD
+RUNTIME_WIRING / MODEL_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```
