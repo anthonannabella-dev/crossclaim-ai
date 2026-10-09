@@ -20,6 +20,7 @@ import {
   FAULT_CLASSES,
   FAULT_CLASSIFICATION_BOUNDARY,
   FAULT_INCIDENT_IDENTITY_RULE,
+  FAULT_REPLAY_SAFETY_RULE,
   FAULT_REQUIRED_ACTIONS,
   FAULT_SOURCE_REF_FIELDS,
   FAULT_TEXT_LIMITS,
@@ -58,14 +59,26 @@ interface Case {
 const CASES: readonly Case[] = [
   {
     label: 'API 超时（模型网关 provider 超时）',
-    observation: { ...BASE, errorCode: 'PROVIDER_TIMEOUT', durationMs: 30_000, timeoutMs: 30_000 },
+    observation: {
+      ...BASE,
+      errorCode: 'PROVIDER_TIMEOUT',
+      durationMs: 30_000,
+      timeoutMs: 30_000,
+      operationKind: 'READ_ONLY',
+    },
     faultClass: 'API_TIMEOUT',
     ruleId: 'R_TIMEOUT',
     requiredAction: 'AUTO_RECOVER',
   },
   {
     label: 'API 限流（HTTP 429 / RATE_LIMITED）',
-    observation: { ...BASE, httpStatus: 429, adapterErrorCode: 'RATE_LIMITED', providerRef: 'AMAZON' },
+    observation: {
+      ...BASE,
+      httpStatus: 429,
+      adapterErrorCode: 'RATE_LIMITED',
+      providerRef: 'AMAZON',
+      operationKind: 'READ_ONLY',
+    },
     faultClass: 'API_RATE_LIMIT',
     ruleId: 'R_RATE_LIMIT',
     requiredAction: 'AUTO_RECOVER',
@@ -107,7 +120,7 @@ const CASES: readonly Case[] = [
   },
   {
     label: '数据库事务错误（Prisma P2034 事务冲突）',
-    observation: { ...BASE, prismaCode: 'P2034' },
+    observation: { ...BASE, prismaCode: 'P2034', operationKind: 'READ_ONLY' },
     faultClass: 'DATABASE_TRANSACTION_ERROR',
     ruleId: 'R_DATABASE_TRANSACTION',
     requiredAction: 'AUTO_RECOVER',
@@ -230,7 +243,7 @@ describe('PHASE 1 安全 / 权限边界：只允许更保守', () => {
   });
 
   it('触及安全边界 ⇒ 风险升到 HIGH，自动恢复被收回', () => {
-    const normal = classifyFault({ ...BASE, errorCode: 'PROVIDER_TIMEOUT' });
+    const normal = classifyFault({ ...BASE, errorCode: 'PROVIDER_TIMEOUT', operationKind: 'READ_ONLY' });
     const flagged = classifyFault({ ...BASE, errorCode: 'PROVIDER_TIMEOUT', securityAffecting: true });
     expect(normal.requiredAction).toBe('AUTO_RECOVER');
     expect(flagged.riskClass).toBe('HIGH');
@@ -242,6 +255,12 @@ describe('PHASE 1 安全 / 权限边界：只允许更保守', () => {
       const diagnosis = classifyFault(entry.observation);
       if (diagnosis.requiredAction === 'AUTO_RECOVER') {
         expect(diagnosis.retryEligibility).toBe('AUTO_RETRY_BACKOFF');
+        expect(diagnosis.replaySafety.autoRecoverAuthorized).toBe(true);
+        expect(diagnosis.replaySafety.disposition).toBe('AUTO_RETRY_CANDIDATE');
+      }
+      // 反向不变量：没有显式重放授权就绝不出现 AUTO_RECOVER
+      if (!diagnosis.replaySafety.autoRecoverAuthorized) {
+        expect(diagnosis.requiredAction).not.toBe('AUTO_RECOVER');
       }
     }
   });
@@ -607,6 +626,136 @@ describe('PHASE 1 / CHANGE 3 身份规则（租户 / Provider 参与身份）', 
       tenantScopedIdentity: true,
       providerScopedIdentity: true,
       hashIsNotAuthorization: true,
+    });
+  });
+});
+
+/**
+ * MSG-20261009-07 / CHANGE 4 —— 「故障可重试 ≠ 业务动作可重放」。
+ * 分类结果必须显式携带重放语义，且**唯一**的自动恢复许可是 `autoRecoverAuthorized`。
+ */
+describe('PHASE 1 / CHANGE 4 重放安全语义', () => {
+  const timeout = (overrides: Partial<FaultObservation> = {}): FaultObservation => ({
+    ...BASE,
+    errorCode: 'PROVIDER_TIMEOUT',
+    operationKind: 'READ_ONLY',
+    ...overrides,
+  });
+
+  it('只读操作超时 ⇒ 可进入自动重试候选', () => {
+    const diagnosis = classifyFault(timeout());
+    expect(diagnosis.replaySafety).toMatchObject({
+      disposition: 'AUTO_RETRY_CANDIDATE',
+      requiresReconciliation: false,
+      autoRecoverAuthorized: true,
+      reason: 'READ_ONLY_OPERATION',
+    });
+    expect(diagnosis.requiredAction).toBe('AUTO_RECOVER');
+  });
+
+  it('外部写超时（副作用不明）⇒ 先对账，绝不重放（审计举的正是这个例子）', () => {
+    const diagnosis = classifyFault(timeout({ operationKind: 'EXTERNAL_WRITE' }));
+    expect(diagnosis.faultClass).toBe('API_TIMEOUT'); // 故障分类不变
+    expect(diagnosis.replaySafety).toMatchObject({
+      disposition: 'RECONCILE_FIRST',
+      requiresReconciliation: true,
+      autoRecoverAuthorized: false,
+      reason: 'EXTERNAL_WRITE_REQUIRES_RECONCILIATION',
+    });
+    expect(diagnosis.requiredAction).toBe('INVESTIGATE');
+  });
+
+  it('副作用已确认生效 ⇒ 禁止重放（即使分类为可重试故障）', () => {
+    const diagnosis = classifyFault(timeout({ operationKind: 'EXTERNAL_WRITE', effectConfirmed: true }));
+    expect(diagnosis.replaySafety).toMatchObject({
+      disposition: 'FORBIDDEN',
+      autoRecoverAuthorized: false,
+      reason: 'EFFECT_ALREADY_APPLIED',
+    });
+    expect(diagnosis.requiredAction).not.toBe('AUTO_RECOVER');
+  });
+
+  it('可变操作：仅「确认未生效 + 可信幂等」才可重试；幂等未知 ⇒ 先对账', () => {
+    const idempotent = classifyFault(
+      timeout({ operationKind: 'MUTATING', effectConfirmed: false, idempotencyGuarantee: 'TRUSTED' }),
+    );
+    expect(idempotent.replaySafety).toMatchObject({
+      disposition: 'AUTO_RETRY_CANDIDATE',
+      autoRecoverAuthorized: true,
+      reason: 'IDEMPOTENT_MUTATION_CONFIRMED_NOT_APPLIED',
+    });
+    const unknownIdempotency = classifyFault(timeout({ operationKind: 'MUTATING', effectConfirmed: false }));
+    expect(unknownIdempotency.replaySafety).toMatchObject({
+      disposition: 'RECONCILE_FIRST',
+      requiresReconciliation: true,
+      autoRecoverAuthorized: false,
+    });
+    const unknownEffect = classifyFault(timeout({ operationKind: 'MUTATING' }));
+    expect(unknownEffect.replaySafety.disposition).toBe('RECONCILE_FIRST');
+  });
+
+  it('操作类型未知 ⇒ 先对账（不猜「大概没副作用」）', () => {
+    const diagnosis = classifyFault(timeout({ operationKind: null }));
+    expect(diagnosis.replaySafety).toMatchObject({
+      disposition: 'RECONCILE_FIRST',
+      reason: 'OPERATION_KIND_UNKNOWN',
+    });
+  });
+
+  it('安全 / 权限信号优先于「可重试」规则（超时不得覆盖它）', () => {
+    const diagnosis = classifyFault(timeout({ privilegeAffecting: true }));
+    expect(diagnosis.escalatedBySecuritySignal).toBe(true);
+    expect(diagnosis.replaySafety).toMatchObject({
+      disposition: 'FORBIDDEN',
+      autoRecoverAuthorized: false,
+      reason: 'SECURITY_OR_PRIVILEGE_SIGNAL_PRECEDENCE',
+    });
+    expect(diagnosis.riskClass).toBe('HIGH');
+    expect(diagnosis.requiredAction).toBe('HUMAN_REVIEW');
+  });
+
+  it('UNKNOWN_ERROR 默认禁止自动恢复；403 也不得被当成凭据过期后自动重试', () => {
+    const unknown = classifyFault({ ...BASE, errorName: 'WibbleFault', operationKind: 'READ_ONLY' });
+    expect(unknown.replaySafety).toMatchObject({
+      disposition: 'NEEDS_CLASSIFICATION',
+      autoRecoverAuthorized: false,
+    });
+    expect(unknown.requiredAction).toBe('HUMAN_REVIEW');
+
+    const forbidden403 = classifyFault({ ...BASE, httpStatus: 403, errorCode: 'NOT_AUTHORIZED', operationKind: 'READ_ONLY' });
+    expect(forbidden403.faultClass).toBe('UNKNOWN_ERROR');
+    expect(forbidden403.replaySafety.autoRecoverAuthorized).toBe(false);
+    expect(forbidden403.requiredAction).not.toBe('AUTO_RECOVER');
+  });
+
+  it('重放语义随 Incident 意图一并落库（下游分流无需二次推断）', () => {
+    const { intent } = buildFaultIncidentIntent(timeout({ operationKind: 'EXTERNAL_WRITE' }));
+    expect(intent.sourceRefs).toMatchObject({
+      operationKind: 'EXTERNAL_WRITE',
+      replayDisposition: 'RECONCILE_FIRST',
+      requiresReconciliation: true,
+      autoRecoverAuthorized: false,
+      escalatedBySecuritySignal: false,
+      idempotencyGuarantee: 'UNKNOWN',
+      effectConfirmed: null,
+    });
+    expect(intent.sourceRefs.requiredAction).toBe('INVESTIGATE');
+  });
+
+  it('规则显式登记（审计可逐条核对）', () => {
+    expect(FAULT_REPLAY_SAFETY_RULE).toMatchObject({
+      securitySignalPrecedence: true,
+      externalWriteDisposition: 'RECONCILE_FIRST',
+      effectAppliedDisposition: 'FORBIDDEN',
+      unknownOperationDisposition: 'RECONCILE_FIRST',
+      unclassifiedFaultDisposition: 'NEEDS_CLASSIFICATION',
+      forbidden403TreatedAsTokenExpired: false,
+    });
+    expect(FAULT_CLASSIFICATION_BOUNDARY).toMatchObject({
+      separatesFaultRetryFromActionReplay: true,
+      externalWriteNeverAutoRetried: true,
+      securitySignalPrecedence: true,
+      unknownErrorNeverAutoRecovers: true,
     });
   });
 });

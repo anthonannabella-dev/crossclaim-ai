@@ -118,7 +118,7 @@ Incident 跨租户访问或误合并（P0，CHANGE 3）／可重试故障被误�
 | 1 Incident 并发创建 / 去重原子性 | P0 | **本轮完成** | 见下 |
 | 2 脱敏边界补强（对抗测试 + 结构化白名单） | P0 | **本轮完成** | 见下 |
 | 3 Incident 生命周期与租户边界 | P0 | **本轮完成** | 见下 |
-| 4 分类安全重试语义 | P1 | NOT_STARTED | — |
+| 4 分类安全重试语义 | P1 | **本轮完成** | 见下 |
 
 **CHANGE 1 实现口径**（`apps/api/src/services/self-repair/fault-incident-intake.ts`）：
 
@@ -235,7 +235,41 @@ PHASE2_IMPLEMENTATION_AUTHORIZED = NO
 | DB-P14 伪造无权限 | 即便伪造「客户任务前缀形状的 dedupeKey + 客户容器形状的 sourceRefs（含 ACTIVE 长期授权）」仍被既有 `claim()` 以 kind 拒绝：领取 0 条、任务持久化 `BLOCKED`、零租约；修复平面读取也不认该形状 |
 | 纯函数身份规则 | 跨组织/跨 Provider 键分离、大小写归一、`global`/`noprovider` 作用域、规则登记项逐条断言 |
 
-NEXT_UNIT = PHASE1-FINAL-R2（CHANGE 1 ✅ / CHANGE 2 ✅ / CHANGE 3 ✅ → NEXT = CHANGE 4 P1 安全重试语义 → 复审）
+**CHANGE 4 实现口径**（`fault-classification.ts`，规则登记于 `FAULT_REPLAY_SAFETY_RULE`）：
+
+核心理念：**故障可重试 ≠ 业务动作可安全重放**。分类结果新增 `replaySafety`，并由它**推导** `requiredAction`：
+
+| 重放语义 | 触发条件（判定顺序即优先级） | 下一步动作 |
+| --- | --- | --- |
+| `FORBIDDEN` | 安全 / 权限信号（最优先）／需代码修复／明确不可重试／**副作用已确认生效** | 保留类别自身修复路径（`CODE_REPAIR_CANDIDATE` / `OWNER_ACTION` / 人工），**绝不** AUTO_RECOVER |
+| `RECONCILE_FIRST` | **外部写（结果不明）**／操作类型未知／副作用状态未确认 | `INVESTIGATE`（**先对账，不得直接重放**） |
+| `AUTO_RETRY_CANDIDATE` | **只读操作**，或「确认未生效 + 可信幂等」的可变操作 | `AUTO_RECOVER` |
+| `NEEDS_CLASSIFICATION` | 未分类故障（如 `UNKNOWN_ERROR`） | 人工，默认禁止自动恢复 |
+
+- **不变量**：`requiredAction === 'AUTO_RECOVER'` ⟺ `replaySafety.autoRecoverAuthorized === true`（双向断言，含反向：无授权则必不出现 AUTO_RECOVER）。
+- 新增**操作维度**输入（由调用方基于可信事实声明，模型声明无效）：`operationKind`、`idempotencyGuarantee`、`effectConfirmed`；
+  随 Incident 一并落库（`operationKind` / `replayDisposition` / `requiresReconciliation` / `autoRecoverAuthorized` / `escalatedBySecuritySignal` 等 7 字段），下游分流无需二次推断。
+- **安全 / 权限信号优先于超时等规则**：`escalatedBySecuritySignal` 显式登记，超时的「可重试」不得覆盖它。
+- 403 **不**自动等同 `TOKEN_EXPIRED`（仍落 `UNKNOWN_ERROR`），因此也**不会**获得任何自动恢复许可。
+
+**CHANGE 4 验收（纯函数，61 用例）**：只读超时 ⇒ 自动重试候选；**外部写超时 ⇒ 先对账（审计举的例子）**；
+副作用已生效 ⇒ 禁止重放；可变操作仅「确认未生效 + 可信幂等」可重试；操作未知 ⇒ 先对账；
+权限信号 ⇒ 强制升级并禁止重放；`UNKNOWN_ERROR`/403 ⇒ 禁止自动恢复；重放语义随意图落库；规则登记逐条断言。
+门禁：定向回归 **5 文件 / 98 tests 全绿**、`tsc --noEmit` **0 error**。
+
+### 1.6 PHASE1-FINAL-R2 汇总（四项修订全部完成，待复审）
+
+| CHANGE | 级别 | 状态 | 关键证据 |
+| --- | --- | --- | --- |
+| 1 并发创建 / 去重原子性 | P0 | ✅ | 单语句原子 upsert；20 路并发 1 行计数=20、恰好一次新建；混合创建/更新；终态与外来容器并发零改动 |
+| 2 脱敏边界（对抗 + 白名单） | P0 | ✅ | 11 例对抗矩阵；24→31 键运行时白名单；字段长度上限；引用收紧为结构化标识符；零日志 |
+| 3 生命周期与租户边界 | P0 | ✅ | 身份规则（租户/Provider 参与）；生命周期矩阵；跨租户隔离；哈希非授权；伪造容器零权限 |
+| 4 安全重试语义 | P1 | ✅ | 重放语义推导 requiredAction；外部写先对账；安全信号优先；双向不变量 |
+
+**全过程门禁**：纯函数 61 用例 + 真实 PostgreSQL 14 用例（隔离库 `crossclaim_p3r2_iso`）；
+定向回归 5 文件 / **98 tests 全绿**；`apps/api tsc --noEmit` **0 error**；未跑全量回归（如实登记）。
+
+NEXT_UNIT = 送独立复审（PHASE1-FINAL-R2 / CHANGE 1–4）
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```

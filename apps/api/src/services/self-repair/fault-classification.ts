@@ -67,6 +67,37 @@ export const FAULT_REQUIRED_ACTIONS = [
 ] as const;
 export type FaultRequiredAction = (typeof FAULT_REQUIRED_ACTIONS)[number];
 
+/**
+ * MSG-20261009-07 / CHANGE 4 —— **故障可重试 ≠ 业务动作可安全重放**。
+ * 分类结果必须显式给出「后续分流所需的安全语义」，而不是让下游把 AUTO_RECOVER 当成重放许可。
+ */
+export const REPLAY_DISPOSITIONS = [
+  /** 只读或无副作用、或具备**可信**幂等保证 ⇒ 可进入自动重试候选。 */
+  'AUTO_RETRY_CANDIDATE',
+  /** 副作用状态不明 / 外部写 ⇒ **先对账，不得直接重放**。 */
+  'RECONCILE_FIRST',
+  /** 明确不允许任何自动重放（需修复 / 需 OWNER / 已生效 / 安全或权限信号）。 */
+  'FORBIDDEN',
+  /** 故障本身未分类（例如 UNKNOWN_ERROR）⇒ 默认禁止自动恢复。 */
+  'NEEDS_CLASSIFICATION',
+] as const;
+export type ReplayDisposition = (typeof REPLAY_DISPOSITIONS)[number];
+
+export const FAULT_OPERATION_KINDS = ['READ_ONLY', 'MUTATING', 'EXTERNAL_WRITE', 'UNKNOWN'] as const;
+export type FaultOperationKind = (typeof FAULT_OPERATION_KINDS)[number];
+
+export const FAULT_IDEMPOTENCY_GUARANTEES = ['TRUSTED', 'NONE', 'UNKNOWN'] as const;
+export type FaultIdempotencyGuarantee = (typeof FAULT_IDEMPOTENCY_GUARANTEES)[number];
+
+export interface FaultReplaySafety {
+  disposition: ReplayDisposition;
+  /** 是否必须先对账（副作用状态不明时**禁止直接重放**）。 */
+  requiresReconciliation: boolean;
+  /** 等价于 `requiredAction === 'AUTO_RECOVER'`；显式暴露给下游，避免二次推断出错。 */
+  autoRecoverAuthorized: boolean;
+  reason: string;
+}
+
 /** 原始观察（调用方只填**证据**，不填结论；全部字段都会被脱敏后使用）。 */
 export interface FaultObservation {
   /** 故障发生模块（相对模块名，例如 `services/adapters`）。 */
@@ -100,6 +131,12 @@ export interface FaultObservation {
   securityAffecting?: boolean;
   /** 该故障是否改变权限语义。 */
   privilegeAffecting?: boolean;
+  /** 发生故障时在飞的操作类型（决定「故障可重试」是否等价于「动作可重放」）。 */
+  operationKind?: FaultOperationKind | null;
+  /** 该操作是否具备**可信**幂等保证（由调用方基于可信事实声明；模型声明无效）。 */
+  idempotencyGuarantee?: FaultIdempotencyGuarantee | null;
+  /** 外部副作用是否已确认生效：`true`=已生效、`false`=确认未生效、`null`/缺省=**未知**。 */
+  effectConfirmed?: boolean | null;
   /** 模型给出的**非权威**归因提示（永不影响分类结果）。 */
   modelHint?: UntrustedModelHint | null;
 }
@@ -132,6 +169,10 @@ export interface FaultDiagnosis {
   summary: string;
   /** 去重键：同一故障反复发生聚合到同一 Incident。 */
   dedupeKey: string;
+  /** 重放安全语义（CHANGE 4）：下游据此决定自动重试 / 先对账 / 禁止重放。 */
+  replaySafety: FaultReplaySafety;
+  /** 是否因安全 / 权限信号被**强制升级**（此类信号优先于普通超时等规则）。 */
+  escalatedBySecuritySignal: boolean;
   /** 模型提示归档（`authority='NONE'`）；无提示时为 null。 */
   untrustedModelHint: ModelHintAnnotation | null;
 }
@@ -627,28 +668,109 @@ export function annotateUntrustedModelHint(
   };
 }
 
+/**
+ * 重放安全判定（CHANGE 4，纯函数）：把「故障可重试」与「动作可安全重放」分开。
+ * 判定顺序即优先级：
+ *   ① 安全 / 权限信号最优先 —— 普通超时等规则的「可重试」不得覆盖它；
+ *   ② 需修复 / 明确不可重试的类别不进入重试候选；
+ *   ③ 未分类故障默认禁止自动恢复；
+ *   ④ 确定性可重试故障再看**动作维度**：只读 ⇒ 可重试；外部写 ⇒ 先对账（不得直接重放）；
+ *      已确认生效 ⇒ 禁止；副作用状态不明 ⇒ 先对账；仅「确认未生效 + 可信幂等」才可重试。
+ */
+function decideReplaySafety(
+  observation: FaultObservation,
+  outcome: FaultOutcome,
+  escalatedBySecuritySignal: boolean,
+): FaultReplaySafety {
+  const forbidden = (reason: string): FaultReplaySafety => ({
+    disposition: 'FORBIDDEN',
+    requiresReconciliation: false,
+    autoRecoverAuthorized: false,
+    reason,
+  });
+  const reconcile = (reason: string): FaultReplaySafety => ({
+    disposition: 'RECONCILE_FIRST',
+    requiresReconciliation: true,
+    autoRecoverAuthorized: false,
+    reason,
+  });
+  const candidate = (reason: string): FaultReplaySafety => ({
+    disposition: 'AUTO_RETRY_CANDIDATE',
+    requiresReconciliation: false,
+    autoRecoverAuthorized: true,
+    reason,
+  });
+
+  if (escalatedBySecuritySignal) return forbidden('SECURITY_OR_PRIVILEGE_SIGNAL_PRECEDENCE');
+  if (outcome.retryEligibility === 'CODE_FIX_REQUIRED') return forbidden('CODE_FIX_REQUIRED');
+  if (outcome.retryEligibility === 'NOT_RETRYABLE') return forbidden('NOT_RETRYABLE');
+  if (outcome.retryEligibility === 'NEEDS_CLASSIFICATION') {
+    return {
+      disposition: 'NEEDS_CLASSIFICATION',
+      requiresReconciliation: false,
+      autoRecoverAuthorized: false,
+      reason: 'FAULT_UNCLASSIFIED',
+    };
+  }
+
+  const operationKind = observation.operationKind ?? 'UNKNOWN';
+  if (operationKind === 'UNKNOWN') return reconcile('OPERATION_KIND_UNKNOWN');
+  if (operationKind === 'READ_ONLY') return candidate('READ_ONLY_OPERATION');
+  if (observation.effectConfirmed === true) return forbidden('EFFECT_ALREADY_APPLIED');
+  // 外部写：结果不明一律先对账（本项目的外部写仍处 HOLD）——绝不因"分类为超时"而重放
+  if (operationKind === 'EXTERNAL_WRITE') return reconcile('EXTERNAL_WRITE_REQUIRES_RECONCILIATION');
+  if (observation.effectConfirmed === false && observation.idempotencyGuarantee === 'TRUSTED') {
+    return candidate('IDEMPOTENT_MUTATION_CONFIRMED_NOT_APPLIED');
+  }
+  return reconcile('EFFECT_STATE_UNCONFIRMED');
+}
+
+/** 重放语义 → 下一步动作（FORBIDDEN 时保留类别自身的修复路径，绝不放行自动恢复）。 */
+function actionForDisposition(safety: FaultReplaySafety, outcome: FaultOutcome): FaultRequiredAction {
+  switch (safety.disposition) {
+    case 'AUTO_RETRY_CANDIDATE':
+      return 'AUTO_RECOVER';
+    case 'RECONCILE_FIRST':
+      return 'INVESTIGATE';
+    case 'NEEDS_CLASSIFICATION':
+      return 'HUMAN_REVIEW';
+    case 'FORBIDDEN':
+      return outcome.requiredAction === 'AUTO_RECOVER' ? 'HUMAN_REVIEW' : outcome.requiredAction;
+  }
+}
+
 /** 确定性分类：纯函数，同一观察必然得到同一结论。 */
 export function classifyFault(observation: FaultObservation): FaultDiagnosis {
   const evidence = normalizeEvidence(observation);
   const rule = FAULT_RULES.find((candidate) => candidate.test(evidence)) ?? FAULT_RULES[FAULT_RULES.length - 1]!;
-  const outcome = escalateOutcome(FAULT_OUTCOMES[rule.faultClass], observation);
+  const escalated = escalateOutcome(FAULT_OUTCOMES[rule.faultClass], observation);
+  const escalatedBySecuritySignal =
+    observation.securityAffecting === true || observation.privilegeAffecting === true;
 
-  if (outcome.requiredAction === 'AUTO_RECOVER' && outcome.retryEligibility !== 'AUTO_RETRY_BACKOFF') {
-    // 自我防护：两者不一致说明表被改坏了 —— fail-closed 到人工，而不是自动重试。
-    return buildDiagnosis(rule, evidence, {
-      ...outcome,
-      retryEligibility: 'NOT_RETRYABLE',
-      requiredAction: 'HUMAN_REVIEW',
-    }, observation);
+  // CHANGE 4：requiredAction **由重放语义推导**，而不是沿用类别默认动作
+  let replaySafety = decideReplaySafety(observation, escalated, escalatedBySecuritySignal);
+  let outcome: FaultOutcome = {
+    ...escalated,
+    requiredAction: actionForDisposition(replaySafety, escalated),
+  };
+
+  if (
+    outcome.requiredAction === 'AUTO_RECOVER' &&
+    (outcome.retryEligibility !== 'AUTO_RETRY_BACKOFF' || !replaySafety.autoRecoverAuthorized)
+  ) {
+    // 自我防护：不变量被破坏说明表被改坏了 —— fail-closed 到人工，而不是自动重试。
+    replaySafety = {
+      disposition: 'FORBIDDEN',
+      requiresReconciliation: false,
+      autoRecoverAuthorized: false,
+      reason: 'AUTO_RECOVER_INVARIANT_VIOLATED',
+    };
+    outcome = { ...outcome, retryEligibility: 'NOT_RETRYABLE', requiredAction: 'HUMAN_REVIEW' };
   }
   if (outcome.ownerGatedAction !== undefined && !requiresOwnerApproval(outcome.ownerGatedAction)) {
-    return buildDiagnosis(rule, evidence, {
-      ...outcome,
-      requiredAction: 'HUMAN_REVIEW',
-      retryEligibility: 'NOT_RETRYABLE',
-    }, observation);
+    outcome = { ...outcome, requiredAction: 'HUMAN_REVIEW', retryEligibility: 'NOT_RETRYABLE' };
   }
-  return buildDiagnosis(rule, evidence, outcome, observation);
+  return buildDiagnosis(rule, evidence, outcome, observation, replaySafety, escalatedBySecuritySignal);
 }
 
 function buildDiagnosis(
@@ -656,6 +778,8 @@ function buildDiagnosis(
   evidence: NormalizedEvidence,
   outcome: FaultOutcome,
   observation: FaultObservation,
+  replaySafety: FaultReplaySafety,
+  escalatedBySecuritySignal: boolean,
 ): FaultDiagnosis {
   const summarized = redactFaultText(
     `${rule.faultClass}: ${observation.message ?? evidence.code ?? observation.errorName ?? rule.id}`,
@@ -706,6 +830,8 @@ function buildDiagnosis(
     ownerGatedAction: outcome.ownerGatedAction ?? null,
     summary,
     dedupeKey,
+    replaySafety,
+    escalatedBySecuritySignal,
     untrustedModelHint: annotateUntrustedModelHint(observation.modelHint, rule.faultClass),
   };
 }
@@ -736,6 +862,14 @@ export interface FaultIncidentSourceRefs {
   occurrenceCount: number;
   detectedAt: string;
   untrustedModelHint: ModelHintAnnotation | null;
+  /** CHANGE 4：重放安全语义（下游分流依据；`autoRecoverAuthorized` 是唯一自动恢复许可）。 */
+  operationKind: FaultOperationKind;
+  idempotencyGuarantee: FaultIdempotencyGuarantee;
+  effectConfirmed: boolean | null;
+  replayDisposition: ReplayDisposition;
+  requiresReconciliation: boolean;
+  autoRecoverAuthorized: boolean;
+  escalatedBySecuritySignal: boolean;
 }
 
 /**
@@ -767,6 +901,14 @@ export const FAULT_SOURCE_REF_FIELDS = [
   'occurrenceCount',
   'detectedAt',
   'untrustedModelHint',
+  /** MSG-20261009-07 CHANGE 4 —— 重放安全语义（下游分流所需） */
+  'operationKind',
+  'idempotencyGuarantee',
+  'effectConfirmed',
+  'replayDisposition',
+  'requiresReconciliation',
+  'autoRecoverAuthorized',
+  'escalatedBySecuritySignal',
 ] as const;
 export type FaultSourceRefField = (typeof FAULT_SOURCE_REF_FIELDS)[number];
 
@@ -889,6 +1031,14 @@ export function buildFaultIncidentIntent(
     occurrenceCount: typeof observation.occurrenceCount === 'number' ? observation.occurrenceCount : 1,
     detectedAt,
     untrustedModelHint: diagnosis.untrustedModelHint,
+    operationKind: observation.operationKind ?? 'UNKNOWN',
+    idempotencyGuarantee: observation.idempotencyGuarantee ?? 'UNKNOWN',
+    effectConfirmed:
+      typeof observation.effectConfirmed === 'boolean' ? observation.effectConfirmed : null,
+    replayDisposition: diagnosis.replaySafety.disposition,
+    requiresReconciliation: diagnosis.replaySafety.requiresReconciliation,
+    autoRecoverAuthorized: diagnosis.replaySafety.autoRecoverAuthorized,
+    escalatedBySecuritySignal: diagnosis.escalatedBySecuritySignal,
   });
 
   const intent: FaultIncidentIntent = {
@@ -921,6 +1071,11 @@ export const FAULT_CLASSIFICATION_BOUNDARY = {
   tenantScopedIdentity: true,
   providerScopedIdentity: true,
   hashIsNotAuthorization: true,
+  /** MSG-20261009-07 CHANGE 4 */
+  separatesFaultRetryFromActionReplay: true,
+  externalWriteNeverAutoRetried: true,
+  securitySignalPrecedence: true,
+  unknownErrorNeverAutoRecovers: true,
   incidentKind: INTERNAL_FAULT_INCIDENT_KIND,
   customerExecutionKind: 'CUSTOMER_GOAL_QUEUE',
 } as const;
@@ -942,4 +1097,22 @@ export const FAULT_INCIDENT_IDENTITY_RULE = {
   rawTenantIdPersisted: false,
   rawProviderIdPersisted: false,
   hashIsNotAuthorization: true,
+} as const;
+
+/**
+ * 重放安全规则（CHANGE 4，**显式登记**）：
+ *   · 安全 / 权限信号优先于任何「可重试」规则；
+ *   · 自动重试候选只允许来自「只读操作」或「确认未生效 + 可信幂等」的可变操作；
+ *   · 外部写一律**先对账**（不得因分类为超时/限流而直接重放）；
+ *   · 副作用已确认生效 ⇒ 禁止重放；
+ *   · 操作类型未知 ⇒ 先对账；故障未分类 ⇒ 禁止自动恢复。
+ */
+export const FAULT_REPLAY_SAFETY_RULE = {
+  securitySignalPrecedence: true,
+  autoRetryRequires: ['READ_ONLY_OPERATION', 'IDEMPOTENT_MUTATION_CONFIRMED_NOT_APPLIED'],
+  externalWriteDisposition: 'RECONCILE_FIRST',
+  effectAppliedDisposition: 'FORBIDDEN',
+  unknownOperationDisposition: 'RECONCILE_FIRST',
+  unclassifiedFaultDisposition: 'NEEDS_CLASSIFICATION',
+  forbidden403TreatedAsTokenExpired: false,
 } as const;
