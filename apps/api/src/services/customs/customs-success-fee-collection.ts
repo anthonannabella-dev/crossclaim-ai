@@ -46,6 +46,7 @@ export type CustomsFeeCollectionReason =
   | 'FEE_POLICY_NOT_EFFECTIVE'
   | 'FEE_POLICY_RATE_OUT_OF_RANGE'
   | 'HISTORY_SOURCE_UNTRUSTED'
+  | 'HISTORY_LEDGER_UNAVAILABLE'
   | 'CURRENCY_MISMATCH'
   | 'DUPLICATE_FEE_SUPPRESSED'
   | 'RECEIVABLE_ESTABLISHED'
@@ -138,8 +139,13 @@ export type CollectionAuthenticationReason =
   | 'COLLECTION_SIGNATURE_MISMATCH'
   | 'COLLECTION_PAYLOAD_MALFORMED'
   | 'COLLECTION_MERCHANT_BINDING_REQUIRED'
+  | 'COLLECTION_BINDING_REQUIRED'
+  | 'COLLECTION_TOLERANCE_INVALID'
   | 'COLLECTION_RECEIVABLE_MISMATCH'
   | 'COLLECTION_CURRENCY_MISMATCH';
+
+/** V2-R3 / CHANGE 14：时间窗必须有安全上限，拒绝非法数值。 */
+export const MAX_COLLECTION_TOLERANCE_SECONDS = 900;
 
 export interface AuthenticateCollectionFactInput {
   rawBody: string;
@@ -210,6 +216,17 @@ export function authenticateCollectionFact(
   if (input.expectedMerchantAccountId.trim().length === 0) {
     return reject('COLLECTION_MERCHANT_BINDING_REQUIRED');
   }
+  if (input.expectedReceivableId.trim().length === 0 || input.expectedCurrency.trim().length === 0) {
+    return reject('COLLECTION_BINDING_REQUIRED');
+  }
+  if (
+    input.toleranceSeconds !== undefined &&
+    (!Number.isInteger(input.toleranceSeconds) ||
+      input.toleranceSeconds <= 0 ||
+      input.toleranceSeconds > MAX_COLLECTION_TOLERANCE_SECONDS)
+  ) {
+    return reject('COLLECTION_TOLERANCE_INVALID');
+  }
   if (input.secret === null || input.secret.length === 0) {
     return reject('COLLECTION_SECRET_NOT_CONFIGURED');
   }
@@ -268,12 +285,8 @@ export interface CustomsFeeCollectionInput {
   /** CHANGE 03：只接受经核验的收款事实（品牌类型，无法自行构造）。 */
   collectionFact?: VerifiedFeeCollectionFact;
   /** 已入账的历史收款/退款合计（来自台账，不受当前授权状态影响）。 */
-  /** V2-R2 / CHANGE 13：历史金额必须来自**可信台账**，不接受任意传入汇总数。 */
-  ledger?: {
-    source: 'LEDGER' | 'PROVIDER_RECONCILIATION_LEDGER';
-    collectedAmount: string;
-    refundedAmount: string;
-  };
+  /** V2-R3 / CHANGE 16：历史金额必须来自**经认证的**台账证据（不再只看来源枚举）。 */
+  ledgerEvidence?: VerifiedLedgerEvidence | null;
   /** CHANGE 07：费率只能来自服务端版本化费率策略（`CUSTOMS_SUCCESS_15`），不接受任意输入值。 */
   feePolicy: FeePolicy | null;
   /** V2-R2 / CHANGE 13：判定日（YYYY-MM-DD），用于校验费率策略有效期。 */
@@ -284,6 +297,86 @@ export const CUSTOMS_TRUSTED_LEDGER_SOURCES = [
   'LEDGER',
   'PROVIDER_RECONCILIATION_LEDGER',
 ] as const;
+
+const VERIFIED_LEDGER_BRAND: unique symbol = Symbol('crossclaim.customs.verifiedLedgerEvidence');
+
+/** 经认证的台账合计证据：品牌为模块私有 Symbol，只能由 authenticateLedgerEvidence 产出。 */
+export interface VerifiedLedgerEvidence {
+  readonly [VERIFIED_LEDGER_BRAND]: true;
+  readonly source: CustomsTrustedCollectionSource extends never ? never : string;
+  readonly collectedAmount: string;
+  readonly refundedAmount: string;
+  readonly occurredAt: string;
+}
+
+export function isVerifiedLedgerEvidence(value: unknown): value is VerifiedLedgerEvidence {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string | symbol, unknown>;
+  return record[VERIFIED_LEDGER_BRAND] === true && typeof record.collectedAmount === 'string';
+}
+
+/** CHANGE 16：台账合计也必须经独立认证边界（HMAC）产出，不接受调用方自述来源。 */
+export function authenticateLedgerEvidence(input: {
+  rawBody: string;
+  signatureHeader: string | null;
+  timestampHeader: string | null;
+  secret: string | null;
+  now: Date;
+  toleranceSeconds?: number;
+}): { verified: boolean; reasonCodes: readonly CollectionAuthenticationReason[]; evidence: VerifiedLedgerEvidence | null } {
+  const reject = (reason: CollectionAuthenticationReason) => ({
+    verified: false,
+    reasonCodes: [reason] as readonly CollectionAuthenticationReason[],
+    evidence: null,
+  });
+  if (input.secret === null || input.secret.length === 0) return reject('COLLECTION_SECRET_NOT_CONFIGURED');
+  if (input.signatureHeader === null || input.signatureHeader.length === 0) {
+    return reject('COLLECTION_SIGNATURE_MISSING');
+  }
+  if (input.timestampHeader === null || input.timestampHeader.length === 0) {
+    return reject('COLLECTION_TIMESTAMP_MISSING');
+  }
+  const tolerance = input.toleranceSeconds ?? 300;
+  const timestampSeconds = Number(input.timestampHeader);
+  if (!Number.isFinite(timestampSeconds) || Math.abs(input.now.getTime() / 1000 - timestampSeconds) > tolerance) {
+    return reject('COLLECTION_TIMESTAMP_OUT_OF_TOLERANCE');
+  }
+  const expectedSignature = createHmac('sha256', input.secret)
+    .update(`${input.timestampHeader}.${input.rawBody}`)
+    .digest('hex');
+  const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
+  const providedBuffer = Buffer.from(input.signatureHeader, 'utf8');
+  if (expectedBuffer.length !== providedBuffer.length || !timingSafeEqual(expectedBuffer, providedBuffer)) {
+    return reject('COLLECTION_SIGNATURE_MISMATCH');
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input.rawBody);
+  } catch {
+    return reject('COLLECTION_PAYLOAD_MALFORMED');
+  }
+  if (typeof parsed !== 'object' || parsed === null) return reject('COLLECTION_PAYLOAD_MALFORMED');
+  const record = parsed as Record<string, unknown>;
+  if (
+    typeof record.collectedAmount !== 'string' ||
+    typeof record.refundedAmount !== 'string' ||
+    typeof record.source !== 'string' ||
+    !(CUSTOMS_TRUSTED_LEDGER_SOURCES as readonly string[]).includes(record.source)
+  ) {
+    return reject('COLLECTION_PAYLOAD_MALFORMED');
+  }
+  return {
+    verified: true,
+    reasonCodes: [],
+    evidence: {
+      [VERIFIED_LEDGER_BRAND]: true,
+      source: record.source,
+      collectedAmount: record.collectedAmount,
+      refundedAmount: record.refundedAmount,
+      occurredAt: typeof record.occurredAt === 'string' ? record.occurredAt : '',
+    },
+  };
+}
 
 export interface CustomsFeeCollectionResult {
   kind: 'CUSTOMS_SUCCESS_FEE_COLLECTION';
@@ -298,7 +391,8 @@ export interface CustomsFeeCollectionResult {
   adjustments: readonly CustomsFeeAdjustmentEntry[];
   autoCollection: 'HOLD' | 'AUTHORIZED';
   /** HISTORICAL：已发生并被核验的收款合计，客户撤销授权**不会**抹除它。 */
-  historicalCollectedAmount: string;
+  /** null = 台账**不可读**（未知），与 '0.00'（确实没有历史收款）严格区分。 */
+  historicalCollectedAmount: string | null;
   /** 是否仍可对**未来**收款发起自动扣款（撤销授权后为 false）。 */
   collectionAuthorizedForFuture: boolean;
   collectionInitiated: false;
@@ -344,10 +438,11 @@ export function evaluateCustomsSuccessFeeCollection(
     currency: input.settlement.currency,
     basisSettlementId: input.settlement.settlementId,
     historicalCollectedAmount:
-      input.ledger === undefined ||
-      !(CUSTOMS_TRUSTED_LEDGER_SOURCES as readonly string[]).includes(input.ledger.source)
+      input.ledgerEvidence === undefined || input.ledgerEvidence === null
         ? '0.00'
-        : formatAtLeastTwoDecimals(input.ledger.collectedAmount),
+        : isVerifiedLedgerEvidence(input.ledgerEvidence)
+          ? formatAtLeastTwoDecimals(input.ledgerEvidence.collectedAmount)
+          : null,
     collectionAuthorizedForFuture: false,
     collectionInitiated: false as const,
     chargedAmount: null,
@@ -394,11 +489,13 @@ export function evaluateCustomsSuccessFeeCollection(
   ) {
     return calculated(['CURRENCY_MISMATCH'], null);
   }
+  // CHANGE 16：台账证据必须经认证边界产出；未认证 → 不采信且区分"不可读"
   if (
-    input.ledger !== undefined &&
-    !(CUSTOMS_TRUSTED_LEDGER_SOURCES as readonly string[]).includes(input.ledger.source)
+    input.ledgerEvidence !== undefined &&
+    input.ledgerEvidence !== null &&
+    !isVerifiedLedgerEvidence(input.ledgerEvidence)
   ) {
-    return calculated(['HISTORY_SOURCE_UNTRUSTED'], null);
+    return calculated(['HISTORY_LEDGER_UNAVAILABLE'], null);
   }
 
   // 1) 计费基础必须可信

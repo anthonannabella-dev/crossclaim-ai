@@ -12,6 +12,7 @@ import {
   evaluateCustomsSuccessFeeCollection,
   sumReceivablesSameCurrency,
   authenticateCollectionFact,
+  authenticateLedgerEvidence,
   signCollectionFactBody,
   isVerifiedFeeCollectionFact,
   type CustomsFeeCollectionFact,
@@ -35,6 +36,26 @@ const FEE_POLICY: FeePolicy = {
 
 /** CHANGE 03：收款事实必须经核验（品牌类型），测试走同一条核验路径。 */
 const COLLECTION_SECRET = 'whsec_collection_test';
+
+/** CHANGE 16：台账证据必须经认证边界产出。 */
+function ledgerEvidence(collectedAmount: string) {
+  const rawBody = JSON.stringify({
+    source: 'LEDGER',
+    collectedAmount,
+    refundedAmount: '0.00',
+    occurredAt: '2026-10-10T00:00:00.000Z',
+  });
+  const timestamp = '1770000000';
+  const result = authenticateLedgerEvidence({
+    rawBody,
+    signatureHeader: signCollectionFactBody(timestamp, rawBody, COLLECTION_SECRET),
+    timestampHeader: timestamp,
+    secret: COLLECTION_SECRET,
+    now: new Date(Number(timestamp) * 1000),
+  });
+  if (result.evidence === null) throw new Error('TEST_LEDGER_UNVERIFIED');
+  return result.evidence;
+}
 
 function collectionFact(
   overrides: Partial<CustomsFeeCollectionFact> = {},
@@ -160,26 +181,79 @@ describe('V2-08 策略有效性与历史台账 — CHANGE 13', () => {
   it('历史金额来源不可信 → 不采信汇总数（HISTORY_SOURCE_UNTRUSTED）', () => {
     const result = evaluateCustomsSuccessFeeCollection(
       input({
-        ledger: {
-          source: 'CLIENT_REPORTED' as unknown as 'LEDGER',
+        ledgerEvidence: {
+          source: 'CLIENT_REPORTED',
           collectedAmount: '9999.00',
           refundedAmount: '0.00',
-        },
+          occurredAt: '2026-10-10T00:00:00.000Z',
+        } as never,
       }),
     );
     expect(result.state).toBe('SUCCESS_FEE_CALCULATED');
-    expect(result.reasonCodes).toContain('HISTORY_SOURCE_UNTRUSTED');
-    expect(result.historicalCollectedAmount).toBe('0.00');
+    expect(result.reasonCodes).toContain('HISTORY_LEDGER_UNAVAILABLE');
+    // 不可读 ≠ 零值：必须为 null 而不是 '0.00'
+    expect(result.historicalCollectedAmount).toBeNull();
   });
 
   it('可信台账来源才被采信为历史已收', () => {
     const result = evaluateCustomsSuccessFeeCollection(
       input({
-        ledger: { source: 'LEDGER', collectedAmount: '300.00', refundedAmount: '0.00' },
+        ledgerEvidence: ledgerEvidence('300.00'),
       }),
     );
     expect(result.state).toBe('PAYMENT_COLLECTION_AUTHORIZED');
     expect(result.historicalCollectedAmount).toBe('300.00');
+  });
+
+  it('未提供台账证据 → 视为确实没有历史收款（0.00，而非 null）', () => {
+    const result = evaluateCustomsSuccessFeeCollection(input());
+    expect(result.historicalCollectedAmount).toBe('0.00');
+  });
+
+  it('认证边界拒绝非法时间窗（0 / 负数 / 非整数 / 超上限）', () => {
+    const timestamp = '1770000000';
+    const rawBody = JSON.stringify({
+      source: 'LEDGER',
+      collectedAmount: '1.00',
+      refundedAmount: '0.00',
+      occurredAt: '2026-10-10T00:00:00.000Z',
+    });
+    for (const toleranceSeconds of [0, -5, 1.5, 99999]) {
+      const result = authenticateCollectionFact({
+        rawBody: '{}',
+        signatureHeader: signCollectionFactBody(timestamp, '{}', COLLECTION_SECRET),
+        timestampHeader: timestamp,
+        secret: COLLECTION_SECRET,
+        now: new Date(Number(timestamp) * 1000),
+        expectedReceivableId: 'st-1',
+        expectedMerchantAccountId: 'acct-1',
+        expectedCurrency: 'USD',
+        toleranceSeconds,
+      });
+      expect(result.reasonCodes).toContain('COLLECTION_TOLERANCE_INVALID');
+    }
+    void rawBody;
+  });
+
+  it('空白应收/币种预期 → 拒绝（COLLECTION_BINDING_REQUIRED）', () => {
+    const timestamp = '1770000000';
+    const rawBody = '{}';
+    const base = {
+      rawBody,
+      signatureHeader: signCollectionFactBody(timestamp, rawBody, COLLECTION_SECRET),
+      timestampHeader: timestamp,
+      secret: COLLECTION_SECRET,
+      now: new Date(Number(timestamp) * 1000),
+      expectedReceivableId: 'st-1',
+      expectedMerchantAccountId: 'acct-1',
+      expectedCurrency: 'USD',
+    };
+    expect(authenticateCollectionFact({ ...base, expectedReceivableId: '  ' }).reasonCodes).toContain(
+      'COLLECTION_BINDING_REQUIRED',
+    );
+    expect(authenticateCollectionFact({ ...base, expectedCurrency: '' }).reasonCodes).toContain(
+      'COLLECTION_BINDING_REQUIRED',
+    );
   });
 });
 
@@ -407,7 +481,7 @@ describe('V2-08 收款结果 — 到账 / 失败 / 部分 / 退款 / 争议', ()
   it('已核验收款事实：历史已收写入结果，撤销授权只影响未来扣款', () => {
     const collected = evaluateCustomsSuccessFeeCollection(
       input({
-        ledger: { source: 'LEDGER', collectedAmount: '300.00', refundedAmount: '0.00' },
+        ledgerEvidence: ledgerEvidence('300.00'),
         collectionFact: collectionFact({ collectedAmount: '1500.00' }),
       }),
     );
@@ -417,7 +491,7 @@ describe('V2-08 收款结果 — 到账 / 失败 / 部分 / 退款 / 争议', ()
 
     const revoked = evaluateCustomsSuccessFeeCollection(
       input({
-        ledger: { source: 'LEDGER', collectedAmount: '300.00', refundedAmount: '0.00' },
+        ledgerEvidence: ledgerEvidence('300.00'),
         authorization: {
           active: true,
           revoked: true,

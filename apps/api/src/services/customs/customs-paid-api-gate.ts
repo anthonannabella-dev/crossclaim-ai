@@ -551,10 +551,14 @@ function readOwnDataProperty(provider: object, key: string): unknown {
 /** capabilities 只保留显式 true 的布尔声明，并冻结为**新的**对象（不交原始引用）。 */
 function safeCapabilitiesCopy(value: unknown): Readonly<Record<string, true>> | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
-  const source = value as Record<string, unknown>;
+  const source = value as object;
   const copy: Record<string, true> = {};
-  for (const key of Object.keys(source)) {
-    if (source[key] === true) copy[key] = true;
+  // V2-R3 / CHANGE 15：capabilities 的每个键也必须走**自有数据描述符**，
+  // 不得经属性访问触发 getter，也不继承原型上的键。
+  for (const key of Object.getOwnPropertyNames(source)) {
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+    if (descriptor === undefined || !('value' in descriptor)) continue;
+    if (descriptor.value === true) copy[key] = true;
   }
   return Object.freeze(copy);
 }
