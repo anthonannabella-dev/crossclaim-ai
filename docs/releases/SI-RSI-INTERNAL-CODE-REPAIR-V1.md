@@ -170,13 +170,58 @@ Linux 路径 / Windows 路径 / 邮箱 / 长数字）逐例断言**密钥原文�
 `evidence:Error: insert failed…`、`{"raw":"payload"}` 全部不落库）。门禁：纯函数套件 **48/48 PASS**、
 定向回归 **5 文件 / 80 tests 全绿**、`tsc --noEmit` **0 error**。
 
+### 1.7 独立复审裁决（MSG-20261009-08 = PASS WITH REVISE；**PHASE 1 收口**）
+
+**裁决原文**：`AI-ARCHITECT-INBOX.md` → `### [MSG-20261009-08]`（逐字归档，FNV1A `3ed6a0de`，`FULL_COPY_OK`：135 行 / 缺失 0 / 多出 0）。
+会话：`https://chatgpt.com/c/6ac83622-e384-83ec-8938-eb6e13eea232`（右侧新会话）；三项投递校验全过。
+
+| 审计项 | 裁决 |
+| --- | --- |
+| CHANGE1_INCIDENT_CONCURRENCY_ATOMICITY | **PASS** |
+| CHANGE2_SANITIZATION_BOUNDARY | **PASS** |
+| CHANGE3_LIFECYCLE_AND_TENANT_BOUNDARY | **PASS** |
+| CHANGE4_REPLAY_SAFETY_SEMANTICS | **PASS** |
+| PHASE1_EVIDENCE_SUFFICIENCY | **PASS WITH REVISE**（全量回归列为 PHASE 2 前置门禁） |
+| SCOPE_HONESTY | **PASS** |
+
+阶段状态：`PHASE0_CLOSED = YES`、**`PHASE1_CLOSED = YES`**、`PHASE2_IMPLEMENTATION_AUTHORIZED = YES_SAFE_SCOPE_ONLY`、
+`PHASE2_CLOSED = NO`、`PHASE3_TO_7_AUTHORIZED = NO`；`EXTERNAL_WRITE = HOLD`、`REAL_PROVIDER_VALIDATION = NO`、
+`REAL_MODEL_INTEGRATION = HOLD`、`PRODUCTION_READY = NO`。
+
+**PHASE 2 授权边界（原文要点）**：复用 ONE SI Runtime（不得新增 Scheduler / Controller / 第二执行器）；
+以**可信 Incident 与既有持久化事实**为输入完成确定性分流；把 `RECONCILE_FIRST` / `FORBIDDEN` / `NEEDS_CLASSIFICATION`
+分别映射到明确的安全路径；**不得因 PHASE 1 的 `AUTO_RECOVER` 分类结果直接执行外部业务写入**；
+不得修改封板 RC / main、生产数据库或生产授权策略；PHASE 2 完成后须**单独申请复审**。
+
+**GATE-1..6（审计登记的后续门禁，非 PHASE 1 阻断项）**：
+
+| 编号 | 级别 | 要求 |
+| --- | --- | --- |
+| GATE-1 | P1 | 运行全量 API 回归，区分历史债务与本轮引入回归 |
+| GATE-2 | P0 | 验证 PHASE 2 每条分流路径都不能绕过既有租户认证、Incident kind、生命周期与可信事实来源 |
+| GATE-3 | P0 | 验证外写相关故障不会因「被分类为可重试」而自动重放；实际外写继续 HOLD |
+| GATE-4 | P0 | 真实运行时下验证异常重投 / 重复分流 / 断连 / 崩溃恢复 / 并发处理的幂等与 fencing |
+| GATE-5 | P1 | 接线边界增加脱敏负向测试（原始异常、未知 sourceRefs、模型自由文本不得绕过白名单） |
+| GATE-6 | P1 | 后续若确需 schema / migration 变更，须先提交独立 Schema Delta 审计 |
+
+**RISKS（原文）**：`FULL_REGRESSION_NOT_VERIFIED` / `SANITIZATION_UNKNOWN_PATTERNS` / `TENANT_CONTEXT_TRUST_BOUNDARY` /
+`INCIDENT_DELIVERY_DUPLICATION` / `REPLAY_RUNTIME_AUTHORIZATION_GAP` / `PRODUCTION_ENVIRONMENT_NOT_VERIFIED`。
+
+**审计方附加约束（照录要点，PHASE 2 必须遵守）**：
+
+1. `replaySafety.autoRecoverAuthorized = true` **只是分类结果，不是运行时授权凭证**；分流与执行阶段必须再次检查
+   服务端可信事实、幂等状态、租约 fencing、授权时效与生产外写门禁。
+2. `listForOrganization()` 必须**始终**使用经服务端认证与授权解析得到的 `organizationId`，
+   不允许从请求参数、客户端输入或模型输出直接取得身份；未加 DB 级 RLS / 独立组织列不代表 DB 层已有完整租户隔离。
+3. `occurrenceCount` 应解释为「**被数据库接受的 intake 次数**」，不必然是全局唯一故障事件数（客户端重试可能重复计数）。
+
 ## 2. 阶段计划与当前状态
 
 | PHASE | 内容 | 状态 |
 | --- | --- | --- |
 | 0 | 现有能力审计（本文件 §1） | **本轮完成** |
-| 1 | 内部故障诊断中心（API_TIMEOUT / RATE_LIMIT / TOKEN_EXPIRED / SCHEMA_CHANGED / PARSER_FAILURE / … / UNKNOWN_ERROR 的确定性分类 → Incident） | **PASS WITH REVISE**（功能基线已接受；收口 4 项 CHANGE 见 §1.4） |
-| 2 | 自动恢复 vs 代码修复分流（A 可恢复业务故障 → 既有 ONE SI Runtime；B 可复现 Bug → `CODE_REPAIR_CANDIDATE`；C 需外部权限 → BLOCK / HUMAN_REVIEW_REQUIRED） | NOT_STARTED |
+| 1 | 内部故障诊断中心（API_TIMEOUT / RATE_LIMIT / TOKEN_EXPIRED / SCHEMA_CHANGED / PARSER_FAILURE / … / UNKNOWN_ERROR 的确定性分类 → Incident） | **CLOSED**（MSG-20261009-08；PHASE 0 + PHASE 1 全部收口） |
+| 2 | 自动恢复 vs 代码修复分流（A 可恢复业务故障 → 既有 ONE SI Runtime；B 可复现 Bug → `CODE_REPAIR_CANDIDATE`；C 需外部权限 → BLOCK / HUMAN_REVIEW_REQUIRED） | **AUTHORIZED（仅内部安全范围）**，尚未实施 |
 | 3 | 内置 AI Code Repair Agent（复用 Model Gateway；隔离工作区；最小 Patch；受限命令白名单；成本/超时/文件范围限制；Prompt Injection 防护） | NOT_STARTED |
 | 4 | 独立 Judge 与自动验证（Builder ≠ Judge；真实测试命令 + 退出码 + 输出证据；REVISE 有界重试） | NOT_STARTED |
 | 5 | 受控发布准备（生成修复分支 / Patch / **可审计 PR**；**禁止**自动合并主线、自动改封板、自动生产迁移/发布） | NOT_STARTED |
@@ -209,8 +254,10 @@ FULL_REGRESSION = 本单元定向回归 5 文件 / 58 tests 全绿（真实 PG �
 NEW_RELEASE_CANDIDATE = NOT_STARTED
 INDEPENDENT_AUDIT = MSG-20261009-07 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A 69f7b353）
 PHASE0_CLOSED = YES
-PHASE1_CLOSED = NO（待 PHASE1-FINAL-R2：CHANGE 1–4 后复审）
-PHASE2_IMPLEMENTATION_AUTHORIZED = NO
+PHASE1_CLOSED = YES（MSG-20261009-08 阶段性收口；全量回归列为 PHASE 2 前置门禁）
+PHASE2_IMPLEMENTATION_AUTHORIZED = YES_SAFE_SCOPE_ONLY（复用 ONE SI Runtime；不得把 AUTO_RECOVER 当外写授权）
+PHASE3_TO_7_AUTHORIZED = NO
+PHASE1_REVIEW_VERDICT = MSG-20261009-08 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A 3ed6a0de）
 **CHANGE 3 实现口径**：
 
 - **显式身份规则**（`FAULT_INCIDENT_IDENTITY_RULE` + 键结构）：
@@ -269,7 +316,7 @@ PHASE2_IMPLEMENTATION_AUTHORIZED = NO
 **全过程门禁**：纯函数 61 用例 + 真实 PostgreSQL 14 用例（隔离库 `crossclaim_p3r2_iso`）；
 定向回归 5 文件 / **98 tests 全绿**；`apps/api tsc --noEmit` **0 error**；未跑全量回归（如实登记）。
 
-NEXT_UNIT = 送独立复审（PHASE1-FINAL-R2 / CHANGE 1–4）
+NEXT_UNIT = PHASE 2 安全范围实施（确定性分流：RECONCILE_FIRST / FORBIDDEN / NEEDS_CLASSIFICATION → 明确安全路径）→ GATE-1 全量回归 → PHASE 2 独立复审
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```

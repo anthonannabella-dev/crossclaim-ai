@@ -168635,3 +168635,352 @@ CHANGE 4：补齐分类结果中的安全重试约束，严格区分故障可重
 
 本次允许继续收口 PHASE 1，不批准越过隔离门禁进入自动代码修复。
 ```
+
+### [MSG-20261009-08] PHASE1-FINAL-R2 独立复审裁决 = PASS WITH REVISE（CHANGE 1–4 全 PASS；PHASE1_CLOSED = YES、PHASE2 仅限内部安全范围；GATE-1..6）reviewed ref 0f90b148
+
+```text
+MSG-20261009-08｜SI/RSI INTERNAL AUTONOMOUS CODE REPAIR V1 · PHASE1-FINAL-R2 独立复审裁决
+
+REVIEWED_HEAD：0f90b148
+
+FINAL VERDICT：PASS WITH REVISE
+
+PHASE1_CLOSED：YES
+
+PHASE2_IMPLEMENTATION_AUTHORIZED：YES（仅限内部安全范围，附带强制门禁）
+
+审计依据：本轮提交的 CHANGE 1–4 实现说明、测试矩阵、真实 PostgreSQL 验收结果及明确登记的未验证事项。
+
+**证据级别声明：**本次为提交材料审计，未直接读取 Git diff、测试日志或数据库原始记录。因此以下 PASS 表示所提交证据在逻辑上足以支持该项设计验收，并不构成独立复现的代码级证明。
+
+一、逐项裁决
+
+审计项目
+
+	
+
+裁决
+
+	
+
+理由
+
+
+
+
+CHANGE1_INCIDENT_CONCURRENCY_ATOMICITY
+
+	
+
+PASS
+
+	
+
+数据库原子 upsert；20 路并发单行聚合；终态和外来容器拒写；新建标记唯一
+
+
+
+
+CHANGE2_SANITIZATION_BOUNDARY
+
+	
+
+PASS
+
+	
+
+白名单、强制丢弃、结构化引用约束和对抗测试形成保守脱敏边界
+
+
+
+
+CHANGE3_LIFECYCLE_AND_TENANT_BOUNDARY
+
+	
+
+PASS
+
+	
+
+生命周期不可复活；租户及 Provider 身份隔离；读取空上下文 fail-closed
+
+
+
+
+CHANGE4_REPLAY_SAFETY_SEMANTICS
+
+	
+
+PASS
+
+	
+
+区分故障重试与副作用重放；外部写默认对账；未知动作禁止自动恢复
+
+
+
+
+PHASE1_EVIDENCE_SUFFICIENCY
+
+	
+
+PASS WITH REVISE
+
+	
+
+61 项纯函数测试、14 项 PG 测试、98 项定向回归及类型检查支持阶段收口；全量回归尚缺
+
+
+
+
+SCOPE_HONESTY
+
+	
+
+PASS
+
+	
+
+未实施阶段、外部依赖、生产状态及技术取舍均明确披露
+
+二、四项 CHANGE 审计结论
+CHANGE 1：PASS
+
+数据库层原子 upsert 修复了上一轮的核心并发风险。
+
+特别认可三个设计决定：
+
+ON CONFLICT ... DO UPDATE WHERE 在数据库写入层限制 kind 和生命周期状态，而非依赖应用层先读后判。
+
+通过预生成 ID 与返回 ID 比较识别本次创建者，避免依赖 PostgreSQL 内部事务字段。
+
+冲突更新返回零行时只读定位，不盲目重新创建或修改 Incident。
+
+所报告的 DB-P2、P7、P8、P9 覆盖并发聚合、创建竞争、终态拒写和跨容器污染。
+
+**保留风险：**仍需在后续故障注入门禁中检查数据库连接中断、事务超时和客户端重试下的重复计数语义。当前 occurrenceCount 应解释为被数据库接受的 intake 次数，而不一定是真实发生且全局去重的故障次数。
+
+CHANGE 2：PASS
+
+从自由文本掩码升级为“字段白名单＋保守引用语法＋不确定即丢弃”，方向正确。
+
+特别认可对 refs 的收紧。引用标识符不应成为未经审查的异常日志存储通道。
+
+**保留风险：**确定性脱敏不能证明任意新型编码或未知密钥形态绝对无法泄露。后续不得将这一层视为允许原始异常、堆栈或模型生成内容任意持久化的安全许可。
+
+CHANGE 3：PASS
+
+生命周期验证与组织、Provider 身份隔离达到本阶段要求。
+
+但必须区分：
+
+租户哈希标识用于分区和查找，不等于租户授权。
+
+listForOrganization() 必须始终使用经过服务端认证与授权解析的 organizationId，不允许从请求参数、客户端输入或模型输出直接取得可信身份。
+
+当前未增加数据库级 RLS 或独立组织列，不阻断 PHASE 1 收口，但不代表数据库层已具备完整租户隔离能力。
+
+CHANGE 4：PASS
+
+这是本轮重要的安全改进。
+
+正确建立：
+
+故障可重试 ≠ 原业务操作可安全重放
+
+外部写超时、未知副作用、未知操作类型均不得直接触发重新提交。安全权限信号优先级最高，403 不自动推断为 TOKEN_EXPIRED，也符合保守处理原则。
+
+特别约束：autoRecoverAuthorized=true 在 PHASE 1 中只是分类结果，不是运行时授权凭证。后续分流与执行阶段必须再次检查服务端可信事实、幂等状态、租约 fencing、授权时效和生产外写门禁。
+
+三、PHASE 1 收口与 PHASE 2 授权
+
+裁决采用阶段性、受限收口原则：
+
+PHASE1_CLOSED=YES 表示当前提交材料支持 PHASE 1 的分类与可信 Incident 设计验收。
+
+它不表示全量回归、真实运行时、生产环境或 PHASE 2–7 已经验收。
+
+允许开始 PHASE 2 的内部实现，但授权严格限制在：
+
+使用现有 ONE SI Runtime，不新增独立 Scheduler、Controller 或第二个执行器。
+
+以可信 Incident 和既有持久化事实为输入，完成确定性故障分流。
+
+将 RECONCILE_FIRST、FORBIDDEN、NEEDS_CLASSIFICATION 分别映射到明确的安全路径。
+
+不得因 PHASE 1 的 AUTO_RECOVER 分类结果直接执行外部业务写入。
+
+不得修改封板 RC/main、生产数据库或生产授权策略。
+
+PHASE 2 实现完成后须单独申请复审，不能自动视为 CLOSED。
+
+四、CHANGES｜强制后续事项
+
+本轮 CHANGE 1–4 无须重做。以下事项是后续集成和执行门禁的强制条件，并非新增 PHASE 1 阻断项。
+
+编号
+
+	
+
+优先级
+
+	
+
+必须执行的事项
+
+
+
+
+GATE-1
+
+	
+
+P1
+
+	
+
+运行全量 API 回归，并记录失败列表、已知历史债务和本轮引入回归的区分结果
+
+
+
+
+GATE-2
+
+	
+
+P0
+
+	
+
+验证 PHASE 2 的每条分流路径都不能绕过既有租户认证、Incident kind、生命周期与可信事实来源
+
+
+
+
+GATE-3
+
+	
+
+P0
+
+	
+
+验证任何外部写相关故障都不会因为被分类为可重试而自动重放；实际外写继续 HOLD
+
+
+
+
+GATE-4
+
+	
+
+P0
+
+	
+
+在真实运行时测试异常重投、重复分流、断连、崩溃恢复和并发处理时的幂等与 fencing
+
+
+
+
+GATE-5
+
+	
+
+P1
+
+	
+
+对接线边界增加脱敏负向测试；原始异常、未知 sourceRefs、模型自由文本不得绕过白名单
+
+
+
+
+GATE-6
+
+	
+
+P1
+
+	
+
+后续若确需 schema/migration 变更，先提交独立 Schema Delta 审计，未经授权不得实施
+
+五、RISKS｜剩余风险
+
+**完整回归风险：**尚未证明本轮变更与全部历史 API 行为兼容。
+
+**脱敏完备性风险：**未知密钥格式、复杂编码和调用方误用仍可能构成泄露路径。
+
+**身份与授权风险：**租户哈希不是安全主体；服务端可信上下文必须贯穿全部读取与分流入口。
+
+**故障计数风险：**客户端重试可能导致同一实际故障被聚合多次，不能将 occurrenceCount 当作严格事件唯一数。
+
+**自动执行风险：**PHASE 1 的 replaySafety 是意图分类，不是完整的执行许可。
+
+**环境差异风险：**Linux/systemd、真实 Provider、生产级监控、断电恢复及真实模型能力尚未验证。
+
+六、正式审计裁决（供 CODEX 直接归档）
+写作
+
+AUDIT_ID: MSG-20261009-08
+PROJECT: CROSSCLAIM · SI/RSI INTERNAL AUTONOMOUS CODE REPAIR V1
+AUDIT_SCOPE: PHASE1-FINAL-R2 / CHANGE 1–4
+REVIEWED_HEAD: 0f90b148
+
+FINAL_VERDICT = PASS WITH REVISE
+
+CHANGE1_INCIDENT_CONCURRENCY_ATOMICITY = PASS
+CHANGE2_SANITIZATION_BOUNDARY = PASS
+CHANGE3_LIFECYCLE_AND_TENANT_BOUNDARY = PASS
+CHANGE4_REPLAY_SAFETY_SEMANTICS = PASS
+PHASE1_EVIDENCE_SUFFICIENCY = PASS WITH REVISE
+SCOPE_HONESTY = PASS
+
+PHASE0_CLOSED = YES
+PHASE1_CLOSED = YES
+PHASE2_IMPLEMENTATION_AUTHORIZED = YES_SAFE_SCOPE_ONLY
+PHASE2_CLOSED = NO
+PHASE3_TO_7_AUTHORIZED = NO
+
+CHANGES:
+
+CHANGE 1–4 无须重复修改。
+
+全量回归列为 PHASE 2 集成验收前置门禁。
+
+PHASE 2 必须复用 ONE SI Runtime 和既有可信事实源。
+
+禁止将 replaySafety 的 AUTO_RECOVER 结果直接视为外部业务动作执行授权。
+
+脱敏、租户身份、kind/lifecycle、幂等和 fencing 检查不得被分流层绕过。
+
+任何 schema/migration 变更必须另行申请审计。
+
+PHASE 2 完成后提交独立审计，不得自行宣布 CLOSED。
+
+RISKS:
+
+FULL_REGRESSION_NOT_VERIFIED
+
+SANITIZATION_UNKNOWN_PATTERNS
+
+TENANT_CONTEXT_TRUST_BOUNDARY
+
+INCIDENT_DELIVERY_DUPLICATION
+
+REPLAY_RUNTIME_AUTHORIZATION_GAP
+
+PRODUCTION_ENVIRONMENT_NOT_VERIFIED
+
+EXTERNAL_WRITE = HOLD
+REAL_PROVIDER_VALIDATION = NO
+REAL_MODEL_INTEGRATION = HOLD
+PRODUCTION_READY = NO
+
+NEXT = PHASE2_SAFE_IMPLEMENTATION → FULL_REGRESSION → PHASE2_INDEPENDENT_AUDIT
+
+**审计说明：**基于提交材料进行独立设计与证据审查，未执行代码仓库、数据库或测试日志的直接复现。
+
+最终决定：PHASE 1 准予阶段性收口，PHASE 2 准予在内部安全边界内启动。 不授权真实外部写入、自动代码发布、生产部署或任何未经单独审计的 PHASE 3–7 能力。
+```
