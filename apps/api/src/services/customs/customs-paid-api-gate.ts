@@ -28,6 +28,7 @@ export const PAID_CUSTOMS_OPERATIONS = [
   'RATE_LOOKUP',
   'FILING_CREATE',
   'DOCUMENT_UPLOAD',
+  'SUBMISSION_READ',
   'STATUS_READ',
   'RFI_READ',
   'RFI_RESPOND',
@@ -352,26 +353,56 @@ export function assertNoFreeCustomsPaidApiCalls(
   return snapshot;
 }
 
+/**
+ * 出站方法白名单：provider 契约里所有会产生外部（可能计费）调用的方法。
+ * V2-02：补齐 getSubmission（此前漏包 → 可直接绕过 Gate 的读出口）。
+ * 新增方法若不进入本表 → assertProviderFullyGated 运行期拒绝（fail-closed）。
+ */
+export const CUSTOMS_FILING_PROVIDER_OUTBOUND_METHODS = [
+  'readData',
+  'lookupRate',
+  'createSubmission',
+  'uploadEvidence',
+  'getSubmission',
+  'getSubmissionStatus',
+  'listRequestsForInformation',
+  'respondToRequest',
+  'getRefundStatus',
+] as const;
+export type CustomsFilingProviderOutboundMethod =
+  (typeof CUSTOMS_FILING_PROVIDER_OUTBOUND_METHODS)[number];
+
+/**
+ * operation ⇄ 方法名 双向穷尽映射：任一方向缺少成员都会编译失败
+ * （Record 的 key 穷尽性检查），从而不可能"悄悄"新增一个未受 Gate 约束的出站出口。
+ */
+export const METHOD_BY_OPERATION: Record<PaidCustomsOperation, CustomsFilingProviderOutboundMethod> = {
+  DATA_READ: 'readData',
+  RATE_LOOKUP: 'lookupRate',
+  FILING_CREATE: 'createSubmission',
+  DOCUMENT_UPLOAD: 'uploadEvidence',
+  SUBMISSION_READ: 'getSubmission',
+  STATUS_READ: 'getSubmissionStatus',
+  RFI_READ: 'listRequestsForInformation',
+  RFI_RESPOND: 'respondToRequest',
+  REFUND_STATUS: 'getRefundStatus',
+};
+
+export const OPERATION_BY_METHOD: Record<CustomsFilingProviderOutboundMethod, PaidCustomsOperation> = {
+  readData: 'DATA_READ',
+  lookupRate: 'RATE_LOOKUP',
+  createSubmission: 'FILING_CREATE',
+  uploadEvidence: 'DOCUMENT_UPLOAD',
+  getSubmission: 'SUBMISSION_READ',
+  getSubmissionStatus: 'STATUS_READ',
+  listRequestsForInformation: 'RFI_READ',
+  respondToRequest: 'RFI_RESPOND',
+  getRefundStatus: 'REFUND_STATUS',
+};
+
 /** C15 operation → provider 方法名（唯一收费调用通道的映射表）。 */
 export function operationMethodName(operation: PaidCustomsOperation): string {
-  switch (operation) {
-    case 'DATA_READ':
-      return 'readData';
-    case 'RATE_LOOKUP':
-      return 'lookupRate';
-    case 'FILING_CREATE':
-      return 'createSubmission';
-    case 'DOCUMENT_UPLOAD':
-      return 'uploadEvidence';
-    case 'STATUS_READ':
-      return 'getSubmissionStatus';
-    case 'RFI_READ':
-      return 'listRequestsForInformation';
-    case 'RFI_RESPOND':
-      return 'respondToRequest';
-    case 'REFUND_STATUS':
-      return 'getRefundStatus';
-  }
+  return METHOD_BY_OPERATION[operation];
 }
 
 export interface WrapPaidCustomsProviderOptions<TProvider extends object> {
@@ -438,6 +469,32 @@ export function wrapPaidCustomsProvider<TProvider extends object>(
       );
   }
   return wrapped as unknown as TProvider;
+}
+
+export class CustomsProviderUngatedExitError extends Error {
+  readonly code = 'CUSTOMS_PROVIDER_UNGATED_EXIT';
+  readonly methods: readonly string[];
+
+  constructor(methods: readonly string[]) {
+    super(`CUSTOMS_PROVIDER_UNGATED_EXIT:${methods.join(',')}`);
+    this.name = 'CustomsProviderUngatedExitError';
+    this.methods = methods;
+  }
+}
+
+/**
+ * 全出口覆盖断言：provider 上存在的每一个出站方法，在包装结果上都必须是**新函数**。
+ * 若包装结果仍直接暴露原函数（漏包 / 被覆盖 / 事后被人为还原）→ 抛错，fail-closed。
+ */
+export function assertProviderFullyGated<T extends object>(original: T, wrapped: T): void {
+  const originalRecord = original as unknown as Record<string, unknown>;
+  const wrappedRecord = wrapped as unknown as Record<string, unknown>;
+  const ungated = CUSTOMS_FILING_PROVIDER_OUTBOUND_METHODS.filter((method) => {
+    const target = originalRecord[method];
+    if (typeof target !== 'function') return false;
+    return wrappedRecord[method] === target;
+  });
+  if (ungated.length > 0) throw new CustomsProviderUngatedExitError(ungated);
 }
 
 /** 边界自证：本模块不产生外部调用 / 资金动作。 */

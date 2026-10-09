@@ -9,7 +9,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   CUSTOMS_PAID_API_GATE_BOUNDARY,
   CustomsPaidApiGateError,
+  METHOD_BY_OPERATION,
+  OPERATION_BY_METHOD,
   PAID_CUSTOMS_API_GATE_VERSION,
+  PAID_CUSTOMS_OPERATIONS,
   assertNoFreeCustomsPaidApiCalls,
   compareDecimalAmounts,
   createPaidCustomsCallCounter,
@@ -409,19 +412,28 @@ describe('V2-01 唯一收费通道 — provider 包装器', () => {
     expect(wrapped.capabilities).toEqual({ STATUS_READ: true });
   });
 
-  it('operation → 方法名映射覆盖全部收费操作', () => {
+  it('operation → 方法名映射覆盖全部收费操作（V2-02 已补齐 getSubmission）', () => {
     const mapped = [
       operationMethodName('DATA_READ'),
       operationMethodName('RATE_LOOKUP'),
       operationMethodName('FILING_CREATE'),
       operationMethodName('DOCUMENT_UPLOAD'),
+      operationMethodName('SUBMISSION_READ'),
       operationMethodName('STATUS_READ'),
       operationMethodName('RFI_READ'),
       operationMethodName('RFI_RESPOND'),
       operationMethodName('REFUND_STATUS'),
     ];
-    expect(new Set(mapped).size).toBe(8);
+    expect(new Set(mapped).size).toBe(9);
     expect(mapped).toContain('createSubmission');
+    expect(mapped).toContain('getSubmission');
+  });
+
+  it('operation ⇄ 方法名 双向映射一致（穷尽性由编译期保证）', () => {
+    for (const [operation, method] of Object.entries(METHOD_BY_OPERATION)) {
+      expect(OPERATION_BY_METHOD[method]).toBe(operation);
+    }
+    expect(Object.keys(METHOD_BY_OPERATION)).toHaveLength(PAID_CUSTOMS_OPERATIONS.length);
   });
 });
 
