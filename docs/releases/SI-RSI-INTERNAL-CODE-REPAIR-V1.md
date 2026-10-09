@@ -3640,3 +3640,70 @@ EXTERNAL_WRITE = HOLD / AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN / PRODUCTION_READY 
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 HEARTBEAT_RESTORED = NO / OS_TIMER_RESTORED = NO
 ```
+
+---
+
+### 2.56 MSG-20261009-49 裁决归档 = **PASS WITH REVISE**（R3 只读收口有条件通过；CHANGE 91–93 全部通过、无新增必改项；F-01 仍 OPEN_P0；下一轮 R4 只读证据收口）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-49] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（148/148，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=3613 / NORM_LINES=148 / FNV=486d9f5b`。
+> 锚点：`BASELINE=0ffad444`、`REVIEWED_HEAD=9dbfcece`、`U1_CODE_HEAD=9ee36837`。
+
+**独立核验**：固定 HEAD PASS、基线 PASS、差异 **1 提交 / 2 文件**、**产品代码变更 0**、
+**R3 文档 Git blob `a4e04172…` PASS**、**checkpoint §2.55 内容与 R3 一致 PASS**；
+未独立复算 SHA-256、PostgreSQL/systemd/CI 实测 `NOT VERIFIED`。审计范围为「**新增文档 188 行 + checkpoint 追加 46 行，未发现本轮产品代码文件变更**」。
+
+**逐项**：`CHANGE 91 = PASS_SCOPED`、`CHANGE 92 = PASS`、`CHANGE 93 = PASS_SCOPED`；**`REQUIRED_CHANGES = NONE_FOR_91_TO_93`**。
+
+#### 2.56.1 CHANGE 91 保留的三个**实施前验收条件**（不改设计、供 F-01 技术验收使用）
+
+1. **接管侧 CAS 的 `affectedRows=1` 只能证明更新语句匹配成功，不能证明接管事务已经 `COMMIT`**
+   ⇒ 接管成功的最终判定必须**明确绑定到事务提交结果**。
+2. **`SERIALIZABLE`（W-B）是候选实现**，不应因隔离级别满足可序列化就认定满足所有真实时间顺序约束
+   ⇒ 隔离实验必须验证「接管提交」与「旧 generation 写入提交」之间的**实际约束**，并证明**外部副作用不会绕过事务保护**。
+3. **租约有效期涉及时间语义** ⇒ 必须明确**数据库时间源、租约过期判断点、事务等待后的重新验证、授权撤销期间的 fail-closed 行为**。
+
+#### 2.56.2 其他要点
+
+- **CHANGE 92**：S3a/S3b 与 `ST-1~ST-4` 判断正确；实施时**测试中的"成功提交"必须由数据库提交结果证明**，不得仅由应用返回值、操作开始时间或生成事务 ID 推断。
+- **CHANGE 93**：取证维度与只读取证纪律通过；但**设计要求通过 ≠ 宿主证据已收齐或真实性已验证**。
+- **路线 A**：`A-7 = ACCEPTED`（验收须涵盖**旧主隔离、异步复制丢失、切换后 generation 恢复、新旧主写入冲突**）；
+  `A-8 = ACCEPTED`（验收范围须包括**应用账号、后台任务、迁移账号、对象所有者、`SECURITY DEFINER` 入口及实际可触达的写入路径**）；
+  二者足以作为附加设计条件、**不重开 R21**，但**工程实现与运行环境证明尚未完成**。
+
+#### 2.56.3 下一步授权（R4 只读证据收口）
+
+```text
+NEXT_AUTHORIZED = PHASE3_A_U2_PRECONDITION_R4_READ_ONLY_EVIDENCE_CLOSURE
+  YES：R4 级只读事实收口 · 接收宿主正式授权采集的证据 · 路线 A 静态论证与写入域映射
+  HOLD/NO：选择最终 fencing 载体 ⇢ HOLD ；关闭 F-01 ⇢ NO ；P3 隔离实验 ⇢ NO ；
+           U2 产品代码实施 ⇢ NO ；Schema migration ⇢ HOLD ；生产写入 ⇢ NO ；
+           多实例自动写入 ⇢ NO ；恢复 heartbeat / OS timer ⇢ NO ；
+           Runtime / Provider / Model call ⇢ FORBIDDEN ；Auto-merge / Auto-deploy ⇢ FORBIDDEN
+
+R4 只做五件事（审计方原文要点）：
+  ①接收并核对已经授权采集的宿主证据；
+  ②核验 E-09 / E-14；
+  ③完成数据库写入域与保护入口映射；
+  ④明确路线 A 的载体选择依据；
+  ⑤整理 F-01 尚未获证的不变量。
+此后应【独立决定】是否具备提出 P3 隔离实验授权申请的条件，而不是自动批准实验。
+```
+
+```text
+MSG-20261009-49_FINAL_VERDICT = PASS_WITH_REVISE
+MSG-20261009-49_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 148/148；FNV1A 486d9f5b）
+CHANGE_91=PASS_SCOPED · CHANGE_92=PASS · CHANGE_93=PASS_SCOPED · REQUIRED_CHANGES=NONE_FOR_91_TO_93
+F01_STATUS=OPEN_P0 · ROUTE_A_7=ACCEPTED_DESIGN_ONLY · ROUTE_A_8=ACCEPTED_DESIGN_ONLY
+PREFERRED_LOCK_ROUTE=LEASE_REVIEW_FIRST · LOCK_PROTOCOL_UNIFORMITY=NOT_PROVEN
+EXCLUSION_PROOF_STATUS=NOT_PROVEN · COMMIT_ATTRIBUTION_PROOF=NOT_AVAILABLE_IN_CURRENT_CONFIGURATION
+NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R4_READ_ONLY_EVIDENCE_CLOSURE
+HOST_AUTHORIZED_READ_ONLY_EVIDENCE=ACCEPTABLE
+P3_EXPERIMENT_AUTHORIZED=NO · U2_IMPLEMENTATION_AUTHORIZED=NO · PRODUCTION_WRITE_AUTHORIZED=NO
+MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED
+SCHEMA_MIGRATION=HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD · AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN
+U1_REOPEN=NO · U2_DESIGN_R21=NOT_REOPENED · HEARTBEAT_RESTORED=NO · OS_TIMER_RESTORED=NO · PRODUCTION_READY=NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```

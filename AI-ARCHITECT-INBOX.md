@@ -182511,3 +182511,394 @@ PRODUCTION_READY=NO
 
 本轮没有修改 GitHub 仓库、连接数据库、运行测试或恢复任何定时任务。
 ```
+
+### [MSG-20261009-49] U2 前置条件 R3 只读收口 = **PASS WITH REVISE**（`R3_READONLY_CONSOLIDATION_ACCEPTED_WITH_CONDITIONS`；逐项：`CHANGE 91 = PASS_SCOPED`、`92 = PASS`、`93 = PASS_SCOPED`；**`REQUIRED_CHANGES=NONE_FOR_91_TO_93`**；`F01_STATUS=OPEN_P0`、`P3_EXPERIMENT_AUTHORIZED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`PRODUCTION_WRITE_AUTHORIZED=NO`、`MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED`）—— **独立核验**：固定 HEAD `9dbfcece…` PASS、基线 `0ffad444` PASS、差异 **1 提交 / 2 文件**、**产品代码变更 0**、**R3 文档 Git blob `a4e04172…` PASS**、**checkpoint §2.55 内容与 R3 一致 PASS**；未独立复算 SHA-256、PostgreSQL/systemd/CI 实测 `NOT VERIFIED`；审计方确认审计范围为「新增文档 188 行 + checkpoint 追加 46 行，**未发现本轮产品代码文件变更**」，并总结「**CHANGE 91–93 的原定修订要求均已达到设计层面的闭合标准；R3 只读收口有条件通过；F-01 继续保持 OPEN_P0，不授权任何实施、实验或生产写入**」；**CHANGE 91 = PASS_SCOPED（通过，但须保留三个实施前验收条件）**：①**接管侧 CAS 的 `affectedRows=1` 只能证明更新语句匹配成功，不能证明接管事务已经 `COMMIT`** ⇒ 接管成功的最终判定必须**明确绑定到事务提交结果**；②**W-B `SERIALIZABLE` 是候选实现**，不应因隔离级别满足可序列化就认定满足所有真实时间顺序约束 ⇒ 隔离实验必须验证「接管提交」与「旧 generation 写入提交」之间的**实际约束**，并证明**外部副作用不会绕过事务保护**；③租约有效期涉及**时间语义** ⇒ 必须明确**数据库时间源、租约过期判断点、事务等待后的重新验证、以及授权撤销期间的 fail-closed 行为**（三项作为后续 F-01 技术验收条件记录，**不要求再次重开 CHANGE 91**）；**CHANGE 92 = PASS**（S3a/S3b 已正确处理两类竞争顺序：旧事务先持栅栏锁 ⇒ 接管等待；接管先提交 ⇒ 旧 generation 写入必须被拒绝；`ST-4` 把「旧事务合法提交后再接管」排除在违规情形之外，判断正确；实施时还需明确：**测试中的"成功提交"必须由数据库提交结果证明**，而不是仅由应用返回值、操作开始时间或生成事务 ID 推断）；**CHANGE 93 = PASS_SCOPED**（E-08~E-16 的证据维度覆盖合理，特别是**权限继承、特权函数、主节点故障切换、提交归因能力、进程身份及阻断传播机制**；`READ_ONLY_EVIDENCE_DISCIPLINE` 已建立必要的**权限、时间窗、超时、脱敏和审计**要求；但**设计中的取证要求已通过，不代表宿主证据已经收齐或真实性已验证**）；**路线 A**：`A-7 = ACCEPTED`（主节点故障切换后已确认 generation 不得回退；验收须涵盖**旧主隔离、异步复制丢失、切换后 generation 恢复、新旧主写入冲突**）、`A-8 = ACCEPTED`（角色/对象所有权/特权入口形成权限闭环；验收范围须包括**应用账号、后台任务、迁移账号、对象所有者、`SECURITY DEFINER` 入口及实际可触达的写入路径**）——二者**足以作为路线 A 的附加设计条件**，无需追加新一轮设计编号、**不重开 R21**，但**其工程实现与运行环境证明尚未完成**；**下一步授权**：**`NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R4_READ_ONLY_EVIDENCE_CLOSURE`**（R4 级只读事实收口 YES、接收宿主正式授权采集的证据 YES、路线 A 静态论证与写入域映射 YES；而**选择最终 fencing 载体 = HOLD**、**关闭 F-01 = NO**、**P3 隔离实验 = NO**、**U2 产品代码实施 = NO**、**Schema migration = HOLD**、**生产写入 = NO**、**多实例自动写入 = NO**、**恢复 heartbeat/OS timer = NO**、**Runtime/Provider/Model call = FORBIDDEN**、**Auto-merge/Auto-deploy = FORBIDDEN**）；审计方建议「**下一步维持 R4 级只读收口，不要继续无限扩展设计轮次**」，R4 应只完成：①接收并核对已授权采集的宿主证据 ②核验 E-09/E-14 ③完成数据库写入域与保护入口映射 ④明确路线 A 的载体选择依据 ⑤整理 F-01 尚未获证的不变量；**此后应独立决定是否具备提出 P3 隔离实验授权申请的条件，而不是自动批准实验**；`LOCK_PROTOCOL_UNIFORMITY=NOT_PROVEN`、`EXCLUSION_PROOF_STATUS=NOT_PROVEN`、`COMMIT_ATTRIBUTION_PROOF=NOT_AVAILABLE_IN_CURRENT_CONFIGURATION`、`U1_REOPEN=NO`、`U2_DESIGN_R21=NOT_REOPENED`、`HEARTBEAT_RESTORED=NO`、`OS_TIMER_RESTORED=NO`、`PRODUCTION_READY=NO`；本轮审计**仅进行 GitHub 读取，没有写入仓库**；reviewed ref `9dbfcece7e8f22c16b005c0f70268c7cb339061b`
+
+```text
+MSG-20261009-49｜CrossClaim AI 独立审计裁决
+PASS WITH REVISE
+
+裁决标识：R3_READONLY_CONSOLIDATION_ACCEPTED_WITH_CONDITIONS
+
+审计结论：CHANGE 91–93 的原定修订要求均已达到设计层面的闭合标准；R3 只读收口有条件通过。F-01 继续保持 OPEN_P0，不授权任何实施、实验或生产写入。
+
+本轮已通过 GitHub 连接器独立读取固定提交 9dbfcece7e8f22c16b005c0f70268c7cb339061b、新增 R3 文档及 checkpoint §2.55，核对结果如下。
+
+一、独立证据核验
+
+项目
+
+
+
+核验结果
+
+
+
+
+固定 HEAD
+
+
+
+PASS
+
+
+
+
+基线 0ffad444
+
+
+
+PASS
+
+
+
+
+差异提交数
+
+
+
+1，PASS
+
+
+
+
+变更文件数
+
+
+
+2，PASS
+
+
+
+
+产品代码变更
+
+
+
+0，PASS
+
+
+
+
+R3 文档 Git blob
+
+
+
+a4e04172...，PASS
+
+
+
+
+R3 文档 SHA-256
+
+
+
+未独立复算
+
+
+
+
+Checkpoint §2.55
+
+
+
+PASS，内容与 R3 一致
+
+
+
+
+PostgreSQL / systemd / CI 实测
+
+
+
+NOT VERIFIED
+
+审计范围确认为新增文档 188 行、checkpoint 追加 46 行，未发现本轮产品代码文件变更。
+
+证据来源：
+固定提交
+ ·
+R3 原始文档
+
+二、CHANGE 91–93 裁决
+
+CHANGE
+
+
+
+裁决
+
+
+
+说明
+
+
+
+
+91（P0）
+
+
+
+PASS_SCOPED
+
+
+
+CAS 与写入侧栅栏保护已正确分离，INV-1~5 已列明
+
+
+
+
+92（P0）
+
+
+
+PASS
+
+
+
+S3a/S3b 及 ST-1~4 消除了原测试时序错误
+
+
+
+
+93（P1）
+
+
+
+PASS_SCOPED
+
+
+
+E-08~E-16 和只读取证纪律均已覆盖
+
+CHANGE 91：通过，但需保留三个实施前验收条件
+
+第一，接管侧 CAS 的 affectedRows=1 只能证明更新语句匹配成功，不能证明接管事务已经 COMMIT。应当将接管成功的最终判定明确绑定到事务提交结果。
+
+第二，W-B SERIALIZABLE 是候选实现，不应因为隔离级别满足可序列化就认定满足所有真实时间顺序约束。隔离实验必须验证接管提交与旧 generation 写入提交之间的实际约束，并证明外部副作用不会绕过事务保护。
+
+第三，租约有效性涉及时间语义。必须明确数据库时间源、租约过期判断点、事务等待后的重新验证，以及授权撤销期间的 fail-closed 行为。
+
+这三项作为后续 F-01 技术验收条件记录，不要求再次重开 CHANGE 91。
+
+CHANGE 92：通过
+
+S3a/S3b 已正确处理两类竞争顺序：
+
+旧事务先持有栅栏锁：接管等待。
+
+接管先提交：旧 generation 写入必须被拒绝。
+
+ST-4 将旧事务合法提交后再接管排除在违规情形之外，判断正确。
+
+实施时还需明确：测试中的“成功提交”必须由数据库提交结果证明，而不是仅由应用返回值、操作开始时间或生成事务 ID 推断。
+
+CHANGE 93：通过
+
+E-08~E-16 的证据维度覆盖合理，特别是权限继承、特权函数、主节点故障切换、提交归因能力、进程身份及阻断传播机制。
+
+READ_ONLY_EVIDENCE_DISCIPLINE 也已建立必要的权限、时间窗、超时、脱敏和审计要求。
+
+设计中的取证要求已通过，不代表宿主证据已经收齐或真实性已验证。
+
+三、路线 A：A-7 / A-8 裁决
+
+A-7 = ACCEPTED
+
+主节点故障切换后，已确认 generation 不得回退，是必要约束。
+
+验收时必须涵盖旧主隔离、异步复制丢失、故障切换后 generation 恢复及新旧主写入冲突。
+
+A-8 = ACCEPTED
+
+角色、对象所有权和特权入口形成权限闭环，是必要约束。
+
+验收范围必须包括应用账号、后台任务、迁移账号、对象所有者、SECURITY DEFINER 入口及实际可触达的写入路径。
+
+A-7/A-8 当前足以作为路线 A 的附加设计条件，无需追加新一轮设计编号，也不重开 R21。但其工程实现与运行环境证明尚未完成。
+
+四、下一步授权裁决
+
+操作
+
+
+
+裁决
+
+
+
+
+R4 级只读事实收口
+
+
+
+YES
+
+
+
+
+接收宿主正式授权采集的证据
+
+
+
+YES
+
+
+
+
+路线 A 静态论证与写入域映射
+
+
+
+YES
+
+
+
+
+选择最终 fencing 载体
+
+
+
+HOLD
+
+
+
+
+关闭 F-01
+
+
+
+NO
+
+
+
+
+P3 隔离 PostgreSQL 16 实验
+
+
+
+NO
+
+
+
+
+U2 产品代码实施
+
+
+
+NO
+
+
+
+
+Schema migration
+
+
+
+HOLD
+
+
+
+
+生产写入
+
+
+
+NO
+
+
+
+
+多实例自动写入
+
+
+
+NO
+
+
+
+
+恢复 heartbeat / OS timer
+
+
+
+NO
+
+
+
+
+Runtime / Provider / Model call
+
+
+
+FORBIDDEN
+
+
+
+
+Auto-merge / Auto-deploy
+
+
+
+FORBIDDEN
+
+下一步建议维持 R4 级只读收口，不要继续无限扩展设计轮次。
+
+R4 应只完成以下工作：接收并核对已经授权采集的宿主证据；核验 E-09/E-14；完成数据库写入域与保护入口映射；明确路线 A 的载体选择依据；整理 F-01 尚未获证的不变量。
+
+此后应独立决定是否具备提出 P3 隔离实验授权申请的条件，而不是自动批准实验。
+
+五、可直接归档的机器裁决块
+
+MSG-20261009-49 · FINAL VERDICT
+
+复制
+
+AUDIT_ID=MSG-20261009-49
+REVIEWED_HEAD=9dbfcece7e8f22c16b005c0f70268c7cb339061b
+FINAL_VERDICT=PASS_WITH_REVISE
+R3_READONLY_CONSOLIDATION=ACCEPTED_WITH_CONDITIONS
+AUDIT_SCOPE_VERIFIED=YES
+AUDIT_SCOPE_COMMITS=1
+AUDIT_SCOPE_FILES=2
+PRODUCT_CODE_CHANGES=0
+R3_DOC_GIT_BLOB_VERIFIED=YES
+R3_DOC_SHA256_INDEPENDENTLY_VERIFIED=NO
+CHANGE_91=PASS_SCOPED
+CHANGE_92=PASS
+CHANGE_93=PASS_SCOPED
+REQUIRED_CHANGES=NONE_FOR_91_TO_93
+F01_STATUS=OPEN_P0
+ROUTE_A_7=ACCEPTED_DESIGN_ONLY
+ROUTE_A_8=ACCEPTED_DESIGN_ONLY
+PREFERRED_LOCK_ROUTE=LEASE_REVIEW_FIRST
+LOCK_PROTOCOL_UNIFORMITY=NOT_PROVEN
+EXCLUSION_PROOF_STATUS=NOT_PROVEN
+COMMIT_ATTRIBUTION_PROOF=NOT_AVAILABLE_IN_CURRENT_CONFIGURATION
+NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R4_READ_ONLY_EVIDENCE_CLOSURE
+HOST_AUTHORIZED_READ_ONLY_EVIDENCE=ACCEPTABLE
+P3_EXPERIMENT_AUTHORIZED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PRODUCTION_WRITE_AUTHORIZED=NO
+MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+U1_REOPEN=NO
+U2_DESIGN_R21=NOT_REOPENED
+HEARTBEAT_RESTORED=NO
+OS_TIMER_RESTORED=NO
+PRODUCTION_READY=NO
+POSTGRESQL_INTEGRATION_TEST=NOT_VERIFIED
+VITEST=NOT_VERIFIED
+TSC=NOT_VERIFIED
+LINUX_SYSTEMD=NOT_VERIFIED
+CI=NOT_VERIFIED
+PRODUCTION=NOT_VERIFIED
+
+最终裁决：R3 设计修订通过，允许进入 R4 只读证据收口。F-01 的 P0 风险尚未解除，所有实施和生产权限维持关闭。本轮审计仅进行了 GitHub 读取，没有写入仓库。
+```
