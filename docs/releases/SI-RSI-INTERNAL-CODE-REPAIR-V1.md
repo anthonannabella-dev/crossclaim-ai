@@ -1531,3 +1531,51 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.24 MSG-20261009-21 裁决（U1 FINAL-R6c / CHANGE 33）= **PASS WITH REVISE**；U1 仍未关闭（新增 CHANGE 34–37，均为最小证据修订）
+
+> 归档：`AI-ARCHITECT-INBOX.md`（逐字，**FULL_COPY_OK**：原文 120 行 / 归档 120 行，缺失 0、多出 0）
+> 源文件：`work/self-repair/verdict-msg-20261009-21.txt`，规范化指纹 FNV1A=a4ed07c5
+> 审计会话：https://chatgpt.com/c/6ac868a8-46bc-83ec-9c9d-9698131ec0c5（REVIEWED_HEAD = e7c177a3）
+
+**本轮裁决**：`FINAL_VERDICT = PASS WITH REVISE`。评审方已审阅内联 A–G 证据，认为「CHANGE 32 的隔离修复设计合理，
+CHANGE 33 的证据明显增强」，但仍差四项**最小核验证据**，**不要求重写实现**、不授权 U2–U5。
+逐项：生命周期 PASS WITH REVISE；真实并发重叠 **REVISE**；句柄与获取层级 PASS_SCOPED；
+PG 断言 PASS WITH REVISE；负对照最小还原 PASS_SCOPED；固定 HEAD 证据绑定 **REVISE**。
+`U1_READ_ONLY_BOUNDARY_PRESERVED = PASS_SCOPED`、`SCOPE_HONESTY = PASS`、`PHASE3_U1_IMPLEMENTATION_CLOSED = NO`。
+
+**新增必须执行的最小修订（下一轮授权：`PHASE3_A_U1_FINAL_R7_CHANGES34_TO37_ONLY`）**
+
+- **CHANGE 34（P0）**：并发门闩必须证明**真实进入**而非超时继续 —— A/B 各自设置**不可伪造**的 `enteredTransaction` 标志；
+  一旦超时必须**直接失败**；释放门闩前断言 A、B 均已进入事务；断言 A/B **事务活动区间确实重叠**；
+  并在**同一重叠窗口内**完成句柄独立性检查。通过标准 `REAL_CONCURRENT_OVERLAP=PASS`。
+- **CHANGE 35（P1）**：明确证明 **PostgreSQL SQLSTATE 25006** —— 展示四个写入探针各自捕获的 SQLSTATE、提取代码、
+  「四项均 25006」的断言，并确认拒绝发生在被测只读事务内。通过标准 `PG_25006_ASSERTION=PASS`。
+- **CHANGE 36（P1）**：异步生命周期确定性 —— `transactionsOpened` 不能只是外层回调进入次数（需真实 PG 事务计数/等效证据）；
+  用**显式事务结束信号**替代 `setTimeout(60)`；并确定性区分「作用域中仍存在已失效句柄」与「使用失效句柄必须被拒绝（不回退裸 client）」。
+  通过标准 `ASYNC_LIFECYCLE_DETERMINISTIC=PASS`。
+- **CHANGE 37（P1）**：机器可核对的 HEAD 绑定最小清单 —— 完整 40 位 Git commit、实际被测源文件 SHA256、测试文件 SHA256、
+  原始 Vitest/tsc 输出文件 SHA256、负向对照执行结果与预期失败断言、运行这些验证时的实际代码 HEAD（无需重贴整仓）。
+
+```text
+MSG21_VERDICT = PASS_WITH_REVISE（逐字归档 FULL_COPY_OK 120/120；规范化 FNV1A a4ed07c5）
+CHANGE33_1_ALS_LIFECYCLE = PASS_WITH_REVISE
+CHANGE33_2_REAL_CONCURRENT_OVERLAP = REVISE
+CHANGE33_3_HANDLE_IDENTITY_AND_LAYER = PASS_SCOPED
+CHANGE33_4_PG_ASSERTIONS = PASS_WITH_REVISE
+CHANGE33_5_NEGATIVE_CONTROL_MINIMAL_REVERT = PASS_SCOPED
+CHANGE33_6_FIXED_HEAD_EVIDENCE_BINDING = REVISE
+U1_READ_ONLY_BOUNDARY_PRESERVED = PASS_SCOPED
+SCOPE_HONESTY = PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+REQUIRED_CHANGES = CHANGE34_P0,CHANGE35_P1,CHANGE36_P1,CHANGE37_P1
+NEXT_UNIT = PHASE3_A_U1_FINAL_R7_CHANGES34_TO37_ONLY（门闩确定性 + SQLSTATE 断言 + 生命周期确定性 + HEAD 绑定清单）→ 送审 MSG-20261009-22
+NEXT_AUDIT = MSG-20261009-22
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+RUNTIME_SOURCE_ISOLATION_IMPLEMENTED = NO
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```

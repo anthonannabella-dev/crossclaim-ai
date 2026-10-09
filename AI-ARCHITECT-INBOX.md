@@ -172970,3 +172970,151 @@ PRODUCTION_READY=NO
 
 本轮裁决仅在当前会话输出，未写入或修改 GitHub 仓库。
 ```
+
+### [MSG-20261009-21] U1 FINAL-R6c（CHANGE 33 证据核验）= **PASS WITH REVISE**（生命周期 PASS WITH REVISE、真实并发重叠 REVISE、句柄层级 PASS_SCOPED、PG 断言 PASS WITH REVISE、负对照最小还原 PASS_SCOPED、固定 HEAD 绑定 REVISE；U1 仍未 CLOSED）；**新增 CHANGE 34（P0）** 并发门闩须证明真实进入（不可伪造 enteredTransaction 标志、超时必须 fail、释放前断言双方已进入、断言活动区间重叠、在重叠窗口内做句柄独立性检查）、**CHANGE 35（P1）** 明确展示 SQLSTATE 25006 的捕获/提取/四项断言与所在事务、**CHANGE 36（P1）** 用真实 PG 事务计数与显式事务结束信号替代回调计数与 setTimeout、**CHANGE 37（P1）** 提供机器可核对的 HEAD 绑定清单（40 位 commit、源文件/测试文件/原始输出 SHA256、负对照结果与预期失败断言）；NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R7_CHANGES34_TO37_ONLY / NEXT_AUDIT=MSG-20261009-22；reviewed ref e7c177a3
+
+```text
+MSG-20261009-21｜U1 FINAL-R6c 独立审计裁决
+FINAL VERDICT：PASS WITH REVISE
+
+REVIEWED_HEAD： e7c177a3
+审计范围： CHANGE 33、AsyncLocalStorage 生命周期与隔离、U1 只读安全边界、PHASE 3 U1 关闭条件。
+
+已收到并审阅 A–G 内联证据，包括固定 HEAD 指纹、关键实现、U1-DB9/10/11、负向对照差异及 PostgreSQL 测试输出。
+
+结论：CHANGE 32 的隔离修复设计合理，CHANGE 33 的证据明显增强，但仍存在影响最终关闭的证据缺口。暂不批准 PHASE3_U1_IMPLEMENTATION_CLOSED。
+
+本轮不要求重写现有实现，也不授权 U2–U5。
+
+一、CHANGE 33 六项审计
+
+审计项目
+裁决
+依据
+1. AsyncLocalStorage 生命周期
+PASS WITH REVISE
+初始化、进入及嵌套复用路径可见；异步失效路径仍需增强
+2. U1-DB9 真实并发重叠
+REVISE
+存在 5 秒超时后继续执行的路径
+3. 事务句柄及获取层级
+PASS_SCOPED
+同一回调层级 WeakMap，A:1/B:2；未独立确认完整数据库事务归属
+4. PostgreSQL 只读、隔离、异常恢复
+PASS WITH REVISE
+readOnly=on、写入拒绝、租户结果及恢复证据存在；缺少完整 SQLSTATE 断言展示
+5. 负向对照最小还原
+PASS_SCOPED
+所示 diff 只涉及 CHANGE 32 的事务作用域实现
+6. 固定 HEAD、测试及证据对应
+REVISE
+64/64 PASS、tsc=0，但 SHA 与测试产物绑定关系尚不能独立核验
+
+证据来源：
+粘贴的文本 (1).txt
+粘贴的文本 (1).txt
+
+二、关键审计发现
+
+CHANGE 34（P0）—— 并发门闩必须证明真实进入，而非超时继续
+
+当前 U1-DB9 使用：
+Promise.race([aInside, timeout(5000)])
+B 亦如此。
+问题在于，5 秒超时同样会让测试继续运行，不能单凭这段编排证明 A/B 都已经进入事务。
+修复要求：
+A、B 分别设置不可伪造的 enteredTransaction 标志。
+超时必须直接使测试失败。
+释放门闩前断言 A、B 都已经进入事务。
+断言 A/B 事务活动区间确实重叠。
+在同一重叠窗口内完成句柄独立性检查。
+通过标准：
+REAL_CONCURRENT_OVERLAP=PASS
+
+CHANGE 35（P1）—— 明确证明 PostgreSQL SQLSTATE 25006
+
+现有证据显示四个写入探针均遭拒绝，transaction_read_only=on。
+但提供的完整代码摘录未展示写入探针如何捕获并断言 PostgreSQL 错误码 25006。
+需要补充：
+四个探针分别捕获的 SQLSTATE；
+SQLSTATE 的提取代码；
+四项均为 25006 的断言；
+确认拒绝发生在被测只读事务内。
+通过标准：
+PG_25006_ASSERTION=PASS
+
+CHANGE 36（P1）—— 异步生命周期边界补强
+
+U1-DB10 已证明相同调用链中两个回调取得相同事务句柄。
+U1-DB11 也证明延迟异步任务在当前运行下抛错，并未静默返回组织数据。
+不过仍有两个问题：
+transactionsOpened=1 实际统计的是外层回调进入次数，不是直接统计 PostgreSQL 真实事务开启次数。
+setTimeout(60) 属于基于时间的验证，建议使用明确的事务结束信号，消除机器负载和调度差异。
+此外，AsyncLocalStorage 上下文不会因为数据库事务结束就自动清空所有派生异步任务中的 store。因此应明确区分：
+作用域中仍存在已失效句柄；
+已失效句柄被使用时必须拒绝，不能回退裸 client。
+现有实现的后一项安全目标合理，但需要确定性验证。
+通过标准：
+ASYNC_LIFECYCLE_DETERMINISTIC=PASS
+
+CHANGE 37（P1）—— 固定 HEAD 证据绑定
+
+当前提供的 SHA256、diff 和测试结果相互支持，但属于内联转述证据，而不是本轮对 Git 对象和测试环境的独立复现。
+要求补充一个机器可核对的最小清单，包含：
+完整 40 位 Git commit；
+实际被测源文件 SHA256；
+测试文件 SHA256；
+原始 Vitest/tsc 输出文件 SHA256；
+负向对照执行结果及预期失败断言；
+运行这些验证时的实际代码 HEAD。
+无需重新粘贴整个仓库。
+
+三、U1 安全边界裁决
+
+CHANGE33_ASYNC_LOCAL_STORAGE_LIFECYCLE_AND_ISOLATION
+PASS WITH REVISE
+已展示跨调用隔离、嵌套复用与失效句柄拒绝的正向证据，但仍需完成确定性验证。
+U1_READ_ONLY_BOUNDARY_PRESERVED
+PASS_SCOPED
+所示生产代码保留只读事务入口，未显示开放自动写入或执行体；此结论仅针对送审摘录及声明边界。
+SCOPE_HONESTY
+PASS
+已明确声明 Linux/systemd、浏览器端到端、真实 Provider、模型、CI 与生产环境未验证。
+PHASE3_U1_IMPLEMENTATION_CLOSED
+NO
+关闭条件尚未全部满足，不能将测试通过直接提升为最终关闭。
+
+四、下一轮授权
+
+批准 Codex 仅实施 CHANGE 34–37 的最小证据修订及必要测试修订。
+不要求重做 U1，不允许扩大修复范围。若发现必须修改产品代码的缺陷，应先提交最小修复说明及对应回归证据，再进行审计。
+下一轮 MSG-20261009-22 应重点核验并发确定性、PG 错误码、失效事务生命周期和 HEAD 绑定。
+
+五、机器可读裁决
+
+INI
+AUDIT_ID=MSG-20261009-21
+REVIEWED_HEAD=e7c177a3
+FINAL_VERDICT=PASS_WITH_REVISE
+CHANGE33_1_ALS_LIFECYCLE=PASS_WITH_REVISE
+CHANGE33_2_REAL_CONCURRENT_OVERLAP=REVISE
+CHANGE33_3_HANDLE_IDENTITY_AND_LAYER=PASS_SCOPED
+CHANGE33_4_PG_ASSERTIONS=PASS_WITH_REVISE
+CHANGE33_5_NEGATIVE_CONTROL_MINIMAL_REVERT=PASS_SCOPED
+CHANGE33_6_FIXED_HEAD_EVIDENCE_BINDING=REVISE
+CHANGE33_ASYNC_LOCAL_STORAGE_LIFECYCLE_AND_ISOLATION=PASS_WITH_REVISE
+U1_READ_ONLY_BOUNDARY_PRESERVED=PASS_SCOPED
+SCOPE_HONESTY=PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED=NO
+PHASE3_A_U2_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE34_P0,CHANGE35_P1,CHANGE36_P1,CHANGE37_P1
+NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R7_CHANGES34_TO37_ONLY
+NEXT_AUDIT=MSG-20261009-22
+RUNTIME_SOURCE_ISOLATION_IMPLEMENTED=NO
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终裁决：U1 尚差四项最小核验证据，不需要推翻 CHANGE 32 的实现方案。 下一轮若全部满足，可申请 PHASE3_U1_IMPLEMENTATION_CLOSED=YES，但该关闭不会自动授予 U2–U5 实施权限。
+```
