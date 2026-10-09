@@ -471,7 +471,12 @@ export function wrapPaidCustomsProvider<TProvider extends object>(
     return invoke();
   }
 
-  const wrapped = Object.create(provider) as Record<string, unknown>;
+  // V2-R1 / CHANGE 04：**不**用 Object.create(provider) —— 那会把原始 provider 变成原型，
+  // 业务层可通过原型链拿到未包装的原始方法。这里构造无原型逃逸的最小权限对象。
+  const wrapped: Record<string, unknown> = {};
+  for (const name of collectProviderDataPropertyNames(provider)) {
+    wrapped[name] = (provider as Record<string, unknown>)[name];
+  }
   for (const operation of PAID_CUSTOMS_OPERATIONS) {
     const key = operationMethodName(operation);
     const original = (provider as unknown as Record<string, unknown>)[key];
@@ -495,11 +500,70 @@ export class CustomsProviderUngatedExitError extends Error {
   }
 }
 
+/** V2-R1 / CHANGE 04：出现未声明的可调用出口（含原型与符号方法）→ 结构性封闭失败。 */
+export class CustomsProviderUndeclaredExitError extends Error {
+  readonly code = 'CUSTOMS_PROVIDER_UNDECLARED_EXIT';
+  readonly exits: readonly string[];
+
+  constructor(exits: readonly string[]) {
+    super(`CUSTOMS_PROVIDER_UNDECLARED_EXIT:${exits.join(',')}`);
+    this.name = 'CustomsProviderUndeclaredExitError';
+    this.exits = exits;
+  }
+}
+
+/** 遍历实例自身 + 原型链 + 符号方法，收集**全部**可调用出口。 */
+export function collectProviderFunctionExits(provider: object): string[] {
+  const names = new Set<string>();
+  let current: object | null = provider;
+  while (current !== null && current !== Object.prototype) {
+    for (const name of Object.getOwnPropertyNames(current)) {
+      if (name === 'constructor') continue;
+      if (typeof (current as Record<string, unknown>)[name] === 'function') names.add(name);
+    }
+    for (const symbol of Object.getOwnPropertySymbols(current)) {
+      if (typeof (current as Record<symbol, unknown>)[symbol] === 'function') {
+        names.add(symbol.toString());
+      }
+    }
+    current = Object.getPrototypeOf(current) as object | null;
+  }
+  return [...names].sort();
+}
+
+/** 实例自身 + 原型链上的**非函数**属性名（用于最小权限拷贝，避免借原型逃逸）。 */
+export function collectProviderDataPropertyNames(provider: object): string[] {
+  const names = new Set<string>();
+  let current: object | null = provider;
+  while (current !== null && current !== Object.prototype) {
+    for (const name of Object.getOwnPropertyNames(current)) {
+      if (name === 'constructor') continue;
+      if (typeof (current as Record<string, unknown>)[name] === 'function') continue;
+      names.add(name);
+    }
+    current = Object.getPrototypeOf(current) as object | null;
+  }
+  return [...names];
+}
+
 /**
  * 全出口覆盖断言：provider 上存在的每一个出站方法，在包装结果上都必须是**新函数**。
  * 若包装结果仍直接暴露原函数（漏包 / 被覆盖 / 事后被人为还原）→ 抛错，fail-closed。
  */
-export function assertProviderFullyGated<T extends object>(original: T, wrapped: T): void {
+export function assertProviderFullyGated<T extends object>(
+  original: T,
+  wrapped: T,
+  options: { allowExtraExits?: readonly string[] } = {},
+): void {
+  // (1) 结构性封闭：任何未声明的可调用出口（含原型/符号）都视为越权能力
+  const allowed = new Set(options.allowExtraExits ?? []);
+  const declared = new Set<string>(CUSTOMS_FILING_PROVIDER_OUTBOUND_METHODS);
+  const undeclared = collectProviderFunctionExits(original).filter(
+    (name) => !declared.has(name) && !allowed.has(name),
+  );
+  if (undeclared.length > 0) throw new CustomsProviderUndeclaredExitError(undeclared);
+
+  // (2) 已声明出口必须确实被包装（引用不同）
   const originalRecord = original as unknown as Record<string, unknown>;
   const wrappedRecord = wrapped as unknown as Record<string, unknown>;
   const ungated = CUSTOMS_FILING_PROVIDER_OUTBOUND_METHODS.filter((method) => {

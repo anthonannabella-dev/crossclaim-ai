@@ -11,9 +11,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   CUSTOMS_FILING_PROVIDER_OUTBOUND_METHODS,
   CustomsPaidApiGateError,
+  CustomsProviderUndeclaredExitError,
   CustomsProviderUngatedExitError,
   PAID_CUSTOMS_API_GATE_VERSION,
   assertProviderFullyGated,
+  collectProviderFunctionExits,
   createPaidCustomsCallCounter,
   wrapPaidCustomsProvider,
   type PaidCustomsGateContext,
@@ -209,11 +211,84 @@ describe('V2-02 漏包检测', () => {
     });
     expect(() => assertProviderFullyGated(provider, wrapped)).not.toThrow();
   });
+
+  // V2-R1 / CHANGE 04：结构性封闭
+  it('包装结果不再通过原型链暴露原始 provider', () => {
+    const provider = makeSandboxLikeProvider();
+    const wrapped = wrapPaidCustomsProvider({
+      provider,
+      counter: createPaidCustomsCallCounter(),
+      resolveContext: () => context(),
+      now: () => NOW,
+    });
+    expect(Object.getPrototypeOf(wrapped)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(wrapped)).not.toBe(provider);
+    expect((wrapped as { providerId?: string }).providerId).toBe('provider-sandbox');
+  });
+
+  it('未声明的额外出口（自有方法 / 符号方法）→ 结构性封闭失败', () => {
+    const withExtra = {
+      ...makeSandboxLikeProvider(),
+      debugDump: () => 'raw',
+    };
+    const wrappedExtra = wrapPaidCustomsProvider({
+      provider: withExtra,
+      counter: createPaidCustomsCallCounter(),
+      resolveContext: () => context(),
+      now: () => NOW,
+    });
+    expect(() => assertProviderFullyGated(withExtra, wrappedExtra as never)).toThrow(
+      CustomsProviderUndeclaredExitError,
+    );
+
+    const symbolExit = {
+      ...makeSandboxLikeProvider(),
+      [Symbol('escape')]: () => 'raw',
+    };
+    const wrappedSymbol = wrapPaidCustomsProvider({
+      provider: symbolExit,
+      counter: createPaidCustomsCallCounter(),
+      resolveContext: () => context(),
+      now: () => NOW,
+    });
+    expect(collectProviderFunctionExits(symbolExit)).toContain('Symbol(escape)');
+    expect(() => assertProviderFullyGated(symbolExit, wrappedSymbol as never)).toThrow(
+      CustomsProviderUndeclaredExitError,
+    );
+  });
+
+  it('显式声明的额外出口可被容忍，但**不会**出现在最小权限包装上', () => {
+    const withExtra = {
+      ...makeSandboxLikeProvider(),
+      debugDump: () => 'raw',
+    };
+    const wrapped = wrapPaidCustomsProvider({
+      provider: withExtra,
+      counter: createPaidCustomsCallCounter(),
+      resolveContext: () => context(),
+      now: () => NOW,
+    });
+    expect(() =>
+      assertProviderFullyGated(withExtra, wrapped as never, { allowExtraExits: ['debugDump'] }),
+    ).not.toThrow();
+    expect((wrapped as Record<string, unknown>).debugDump).toBeUndefined();
+  });
+
+  it('组合点对含有未声明出口的 provider 直接抛错（不返回半成品）', () => {
+    const withExtra = { ...makeSandboxLikeProvider(), debugDump: () => 'raw' };
+    expect(() =>
+      composeGatedCustomsFilingProvider({
+        provider: withExtra,
+        resolveContext: () => context(),
+        now: () => NOW,
+      }),
+    ).toThrow(CustomsProviderUndeclaredExitError);
+  });
 });
 
 describe('V2-02 绕过 Gate 的静态扫描', () => {
   const CALL_PATTERN =
-    /\b\w*[Pp]rovider\s*\.\s*(?:readData|lookupRate|createSubmission|uploadEvidence|getSubmission|getSubmissionStatus|listRequestsForInformation|respondToRequest|getRefundStatus)\s*\(/g;
+    /\b\w*[Pp]rovider\s*(?:\.\s*|\[\s*['"`])(?:readData|lookupRate|createSubmission|uploadEvidence|getSubmission|getSubmissionStatus|listRequestsForInformation|respondToRequest|getRefundStatus)/g;
 
   function scanSourceText(text: string): number {
     return text.match(CALL_PATTERN)?.length ?? 0;
@@ -246,6 +321,8 @@ describe('V2-02 绕过 Gate 的静态扫描', () => {
   it('扫描器本身能检出合成违例（防止空扫描假通过）', () => {
     expect(scanSourceText('await customsFilingProvider.createSubmission(input);')).toBe(1);
     expect(scanSourceText('provider.getSubmission({ id });')).toBe(1);
+    expect(scanSourceText("provider['createSubmission'](input);")).toBe(1);
+    expect(scanSourceText('provider["getRefundStatus"]({ id });')).toBe(1);
     expect(scanSourceText('const x = resolveCustomsExecutionRoute(provider);')).toBe(0);
   });
 });
