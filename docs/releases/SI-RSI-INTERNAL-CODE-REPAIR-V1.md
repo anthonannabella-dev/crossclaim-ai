@@ -3452,3 +3452,51 @@ SCHEMA_MIGRATION=HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL=FORBIDDEN
 EXTERNAL_WRITE=HOLD · AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN · PRODUCTION_READY=NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.53 R2 只读收口交付（授权 `PHASE3_A_U2_PRECONDITION_R2_READ_ONLY`）
+
+> 交付物：`docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-PRECONDITION-R2-READONLY-CONSOLIDATION.md`
+> （SHA-256 `d97ab6c2da43645a32e465702c89dbecef8fb98f6a1c2bef495e3539409e935c`，18,262 字节）
+> 基线 `f611847e`；U1 封板 `9ee36837` 未改动；`P3_EXPERIMENT_AUTHORIZED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`PRODUCTION_WRITE_AUTHORIZED=NO` 不变。
+> 本轮**仅**文档修订与只读勘验：未实施产品代码、未连接任何数据库、未运行任何实验、未恢复心跳或 OS 定时任务、未新增 schema/migration。
+
+**四项材料（对应 MSG-20261009-47 的下一轮提交要求）**
+
+1. **F-01 锁协议决策建议 + 写入域清单（CHANGE 86）**：明确「任务领取互斥 / 候选写入互斥 / 提交时 fencing」三者**不等价**；
+   路线建议 **A 统一到 durable lease = 优先评审**（B flock 暂不推荐、C 写入域不相交保留备选），并给出 **A-1~A-6 六项成立条件**；
+   提供 `LOCK_DOMAIN_AND_WRITER_INVENTORY` 模板（任务领取者 / U2 候选写入者 / 现有 RSI 写入者 / 保护资源 / 锁作用域 / 失效行为 / 统一协议），
+   逐行区分**仓库已知**与**宿主缺失**。并声明：这是**方案建议**，U2 设计 R21 未重开；若选 A 需另一次单独授权的设计修订。
+2. **P1 fencing 与提交归因修订（CHANGE 87、88）**：把原 `F-A`「单语句条件检查」升级为 **`FENCE_CONTRACT`（F-A′）**——
+   写入事务对 `FENCE_ROW(resourceKey)` 取**行锁**（`SELECT ... FOR UPDATE`）→ 校验 `ownerRef`+`fenceGeneration` → 受保护写入 → `COMMIT`；
+   接管事务对**同一行**取同一锁并 `generation+1` ⇒ 二者形成**全序**，接管无法插入到校验与提交之间；明确**覆盖提交时刻**；
+   给出等价实现（`UPDATE ... WHERE gen=:old` 受影响行数判定、受约束的 `SECURITY DEFINER` 写入接口）；`SERIALIZABLE` 路径须证明序列化约束并正确处理 `40001`（重试须重新校验 generation），**不得**仅凭隔离级别宣称安全；
+   并新增**三个互不推导**的证明字段 **`DEDUPE_PROOF` / `EXCLUSION_PROOF` / `COMMIT_ATTRIBUTION_PROOF`**（`F-C` 是归因机制，不是 fencing 替代）。
+3. **E-08 ~ E-16 缺失证据登记 + 宿主只读采集清单**：逐项给出所需内容、只读采集示例命令与充分性判据；
+   纪律写明「只回传名称/布尔/计数/时间/对象名，禁止回传连接串、密码、密钥、令牌与业务数据行」；
+   再次强调审计方两点：**systemd 硬化声明 ≠ 目标机已生效**、**migration 中的触发器定义 ≠ 目标库已部署该迁移、也 ≠ 特权者无法停用**；
+   其中 **E-08/E-10/E-11/E-12/E-14 为实施授权前必要证据**。
+4. **P3 修订后实验矩阵（S1–S11）**：S2 须先确定数据库是否已接收 `COMMIT`（未确认不得统一判 `NOT_COMMITTED`）；
+   **S3** 四阶段确定性注入（旧事务已开始未提交 → token 失效 → 新持有者接管并提交 → 旧事务再提交），通过条件为**不得出现违反 fencing 顺序的陈旧写入提交**；
+   S4 默认 `UNKNOWN`；**S7** 须以**并发竞争**（而非仅检查配置）证明互斥，并覆盖"两实例分别持 lease 与文件锁却同时自认可写"；**S8** 分别覆盖旧事务**未开始/已开始**；
+   新增 **S9**（主从切换+连接池重连）、**S10**（特权角色与旁路写入）、**S11**（故障注入与阻断恢复）；
+   并写明 **≤60 分钟仅为资源边界，超时须记 `INCONCLUSIVE`**。
+
+**本轮结束时状态**
+
+```text
+F01_STATUS = OPEN_P0（未关闭）
+PREFERRED_LOCK_ROUTE = LEASE_REVIEW_FIRST（方案建议；未做设计变更）
+LOCK_PROTOCOL_UNIFORMITY = NOT_PROVEN
+DEDUPE_PROOF = DESIGN_EVIDENCE_ONLY
+EXCLUSION_PROOF_STATUS = NOT_PROVEN
+COMMIT_ATTRIBUTION_PROOF = NOT_AVAILABLE_IN_CURRENT_CONFIGURATION
+MULTI_INSTANCE_AUTOMATED_WRITE = NOT_AUTHORIZED
+P3_EXPERIMENT_AUTHORIZED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · PRODUCTION_WRITE_AUTHORIZED = NO
+U1_CODE_CLOSURE = UNCHANGED（9ee36837）· U2_DESIGN_R21 = 未重开
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+HEARTBEAT_RESTORED = NO · OS_TIMER_RESTORED = NO
+```
