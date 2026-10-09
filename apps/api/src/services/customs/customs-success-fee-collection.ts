@@ -303,7 +303,14 @@ const VERIFIED_LEDGER_BRAND: unique symbol = Symbol('crossclaim.customs.verified
 /** 经认证的台账合计证据：品牌为模块私有 Symbol，只能由 authenticateLedgerEvidence 产出。 */
 export interface VerifiedLedgerEvidence {
   readonly [VERIFIED_LEDGER_BRAND]: true;
-  readonly source: CustomsTrustedCollectionSource extends never ? never : string;
+  readonly source: string;
+  readonly organizationId: string;
+  readonly merchantAccountId: string;
+  readonly receivableId: string;
+  readonly currency: string;
+  readonly ledgerSnapshotId: string;
+  /** 只有经认证的**空账本**证据才允许把历史金额解释为 0.00。 */
+  readonly confirmedEmpty: boolean;
   readonly collectedAmount: string;
   readonly refundedAmount: string;
   readonly occurredAt: string;
@@ -323,6 +330,12 @@ export function authenticateLedgerEvidence(input: {
   secret: string | null;
   now: Date;
   toleranceSeconds?: number;
+  /** CHANGE 17：账目身份绑定（全部必填，不允许"预期缺失就跳过"）。 */
+  expectedOrganizationId: string;
+  expectedMerchantAccountId: string;
+  expectedReceivableId: string;
+  expectedCurrency: string;
+  expectedLedgerSnapshotId?: string | null;
 }): { verified: boolean; reasonCodes: readonly CollectionAuthenticationReason[]; evidence: VerifiedLedgerEvidence | null } {
   const reject = (reason: CollectionAuthenticationReason) => ({
     verified: false,
@@ -335,6 +348,15 @@ export function authenticateLedgerEvidence(input: {
   }
   if (input.timestampHeader === null || input.timestampHeader.length === 0) {
     return reject('COLLECTION_TIMESTAMP_MISSING');
+  }
+  // CHANGE 17：与 Collection 认证一致的时间窗限制（非法即拒，不给"异常值改变窗口"留口子）
+  if (
+    input.toleranceSeconds !== undefined &&
+    (!Number.isInteger(input.toleranceSeconds) ||
+      input.toleranceSeconds <= 0 ||
+      input.toleranceSeconds > MAX_COLLECTION_TOLERANCE_SECONDS)
+  ) {
+    return reject('COLLECTION_TOLERANCE_INVALID');
   }
   const tolerance = input.toleranceSeconds ?? 300;
   const timestampSeconds = Number(input.timestampHeader);
@@ -357,12 +379,46 @@ export function authenticateLedgerEvidence(input: {
   }
   if (typeof parsed !== 'object' || parsed === null) return reject('COLLECTION_PAYLOAD_MALFORMED');
   const record = parsed as Record<string, unknown>;
+  const requiredStringKeys = [
+    'organizationId',
+    'merchantAccountId',
+    'receivableId',
+    'currency',
+    'ledgerSnapshotId',
+    'source',
+    'collectedAmount',
+    'refundedAmount',
+  ] as const;
+  for (const key of requiredStringKeys) {
+    if (typeof record[key] !== 'string' || (record[key] as string).length === 0) {
+      return reject('COLLECTION_PAYLOAD_MALFORMED');
+    }
+  }
+  if (!(CUSTOMS_TRUSTED_LEDGER_SOURCES as readonly string[]).includes(record.source as string)) {
+    return reject('COLLECTION_PAYLOAD_MALFORMED');
+  }
+  // CHANGE 17：账目归属绑定（跨租户 / 跨商户 / 跨币种 / 跨应收 / 跨快照一律拒）
   if (
-    typeof record.collectedAmount !== 'string' ||
-    typeof record.refundedAmount !== 'string' ||
-    typeof record.source !== 'string' ||
-    !(CUSTOMS_TRUSTED_LEDGER_SOURCES as readonly string[]).includes(record.source)
+    record.organizationId !== input.expectedOrganizationId ||
+    record.merchantAccountId !== input.expectedMerchantAccountId ||
+    record.receivableId !== input.expectedReceivableId ||
+    record.currency !== input.expectedCurrency
   ) {
+    return reject('COLLECTION_RECEIVABLE_MISMATCH');
+  }
+  if (
+    input.expectedLedgerSnapshotId !== undefined &&
+    input.expectedLedgerSnapshotId !== null &&
+    record.ledgerSnapshotId !== input.expectedLedgerSnapshotId
+  ) {
+    return reject('COLLECTION_RECEIVABLE_MISMATCH');
+  }
+  // CHANGE 17：金额必须是合法非负定点数（拒绝任意字符串 / 负数 / 超精度）
+  const collected = normalizeDecimalAmount(record.collectedAmount as string);
+  const refunded = normalizeDecimalAmount(record.refundedAmount as string);
+  if (collected === null || refunded === null) return reject('COLLECTION_PAYLOAD_MALFORMED');
+  const confirmedEmpty = record.empty === true;
+  if (confirmedEmpty && (compareDecimalAmounts(collected, '0') !== 0 || compareDecimalAmounts(refunded, '0') !== 0)) {
     return reject('COLLECTION_PAYLOAD_MALFORMED');
   }
   return {
@@ -370,9 +426,15 @@ export function authenticateLedgerEvidence(input: {
     reasonCodes: [],
     evidence: {
       [VERIFIED_LEDGER_BRAND]: true,
-      source: record.source,
-      collectedAmount: record.collectedAmount,
-      refundedAmount: record.refundedAmount,
+      source: record.source as string,
+      organizationId: record.organizationId as string,
+      merchantAccountId: record.merchantAccountId as string,
+      receivableId: record.receivableId as string,
+      currency: record.currency as string,
+      ledgerSnapshotId: record.ledgerSnapshotId as string,
+      confirmedEmpty,
+      collectedAmount: collected,
+      refundedAmount: refunded,
       occurredAt: typeof record.occurredAt === 'string' ? record.occurredAt : '',
     },
   };
@@ -439,9 +501,11 @@ export function evaluateCustomsSuccessFeeCollection(
     basisSettlementId: input.settlement.settlementId,
     historicalCollectedAmount:
       input.ledgerEvidence === undefined || input.ledgerEvidence === null
-        ? '0.00'
+        ? null
         : isVerifiedLedgerEvidence(input.ledgerEvidence)
-          ? formatAtLeastTwoDecimals(input.ledgerEvidence.collectedAmount)
+          ? input.ledgerEvidence.confirmedEmpty
+            ? '0.00'
+            : formatAtLeastTwoDecimals(input.ledgerEvidence.collectedAmount)
           : null,
     collectionAuthorizedForFuture: false,
     collectionInitiated: false as const,

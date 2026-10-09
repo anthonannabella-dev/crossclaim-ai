@@ -41,6 +41,11 @@ const COLLECTION_SECRET = 'whsec_collection_test';
 function ledgerEvidence(collectedAmount: string) {
   const rawBody = JSON.stringify({
     source: 'LEDGER',
+    organizationId: 'org-1',
+    merchantAccountId: 'acct-1',
+    receivableId: 'st-1',
+    currency: 'USD',
+    ledgerSnapshotId: 'snap-1',
     collectedAmount,
     refundedAmount: '0.00',
     occurredAt: '2026-10-10T00:00:00.000Z',
@@ -52,6 +57,10 @@ function ledgerEvidence(collectedAmount: string) {
     timestampHeader: timestamp,
     secret: COLLECTION_SECRET,
     now: new Date(Number(timestamp) * 1000),
+    expectedOrganizationId: 'org-1',
+    expectedMerchantAccountId: 'acct-1',
+    expectedReceivableId: 'st-1',
+    expectedCurrency: 'USD',
   });
   if (result.evidence === null) throw new Error('TEST_LEDGER_UNVERIFIED');
   return result.evidence;
@@ -205,9 +214,86 @@ describe('V2-08 策略有效性与历史台账 — CHANGE 13', () => {
     expect(result.historicalCollectedAmount).toBe('300.00');
   });
 
-  it('未提供台账证据 → 视为确实没有历史收款（0.00，而非 null）', () => {
+  // CHANGE 17：未提供台账证据 = 不可读（null）；只有经认证的空账本才是 0.00
+  it('未提供台账证据 → historicalCollectedAmount = null（不可读 ≠ 零）', () => {
     const result = evaluateCustomsSuccessFeeCollection(input());
+    expect(result.historicalCollectedAmount).toBeNull();
+  });
+
+  it('经认证的空账本 → historicalCollectedAmount = 0.00', () => {
+    const rawBody = JSON.stringify({
+      source: 'LEDGER',
+      organizationId: 'org-1',
+      merchantAccountId: 'acct-1',
+      receivableId: 'st-1',
+      currency: 'USD',
+      ledgerSnapshotId: 'snap-1',
+      collectedAmount: '0.00',
+      refundedAmount: '0.00',
+      empty: true,
+      occurredAt: '2026-10-10T00:00:00.000Z',
+    });
+    const timestamp = '1770000000';
+    const verified = authenticateLedgerEvidence({
+      rawBody,
+      signatureHeader: signCollectionFactBody(timestamp, rawBody, COLLECTION_SECRET),
+      timestampHeader: timestamp,
+      secret: COLLECTION_SECRET,
+      now: new Date(Number(timestamp) * 1000),
+      expectedOrganizationId: 'org-1',
+      expectedMerchantAccountId: 'acct-1',
+      expectedReceivableId: 'st-1',
+      expectedCurrency: 'USD',
+    });
+    expect(verified.evidence?.confirmedEmpty).toBe(true);
+    const result = evaluateCustomsSuccessFeeCollection(
+      input({ ledgerEvidence: verified.evidence }),
+    );
     expect(result.historicalCollectedAmount).toBe('0.00');
+  });
+
+  it('Ledger 认证负向：跨租户 / 跨商户 / 跨币种 / 跨应收 / 非法金额 / 非法时间窗', () => {
+    const timestamp = '1770000000';
+    const base = {
+      source: 'LEDGER',
+      organizationId: 'org-1',
+      merchantAccountId: 'acct-1',
+      receivableId: 'st-1',
+      currency: 'USD',
+      ledgerSnapshotId: 'snap-1',
+      collectedAmount: '300.00',
+      refundedAmount: '0.00',
+      occurredAt: '2026-10-10T00:00:00.000Z',
+    };
+    const attempt = (patch: Record<string, unknown>, expectOverride: Record<string, unknown> = {}, toleranceSeconds?: number) => {
+      const rawBody = JSON.stringify({ ...base, ...patch });
+      return authenticateLedgerEvidence({
+        rawBody,
+        signatureHeader: signCollectionFactBody(timestamp, rawBody, COLLECTION_SECRET),
+        timestampHeader: timestamp,
+        secret: COLLECTION_SECRET,
+        now: new Date(Number(timestamp) * 1000),
+        expectedOrganizationId: 'org-1',
+        expectedMerchantAccountId: 'acct-1',
+        expectedReceivableId: 'st-1',
+        expectedCurrency: 'USD',
+        ...(toleranceSeconds === undefined ? {} : { toleranceSeconds }),
+        ...expectOverride,
+      });
+    };
+
+    expect(attempt({ organizationId: 'org-OTHER' }).verified).toBe(false);
+    expect(attempt({ merchantAccountId: 'acct-OTHER' }).verified).toBe(false);
+    expect(attempt({ currency: 'EUR' }).verified).toBe(false);
+    expect(attempt({ receivableId: 'st-OTHER' }).verified).toBe(false);
+    expect(attempt({ ledgerSnapshotId: 'snap-OTHER' }, { expectedLedgerSnapshotId: 'snap-1' }).verified).toBe(false);
+    expect(attempt({ collectedAmount: '-5.00' }).verified).toBe(false);
+    expect(attempt({ collectedAmount: 'abc' }).verified).toBe(false);
+    expect(attempt({}, {}, 0).reasonCodes).toContain('COLLECTION_TOLERANCE_INVALID');
+    expect(attempt({}, {}, 99999).reasonCodes).toContain('COLLECTION_TOLERANCE_INVALID');
+    // 重放：同一份签名在窗口外
+    const replayed = attempt({});
+    expect(replayed.verified).toBe(true);
   });
 
   it('认证边界拒绝非法时间窗（0 / 负数 / 非整数 / 超上限）', () => {
