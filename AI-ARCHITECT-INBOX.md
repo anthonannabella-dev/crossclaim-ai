@@ -178806,3 +178806,282 @@ PRODUCTION_READY=NO
 
 最终裁决：R15 = REVISE。 允许进入 R16 的只读设计修订和证据复核，但不允许实施 U2_PLATFORM_ONLY_INSERT_SUBSET。下一轮重点是消除 P2 锁归属假阳性、COMMIT 执行归因假阳性，以及 nonce 消费终态不确定时的状态误报。
 ```
+
+### [MSG-20261009-41] U2 设计 R16 = **REVISE**（`CHANGE 63 = PASS（DESIGN ONLY）`；`CHANGE 61/62 = REVISE`；仅新增 **CHANGE 64（P0）/65（P1）/66（P0）**，明确不重复已通过项）—— **独立核验全部 PASS**：`a43d1b8a..97dee91e` 恰好 **1 提交 / 1 变更文件**、唯一变更文件为 U2 设计文档、`+190 / −9`、**无 `apps/api` 产品代码变更**、**Git blob SHA `ba849c495b567fe04a9dce98d3d7186a6f0ec548` 与送审值一致**、已读取固定 HEAD 下 `AutonomyCandidate` Prisma 模型并**确认现有模型没有 `executionRef` 字段**、`DOC_SHA256_INDEPENDENTLY_VERIFIED=NO`；审计方重申「仓库证据核验 ≠ 目标 Linux 内核 / 真实 PostgreSQL / 运行时安全性验证」；**CHANGE 61 = REVISE（核心纠错通过，仍有两项边界）**：R16 §24.1 已正确撤回「`P2` 返回 `EWOULDBLOCK` 即证明本实例持锁」，O1/O2/O3 职责分离、`P2` 错误分类、异常探针释放、FD 扫描降级为辅助证据**均可接受**；**新增 CHANGE 64（P0）**：`F_OFD_GETLK` 是**冲突查询**接口、**不是**「查询本 OFD 是否持锁」的接口 ⇒ **不得**单独视为自身持锁的肯定证明；`fdinfo` 必须验证**锁类型、目标对象、锁范围与 OFD 归属**而不仅是「存在锁条目」；若查询只能证明「存在冲突锁」而不能证明「属于目标 OFD」则 **O3 = INCONCLUSIVE**；O3 不可用时**仅**可在 O2 持续持锁结构保证确实成立时继续，否则拒绝写入；新增 **U2-47a**（本实例释放锁、另一进程接管 ⇒ O3 **不得**错误报告本实例仍持有）；**新增 CHANGE 65（P1）**：`releaseCounter == 0` **不能替代**真实结构保证（例如未经锁管理模块的 native 调用执行 `close(fd)` 时计数器可能仍为零）⇒ R17 须明确：锁 FD 的**创建/持有/传递/释放接口必须统一封装**、覆盖 **native addon / FFI / 子进程继承 / 异常退出**等适用边界、对**不能证明受统一管理的代码路径禁止进入排他写入窗口**、持锁证明须覆盖**整个实际写入窗口**（不得仅在 `T2` 瞬间成立）；**CHANGE 62 = REVISE（存在性与提交归因的区分通过，归因证据链仍不充分）**：R16 §24.2 正确识别 `dedupeKey` 命中 ≠ 本次提交、`returnedCandidateId` 命中 ≠ 本次提交、随机 `executionRef` 不可由业务字段推导、Prisma 模型无 `executionRef` 列、外部持久记录丢失时不得推断提交成功；**新增 CHANGE 66（P0）**：执行身份必须与**数据库提交事件**建立**可信因果绑定**——反例：E1 生成 `executionRef=A`、E1 提交时连接中断结果未知、另一有写入权限的 E2 以**相同候选 ID** 插入内容一致的行、E1 的事务外记录仍含 `{A,candidateId,dedupeKey,attemptNo}`、E1 事后查询发现行与记录一致 ⇒ **仍无法证明该行由 E1 提交**；R17 须补充至少一种可审计因果绑定（可信的**同事务数据库审计记录**关联执行身份与候选插入 / 可证明只有本次事务能使用该写入凭证的隔离机制 / 受信写入边界提供的**可持久验证事务回执**；均为设计候选、不代表当前 schema 或环境已支持）；在 `SCHEMA_MIGRATION=HOLD` 且缺少可信因果绑定时**必须允许** `candidateExists=YES` 且 **`thisExecutionCommitted=UNKNOWN`**，不得强行升级为 YES；新增 **U2-47b**（E1 结果未知 + E2 插入内容一致的行 + E1 外部记录仍存在 ⇒ 必须拒绝把该行归因于 E1）；**CHANGE 63 = PASS（DESIGN ONLY）**：三分支、未知终态不得误报、未知按不可复用执行安全策略但**不改变事实报告**、两状态独立报告、消费记录不得因候选写入失败被清理/复位、U2-46a~d 均有对应断言 ⇒ **不再要求修订**；但强调通过的是**文档设计审查**，实际消费存储、事务状态确认与并发测试仍 **NOT_VERIFIED**；**授权结论**：`U2_DESIGN_R16_ACCEPTED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`SCHEMA_MIGRATION=HOLD`、`RUNTIME_WIRING=FORBIDDEN`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`；`REQUIRED_CHANGES=CHANGE_64_P0,CHANGE_65_P1,CHANGE_66_P0`、`NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R17_READ_ONLY_CHANGES_64_TO_66` / `NEXT_AUDIT=MSG-20261009-42`；reviewed ref `97dee91e635de6cd79e5f25883822ae0107891fe`
+
+```text
+MSG-20261009-41｜独立审计裁决
+
+审计对象： CrossClaim AI · SI/RSI INTERNAL CODE REPAIR V1
+阶段： PHASE 3-A · U2 设计 R16
+固定 HEAD： 97dee91e635de6cd79e5f25883822ae0107891fe
+审计方式： GitHub 仓库只读核验 + 设计安全性审查
+仓库写入： 无
+
+总体裁决：REVISE
+
+已通过 GitHub 连接器独立确认：
+
+a43d1b8a..97dee91e 恰好包含 1 个提交、1 个变更文件。
+
+唯一变更文件是 U2 设计文档，变更量为 +190 / −9。
+
+本轮没有 apps/api 产品代码变更。
+
+R16 文档的 Git blob SHA 为 ba849c495b567fe04a9dce98d3d7186a6f0ec548，与送审值一致。
+
+已读取固定 HEAD 下的 AutonomyCandidate Prisma 模型，确认现有模型没有 executionRef 字段。
+
+上述属于仓库证据核验，不等于目标 Linux 内核、真实 PostgreSQL 或运行时安全性验证。
+
+一、裁决总表
+
+审计项
+
+
+
+裁决
+
+
+
+关键判断
+
+
+
+
+CHANGE 61（P0）
+
+
+
+REVISE
+
+
+
+P2 纠错成立，但 O3 查询与 O2 证明边界尚需修订
+
+
+
+
+CHANGE 62（P1）
+
+
+
+REVISE
+
+
+
+执行身份记录尚不能单独证明数据库事务归属
+
+
+
+
+CHANGE 63（P1）
+
+
+
+PASS — 设计范围
+
+
+
+三态消费和安全默认语义成立
+
+
+
+
+U2 设计 R16 整体
+
+
+
+REVISE
+
+
+
+仍有需要收紧的归属证明
+
+
+
+
+U2_PLATFORM_ONLY_INSERT_SUBSET
+
+
+
+NOT AUTHORIZED
+
+
+
+不得开始实施
+
+核心结论： R16 相比 R15 已经解决了锁探针误判和 nonce 消费状态误报的主要设计问题，但仍不能把「外部记录与数据库行一致」升级为「该数据库行必定由本次执行提交」。
+
+二、CHANGE 61（P0）审计
+
+裁决：REVISE — 核心纠错通过，仍有两项设计问题。
+
+R16 §24.1 已正确撤回「P2 返回 EWOULDBLOCK 即证明本实例持锁」的结论。O1、O2、O3 的职责分离、P2 错误分类、异常探针释放以及跨进程 FD 扫描降级为辅助证据，均可接受。
+
+但还有两个需要处理的边界。
+
+CHANGE 64（P0）— O3 查询机制不能预设具备所有权证明能力
+
+F_OFD_GETLK 是冲突查询接口，不是简单的「查询本 OFD 是否持锁」接口。对于调用者自身的 OFD 锁，其冲突判断语义不足以直接证明当前仍持有锁。
+
+而 /proc/self/fdinfo 的锁信息能否稳定地完成 OFD 身份关联，还依赖具体内核行为和解析方式。
+
+因此必须补充：
+
+F_OFD_GETLK 不得被单独视为自身持锁的肯定证明。
+
+fdinfo 信息必须验证锁类型、目标对象、锁范围和 OFD 归属，而不仅是存在锁条目。
+
+如果查询只能证明存在冲突锁，不能证明属于目标 OFD，则 O3 判定为 INCONCLUSIVE。
+
+O3 不可用时，仅能在 O2 的持续持锁结构保证确实成立的条件下继续，否则拒绝写入。
+
+新增测试 U2-47a：本实例释放锁，另一进程接管，O3 不得错误地报告本实例仍持有。
+
+CHANGE 65（P1）— O2 必须覆盖无法通过计数器观测的释放路径
+
+releaseCounter == 0 不能替代真实的结构保证。
+
+例如某个未通过锁管理模块的原生调用执行了 close(fd)，计数器可能仍为零。
+
+R17 应明确：
+
+锁 FD 的创建、持有、传递和释放接口必须统一封装。
+
+纳入 native addon、FFI、子进程继承和异常退出等适用的运行环境边界。
+
+对不能证明受到统一管理的代码路径，禁止进入排他写入窗口。
+
+持锁证明应覆盖整个实际写入窗口，不得仅在 T2 瞬间成立。
+
+CHANGE 61 尚不能完全闭合。 但其 P2 必要非充分、错误分类和安全释放设计已经接受，无需在 R17 重做。
+
+三、CHANGE 62（P1）审计
+
+裁决：REVISE — 存在性与提交归因的区分通过，归因证据链仍不充分。
+
+R16 §24.2 正确识别了以下事实：
+
+dedupeKey 命中不等于本次事务提交。
+
+returnedCandidateId 命中不等于本次事务提交。
+
+随机 executionRef 不能从业务字段推导。
+
+当前 Prisma 模型没有 executionRef 列。
+
+外部持久记录丢失时不能推断提交成功。
+
+不过，独立执行日志与数据库候选行之间仍存在归因缺口。
+
+CHANGE 66（P0）— 执行身份必须与数据库提交事件建立可信因果绑定
+
+考虑以下反例：
+
+本次执行 E1 生成 executionRef=A。
+
+E1 尝试提交候选记录，连接中断，提交结果未知。
+
+另一具备写入权限的执行者 E2 获得或使用相同的候选 ID，并插入内容一致的候选行。
+
+E1 的事务外持久记录仍包含 {A, candidateId, dedupeKey, attemptNo}。
+
+E1 事后查询主库，发现候选行与记录一致。
+
+这时，外部记录和候选行一致，但仍无法证明该行由 E1 提交。
+
+随机身份能够证明执行记录的身份，却不能自动证明数据库行的创建者。
+
+R17 必须补充至少一种可审计的因果绑定机制，例如：
+
+可信的同事务数据库审计记录，能够关联执行身份和候选插入；
+
+可证明只有本次事务有能力使用该特定写入凭证的隔离机制；
+
+由受信数据库写入边界提供、可持久验证的事务回执。
+
+以上是设计候选，不代表当前 schema 或运行环境已支持。
+
+在 SCHEMA_MIGRATION=HOLD 且缺少可信因果绑定机制的情况下，应明确允许：
+
+candidateExists=YES
+
+同时：
+
+thisExecutionCommitted=UNKNOWN
+
+不得强行升级为 YES。
+
+新增 U2-47b：执行 E1 的结果未知、其他写入者 E2 插入内容一致的行、E1 外部记录仍存在，必须拒绝将该行归因于 E1。
+
+四、CHANGE 63（P1）审计
+
+裁决：PASS — DESIGN ONLY。
+
+经对照 GitHub 中 R16 §24.3 和 §24.4，以下要求已经得到明确表达：
+
+CONSUMED、UNCONSUMED、CONSUMPTION_UNKNOWN 三分支。
+
+未知终态不得误报已消费或未消费。
+
+未知消费状态按不可复用执行安全策略，但不改变事实报告。
+
+授权消费状态与候选写入状态独立报告。
+
+消费记录不得因候选写入失败被清理或复位。
+
+U2-46a～U2-46d 均有对应验收断言。
+
+不再要求对 CHANGE 63 进行设计修订。
+
+需要强调，通过的是文档设计审查，而非 nonce 消费存储的实现验收。实际消费存储、事务状态确认与并发测试仍为 NOT_VERIFIED。
+
+五、实施授权裁决
+
+U2_PLATFORM_ONLY_INSERT_SUBSET
+
+NOT AUTHORIZED
+原因不是 R16 没有进展，而是锁所有权证明与数据库事务归因仍存在 P0 级别缺口。实际数据库权限、其他写入者范围及 Linux 多进程行为也尚未验证。
+
+下一步仅授权 U2 设计 R17 的只读修订，范围严格限定 CHANGE 64–66，不得扩大到 U2 产品代码实施。
+
+六、机器可读裁决
+复制裁决
+
+AUDIT_ID=MSG-20261009-41
+REVIEWED_HEAD=97dee91e635de6cd79e5f25883822ae0107891fe
+AUDIT_SCOPE=a43d1b8a..97dee91e
+AUDIT_SCOPE_COMMITS=1
+AUDIT_SCOPE_FILES=1
+PRODUCT_CODE_CHANGES=0
+GIT_BLOB_VERIFIED=YES
+DOC_SHA256_INDEPENDENTLY_VERIFIED=NO
+
+VERDICT=REVISE
+CHANGE_61=REVISE
+CHANGE_62=REVISE
+CHANGE_63=PASS_DESIGN_ONLY
+
+REQUIRED_CHANGES=CHANGE_64_P0,CHANGE_65_P1,CHANGE_66_P0
+U2_DESIGN_R16_ACCEPTED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED
+
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R17_READ_ONLY_CHANGES_64_TO_66
+NEXT_AUDIT=MSG-20261009-42
+
+U1_CODE_HEAD=9ee36837
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终裁决：REVISE。 CHANGE 63 设计闭合；CHANGE 61 和 62 继续修订。下一轮只需处理 CHANGE 64、65、66。已通过的部分不要求重复修改；未授权实施、迁移、运行时接线、外部写入或生产部署。
+
+独立核验使用的固定版本：
+GitHub R16 提交
+；本轮没有向仓库写入任何内容。
+```

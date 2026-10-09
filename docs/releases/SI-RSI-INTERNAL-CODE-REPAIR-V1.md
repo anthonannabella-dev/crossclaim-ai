@@ -2850,3 +2850,65 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.45 MSG-20261009-41 裁决归档 = **REVISE**（R16：`CHANGE 63 = PASS（DESIGN ONLY）`；61/62 继续修订；只新增 CHANGE 64–66）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-41] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（132/132，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=3940 / NORM_LINES=132 / FNV=89c9d657`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R15=52308673`、`REVIEWED_HEAD=97dee91e`。
+
+**审计方独立核验（全部 PASS）**：`a43d1b8a..97dee91e` 恰好 **1 提交 / 1 变更文件**、唯一变更文件为 U2 设计文档、`+190 / −9`、
+**无 `apps/api` 产品代码变更**、**Git blob SHA `ba849c495b567fe04a9dce98d3d7186a6f0ec548` 与送审值一致**、
+已读取固定 HEAD 下 `AutonomyCandidate` Prisma 模型并**确认现有模型没有 `executionRef` 字段**、
+`DOC_SHA256_INDEPENDENTLY_VERIFIED = NO`；并重申「**仓库证据核验 ≠ 目标 Linux 内核 / 真实 PostgreSQL / 运行时安全性验证**」。
+（**送审范围口径连续两轮通过**：本轮 `AUDIT_SCOPE` 与 `SINGLE_COMMIT_SCOPE` 一致，均为 1 提交 / 1 文件。）
+
+**逐项裁决**：`CHANGE 61（P0）= REVISE`（**核心纠错通过**：R16 §24.1 已正确撤回「`P2` 返回 `EWOULDBLOCK` 即证明本实例持锁」；
+O1/O2/O3 职责分离、`P2` 错误分类、异常探针释放、跨进程 FD 扫描降级为辅助证据**均可接受**；仍有两项边界见 CHANGE 64/65）、
+`CHANGE 62（P1）= REVISE`（**存在性与提交归因的区分通过**；归因证据链仍不充分，见 CHANGE 66）、
+`CHANGE 63（P1）= PASS（DESIGN ONLY）`。`U2_DESIGN_R16_ACCEPTED = NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED`。
+
+**新增 REQUIRED_CHANGES（下一轮 MSG-20261009-42 只做这三项；不重复已通过项）**
+
+- **CHANGE 64（P0）`O3` 查询机制不能预设具备所有权证明能力**：`F_OFD_GETLK` 是**冲突查询**接口，
+  **不是**「查询本 OFD 是否持锁」的接口 ⇒ **不得**单独视为自身持锁的肯定证明；
+  `/proc/self/fdinfo` 的锁信息须验证**锁类型、目标对象、锁范围与 OFD 归属**，而不仅是「存在锁条目」；
+  若查询只能证明「存在冲突锁」而不能证明「属于目标 OFD」⇒ **`O3 = INCONCLUSIVE`**；
+  `O3` 不可用时**仅**可在 `O2` 的持续持锁结构保证**确实成立**的条件下继续，否则**拒绝写入**。
+  新增 **U2-47a**：本实例释放锁、另一进程接管 ⇒ `O3` **不得**错误报告本实例仍持有。
+- **CHANGE 65（P1）`O2` 必须覆盖无法通过计数器观测的释放路径**：`releaseCounter == 0` **不能替代**真实的结构保证
+  （例如某个**未通过锁管理模块**的原生调用执行了 `close(fd)`，计数器可能仍为零）。R17 须明确：
+  ①锁 FD 的**创建、持有、传递与释放接口必须统一封装**；②纳入 **native addon、FFI、子进程继承、异常退出**等适用运行环境边界；
+  ③对**不能证明受统一管理**的代码路径，**禁止进入排他写入窗口**；④持锁证明应覆盖**整个实际写入窗口**，
+  **不得**仅在 `T2` 瞬间成立。
+- **CHANGE 66（P0）执行身份必须与数据库提交事件建立可信因果绑定**：反例（审计方给出）：
+  E1 生成 `executionRef=A` → E1 提交候选记录时**连接中断、提交结果未知** → 另一具备写入权限的执行者 E2
+  **获得或使用相同候选 ID** 并插入**内容一致**的候选行 → E1 的事务外持久记录仍含 `{A, candidateId, dedupeKey, attemptNo}` →
+  E1 事后查询主库发现候选行与记录一致 ⇒ **仍无法证明该行由 E1 提交**（随机身份能证明「执行记录的身份」，不能自动证明「数据库行的创建者」）。
+  R17 必须补充**至少一种可审计的因果绑定机制**（设计候选，**不代表**当前 schema 或运行环境已支持）：
+  ①可信的**同事务数据库审计记录**，能够关联执行身份与候选插入；②可证明**只有本次事务**有能力使用该特定写入凭证的**隔离机制**；
+  ③由受信数据库写入边界提供、**可持久验证的事务回执**。在 `SCHEMA_MIGRATION=HOLD` 且缺少可信因果绑定机制的情况下，
+  应**明确允许** `candidateExists=YES` 而 **`thisExecutionCommitted=UNKNOWN`**，**不得**强行升级为 `YES`。
+  新增 **U2-47b**：E1 结果未知、其他写入者 E2 插入内容一致的行、E1 外部记录仍存在 ⇒ **必须拒绝**将该行归因于 E1。
+
+**CHANGE 63 的通过要点（不再修订）**：三分支（`CONSUMED`/`UNCONSUMED`/`CONSUMPTION_UNKNOWN`）；
+未知终态不得误报已消费或未消费；未知消费状态**按不可复用执行安全策略但不改变事实报告**；
+授权消费状态与候选写入状态**独立报告**；消费记录不得因候选写入失败被清理或复位；`U2-46a`~`U2-46d` 均有对应断言。
+**但**通过的是**文档设计审查**——实际消费存储、事务状态确认与并发测试仍为 `NOT_VERIFIED`。
+
+```text
+MSG-20261009-41_FINAL_VERDICT = REVISE
+MSG-20261009-41_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 132/132；FNV1A 89c9d657）
+CHANGE_61=REVISE · CHANGE_62=REVISE · CHANGE_63=PASS_DESIGN_ONLY
+U2_DESIGN_R16_ACCEPTED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED
+REQUIRED_CHANGES = CHANGE_64_P0 ; CHANGE_65_P1 ; CHANGE_66_P0
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R17_READ_ONLY_CHANGES_64_TO_66
+NEXT_AUDIT = MSG-20261009-42
+GIT_BLOB_VERIFIED = YES · DOC_SHA256_INDEPENDENTLY_VERIFIED = NO
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
