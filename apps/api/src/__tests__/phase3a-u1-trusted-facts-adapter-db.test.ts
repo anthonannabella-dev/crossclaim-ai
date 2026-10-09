@@ -174,6 +174,17 @@ async function snapshot(): Promise<Record<string, unknown>> {
   };
 }
 
+/**
+ * CHANGE 36：读取数据库级事务计数（PostgreSQL 真实事务数，而非测试里的回调进入次数）。
+ * 说明：测量查询自身的提交不计入其返回值，因此「Q1 → 被测代码 → Q2」的差值 = Q1 自身提交 1 + 被测代码开启的事务数。
+ */
+async function pgTransactionCount(): Promise<number> {
+  const rows = await prisma.$queryRawUnsafe<{ txs: bigint }[]>(
+    `SELECT (xact_commit + xact_rollback)::bigint AS txs FROM pg_stat_database WHERE datname = current_database()`,
+  );
+  return Number(rows[0]?.txs ?? 0n);
+}
+
 beforeEach(async () => {
   for (const organizationId of [ORG, ORG_A, ORG_B, ORG_MISSING]) {
     await prisma.standingAuthorization.deleteMany({ where: { organizationId } });
@@ -477,7 +488,18 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat
     const bInside = new Promise<void>((resolve) => {
       gate.bInside = resolve;
     });
-    const timeout = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    /** CHANGE 34：门闩等待必须确定性 —— 超时即**失败**（不允许“超时后继续跑”） */
+    const entered: Record<string, boolean> = {};
+    const intervals: Record<string, { enteredAt: number; leftAt: number }> = {};
+    const waitOrFail = async (label: string, signal: Promise<void>): Promise<void> => {
+      const outcome = await Promise.race([
+        signal.then(() => 'entered' as const),
+        new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 5000)),
+      ]);
+      if (outcome !== 'entered') throw new Error('GATE_TIMEOUT_NOT_ENTERED:' + label);
+    };
+    const releaseGuard = (): Promise<never> =>
+      new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error('GATE_RELEASE_TIMEOUT')), 15000));
 
     const wrap = (call: string): TrustedFactsReadPort => ({
       findOrganization: (input) => sharedPort.findOrganization(input),
@@ -492,23 +514,33 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat
           const settings = await tx.$queryRawUnsafe<{ transaction_read_only: string }[]>(
             `SELECT current_setting('transaction_read_only') AS transaction_read_only`,
           );
+          entered[call] = true;
+          intervals[call] = { enteredAt: Date.now(), leftAt: Number.MAX_SAFE_INTEGER };
+          handles.push({
+            call,
+            seq: txSeq.get(key)!,
+            readOnly: settings[0]?.transaction_read_only ?? null,
+            writeRejected: false,
+          });
           // 交错编排：A 先进入自己的只读事务并停住；B 在 A **仍然在事务内**时才开始
           if (call === 'A') {
             gate.aInside();
-            await Promise.race([bothRelease, timeout(5000)]);
+            await Promise.race([bothRelease, releaseGuard()]);
           } else if (call === 'B') {
             gate.bInside();
-            await Promise.race([bothRelease, timeout(5000)]);
+            await Promise.race([bothRelease, releaseGuard()]);
           }
           const result = await run(tx);
           // 读完之后再做写入探针（若先写，事务进入 aborted 状态会让后续读取失败）
           let writeRejected = false;
           try {
-            await tx.$executeRawUnsafe(`DELETE FROM "StandingAuthorization" WHERE "id" = 'u1-r6-probe-${call}'`);
+            await tx.$executeRawUnsafe(`DELETE FROM "StandingAuthorization" WHERE "id" = 'u1-r7-probe-${call}'`);
           } catch {
             writeRejected = true;
           }
-          handles.push({ call, seq: txSeq.get(key)!, readOnly: settings[0]?.transaction_read_only ?? null, writeRejected });
+          const record = handles.find((h) => h.call === call);
+          if (record !== undefined) record.writeRejected = writeRejected;
+          intervals[call].leftAt = Date.now();
           return result;
         }),
     });
@@ -520,13 +552,21 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat
         now: () => AT,
       });
 
-    // 先启动 A，等它确实进入只读事务后，再启动 B（“后发请求”场景）
+    // 先启动 A，等它确实进入只读事务后，再启动 B（“后发请求”场景）；超时即失败
     const pendingA = mkAdapter(wrap('A'), scopeA).resolve({ organizationId: ORG_A, actionType: 'recovery.read', monetaryAction: false });
-    await Promise.race([aInside, timeout(5000)]);
+    await waitOrFail('A', aInside);
     const pendingB = mkAdapter(wrap('B'), scopeB).resolve({ organizationId: ORG_B, actionType: 'recovery.read', monetaryAction: false });
-    await Promise.race([bInside, timeout(5000)]);
+    await waitOrFail('B', bInside);
+    // CHANGE 34：释放门闩前断言 A、B 都已进入事务，并在**同一重叠窗口内**完成句柄独立性检查
+    expect(entered.A).toBe(true);
+    expect(entered.B).toBe(true);
+    expect(new Set(handles.filter((h) => h.call === 'A' || h.call === 'B').map((h) => h.seq)).size).toBe(2);
     gate.release();
     const [resA, resB] = await Promise.all([pendingA, pendingB]);
+    // CHANGE 34：两个事务的活动区间确实重叠
+    const realConcurrentOverlap =
+      Math.max(intervals.A!.enteredAt, intervals.B!.enteredAt) < Math.min(intervals.A!.leftAt, intervals.B!.leftAt);
+    expect(realConcurrentOverlap).toBe(true);
 
     expect(resA.ok && resB.ok).toBe(true);
     if (resA.ok && resB.ok) {
@@ -573,6 +613,8 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat
       writeProbeRejectedPerCall: handles.filter((h) => h.writeRejected).length,
       results: { A_version: 3, B_version: 5, A_authorizationId: rowA.id, B_authorizationId: rowB.id },
       crossTenantLeak: false,
+      realConcurrentOverlap,
+      intervals,
       exceptionPath: { org: ORG_MISSING, reason: 'ORGANIZATION_NOT_FOUND', laterCallFreshTransaction: new Set([seqA, seqB, seqC, seqD]).size === 4 },
     });
   });
@@ -592,30 +634,48 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat
     };
     const seen: number[] = [];
     let opened = 0;
-
-    const result = await port.withReadOnlyTransaction(async (tx) => {
-      opened += 1;
-      seen.push(seqOf(tx));
-      // 同一调用链内再次进入 ⇒ 必须复用同一事务句柄，且不得新开第二个只读事务
-      const inner = await port.withReadOnlyTransaction(async (tx2) => {
-        seen.push(seqOf(tx2));
-        // 通过端口读取：db() 应命中当前调用链的事务（而非裸 client / 别人的事务）
-        const org = await port.findOrganization({ organizationId: ORG_A });
-        return org === null ? 'MISS' : 'HIT';
+    const txsBefore = await pgTransactionCount();
+    // CHANGE 36：直接统计**真实事务开启次数**（Prisma $transaction 每次调用 = 一次真实 BEGIN/COMMIT），
+    // 而不是只统计测试回调进入次数；pg_stat_database 计数作为补充记录（其刷新有延迟，故不作断言）。
+    const originalTransaction = prisma.$transaction.bind(prisma);
+    let transactionsOpenedAtDb = 0;
+    (prisma as unknown as { $transaction: (...args: unknown[]) => unknown }).$transaction = (...args: unknown[]) => {
+      transactionsOpenedAtDb += 1;
+      return (originalTransaction as unknown as (...a: unknown[]) => unknown)(...args);
+    };
+    let result: string;
+    try {
+      result = await port.withReadOnlyTransaction(async (tx) => {
+        opened += 1;
+        seen.push(seqOf(tx));
+        // 同一调用链内再次进入 ⇒ 必须复用同一事务句柄，且不得新开第二个只读事务
+        const inner = await port.withReadOnlyTransaction(async (tx2) => {
+          seen.push(seqOf(tx2));
+          // 通过端口读取：db() 应命中当前调用链的事务（而非裸 client / 别人的事务）
+          const org = await port.findOrganization({ organizationId: ORG_A });
+          return org === null ? 'MISS' : 'HIT';
+        });
+        return inner;
       });
-      return inner;
-    });
-
+    } finally {
+      (prisma as unknown as { $transaction: unknown }).$transaction = originalTransaction;
+    }
+    const txsAfter = await pgTransactionCount();
     expect(result).toBe('HIT');
     expect(opened).toBe(1);
+    expect(transactionsOpenedAtDb).toBe(1);
     expect(seen).toEqual([1, 1]);
     evidence({
       kind: 'NESTED_TRANSACTION_REUSE',
       sameCallChain: true,
-      transactionsOpened: opened,
+      callbackEntries: opened,
+      transactionsOpenedAtDb,
       handleSequences: seen,
       reusedSameHandle: seen[0] === seen[1],
       readInsideNestedCall: result === 'HIT',
+      pgTransactionCountBefore: txsBefore,
+      pgTransactionCountAfter: txsAfter,
+      pgTransactionCountNote: 'pg_stat_database 计数刷新有延迟，仅作补充记录；断言使用 $transaction 调用次数（每次 = 一次真实 BEGIN/COMMIT）',
     });
   });
 
@@ -623,15 +683,21 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat
     await seedOrganization(ORG_A);
     const port = createPrismaTrustedFactsReadPort({ prisma });
     let leaked: Promise<unknown> | null = null;
+    const endGate = { release: (): void => {} };
+    const transactionEnded = new Promise<void>((resolve) => {
+      endGate.release = resolve;
+    });
 
     await port.withReadOnlyTransaction(async () => {
-      // 在事务作用域内派生一个“超出事务生命周期”的任务：事务提交后才尝试读取
+      // CHANGE 36：在事务作用域内派生一个“超出事务生命周期”的任务，等待**显式事务结束信号**（不再用 setTimeout）
       leaked = (async () => {
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await transactionEnded;
         return port.findOrganization({ organizationId: ORG_A });
       })();
       return true;
     });
+    // 事务已结束（withReadOnlyTransaction 已返回）——此刻才释放信号，消除基于时间的验证
+    endGate.release();
 
     let threw = false;
     let value: unknown = null;
@@ -646,9 +712,58 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat
     evidence({
       kind: 'DEAD_TRANSACTION_ACCESS',
       detachedFromTransactionLifecycle: true,
+      signalSource: 'EXPLICIT_TRANSACTION_END_SIGNAL（取代 setTimeout）',
       threw,
       returnedValue: value,
       failClosed: threw && value === null,
+    });
+  });
+
+  it('U1-DB12（CHANGE 35）四个写入探针分别捕获 PostgreSQL SQLSTATE 25006（且均位于只读事务内）', async () => {
+    await seedOrganization(ORG_A);
+    const probes: readonly string[] = [
+      `DELETE FROM "StandingAuthorization" WHERE "id" = 'u1-r7-sqlstate-nonexistent'`,
+      `CREATE TABLE IF NOT EXISTS "u1_r7_sqlstate_probe" ("x" int)`,
+      `UPDATE "StandingAuthorization" SET "currency" = 'USD' WHERE "id" = 'u1-r7-sqlstate-nonexistent'`,
+      `INSERT INTO "StandingAuthorization" ("id") SELECT 'u1-r7-sqlstate' WHERE false`,
+    ];
+    const captured: { sql: string; sqlstate: string | null; readOnlyInsideTx: string | null; errorName: string | null }[] = [];
+
+    for (const sql of probes) {
+      let sqlstate: string | null = null;
+      let readOnlyInsideTx: string | null = null;
+      let errorName: string | null = null;
+      await runInReadOnlyTransaction(prisma, async (tx) => {
+        const rows = await tx.$queryRawUnsafe<{ transaction_read_only: string }[]>(
+          `SELECT current_setting('transaction_read_only') AS transaction_read_only`,
+        );
+        readOnlyInsideTx = rows[0]?.transaction_read_only ?? null;
+        try {
+          await tx.$executeRawUnsafe(sql);
+        } catch (error) {
+          const e = error as { constructor?: { name?: string }; meta?: { code?: unknown }; message?: unknown };
+          errorName = e.constructor?.name ?? null;
+          // SQLSTATE 提取：优先 Prisma meta.code，其次错误消息中的 Code: 25006
+          const metaCode = e.meta?.code;
+          const matched = /Code: `(\d{5})`/.exec(typeof e.message === 'string' ? e.message : '');
+          sqlstate = metaCode === undefined || metaCode === null ? (matched === null ? null : matched[1]) : String(metaCode);
+        }
+      });
+      captured.push({ sql, sqlstate, readOnlyInsideTx, errorName });
+    }
+
+    expect(captured).toHaveLength(4);
+    expect(captured.every((c) => c.readOnlyInsideTx === 'on')).toBe(true);
+    expect(captured.every((c) => c.errorName === 'PrismaClientKnownRequestError')).toBe(true);
+    expect(captured.map((c) => c.sqlstate)).toEqual(['25006', '25006', '25006', '25006']);
+    evidence({
+      kind: 'PG_SQLSTATE_PROBES',
+      probeCount: captured.length,
+      extraction: 'Prisma error meta.code，回退到错误消息正则 Code: (5 位数字)',
+      rejectionInsideReadOnlyTransaction: captured.every((c) => c.readOnlyInsideTx === 'on'),
+      sqlstates: captured.map((c) => c.sqlstate),
+      allSqlState25006: captured.every((c) => c.sqlstate === '25006'),
+      probes: captured.map((c) => ({ sql: c.sql, sqlstate: c.sqlstate, readOnly: c.readOnlyInsideTx })),
     });
   });
 });
