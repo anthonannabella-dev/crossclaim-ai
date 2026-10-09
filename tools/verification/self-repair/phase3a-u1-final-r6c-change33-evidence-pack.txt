@@ -1,0 +1,252 @@
+[CHANGE 33 EVIDENCE PACK :: generated from fixed HEAD e7c177a3]
+（说明：代码逐字摘录并附行号；原文反引号在下方以 <B> 标记，其余逐字一致。）
+
+== A. 固定 HEAD 指纹与差异 ==
+reviewedHead = e7c177a3
+previousReviewedHead = 23604dcb
+sha256 apps/api/src/services/self-repair/trusted-facts-adapter.ts = ad47c6b205192b345b7f1cc180e8e466dd91a382d6571727c29dbe9609b1f14b
+sha256 apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts = 731b7d99b54960350d352d45f3d86eea1b9d63457bb1e6268e4d1ae56772654f
+本 HEAD 相对 23604dcb 的变更（仅新增证据用例）：
+AI-ARCHITECT-INBOX.md                              |  99 ++++
+ .../phase3a-u1-trusted-facts-adapter-db.test.ts    |  75 +++
+ ...-INTERNAL-CODE-REPAIR-V1-MSG20-AUDIT-REQUEST.md |  70 +++
+ docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1.md    |  98 +++
+ .../self-repair/phase3a-u1-final-r6-evidence.json  | 532 +++++++++++++++++
+ ...phase3a-u1-final-r6-negative-control-adapter.ts | 655 +++++++++++++++++++++
+ ...e3a-u1-final-r6-negative-control-vitest-raw.txt | 105 ++++
+ .../self-repair/phase3a-u1-final-r6-tsc-raw.txt    |   0
+ .../self-repair/phase3a-u1-final-r6-vitest-raw.txt |  93 +++
+ 9 files changed, 1727 insertions(+)
+
+== B. AsyncLocalStorage 初始化 / 进入 / 退出 / 嵌套复用 / 异常路径（trusted-facts-adapter.ts）==
+ 550| export function createPrismaTrustedFactsReadPort(input: { prisma: PrismaClient }): TrustedFactsReadPort {
+ 551|   /**
+ 552|    * CHANGE 32：以**调用链**（而非端口实例）为作用域保存当前只读事务句柄。
+ 553|    * - 并发请求：各自 <B>AsyncLocalStorage<B> 上下文相互隔离，绝不串用事务；
+ 554|    * - 同一调用链的嵌套：命中已有句柄 ⇒ 复用（不嵌套开启第二个事务）；
+ 555|    * - 异常：上下文随调用链退出自动失效，不存在“残留句柄被后续请求复用”的路径。
+ 556|    */
+ 557|   const transactionScope = new AsyncLocalStorage<Prisma.TransactionClient>();
+ 558|   const db = (): Prisma.TransactionClient =>
+ 559|     transactionScope.getStore() ?? (input.prisma as unknown as Prisma.TransactionClient);
+ 560| 
+ 561|   return {
+ 562|     async findOrganization({ organizationId }) {
+ 563|       const row = await db().organization.findUnique({
+ 564|         where: { id: organizationId },
+ 565|         select: { id: true, updatedAt: true },
+ 566|       });
+ 567|       if (row === null) return null;
+ 568|       return { id: row.id, identityVersion: row.updatedAt.toISOString() };
+ 569|     },
+...
+ 608|     },
+ 609|     async withReadOnlyTransaction(run) {
+ 610|       // 同一调用链已在只读事务内 ⇒ 复用（不得嵌套开启第二个事务）
+ 611|       const existing = transactionScope.getStore();
+ 612|       if (existing !== undefined) return run(existing);
+ 613|       // 新调用链 ⇒ 开启只读事务，并把该事务绑定到**本调用链**的上下文
+ 614|       return runInReadOnlyTransaction(input.prisma, (tx) => transactionScope.run(tx, () => run(tx)));
+ 615|     },
+ 616|   };
+ 617| }
+
+== C. U1-DB9 并发交错编排与断言（phase3a-u1-trusted-facts-adapter-db.test.ts）==
+ 460|       authorizationVersion: 5,
+ 461|     });
+ 462|     const rowA = await prisma.standingAuthorization.findFirstOrThrow({ where: { organizationId: ORG_A }, select: { id: true } });
+ 463|     const rowB = await prisma.standingAuthorization.findFirstOrThrow({ where: { organizationId: ORG_B }, select: { id: true } });
+ 464| 
+ 465|     // 同一个 readPort 实例被两个租户的调用共用（正是评审指出的场景）
+ 466|     const sharedPort = createPrismaTrustedFactsReadPort({ prisma });
+ 467|     const txSeq = new WeakMap<object, number>();
+ 468|     let nextSeq = 0;
+ 469|     const handles: { call: string; seq: number; readOnly: string | null; writeRejected: boolean }[] = [];
+ 470|     const gate = { release: (): void => {}, aInside: (): void => {}, bInside: (): void => {} };
+ 471|     const bothRelease = new Promise<void>((resolve) => {
+ 472|       gate.release = resolve;
+ 473|     });
+ 474|     const aInside = new Promise<void>((resolve) => {
+ 475|       gate.aInside = resolve;
+ 476|     });
+ 477|     const bInside = new Promise<void>((resolve) => {
+ 478|       gate.bInside = resolve;
+ 479|     });
+ 480|     const timeout = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+ 481| 
+ 482|     const wrap = (call: string): TrustedFactsReadPort => ({
+ 483|       findOrganization: (input) => sharedPort.findOrganization(input),
+ 484|       listStandingAuthorizations: (input) => sharedPort.listStandingAuthorizations(input),
+ 485|       withReadOnlyTransaction: (run) =>
+ 486|         sharedPort.withReadOnlyTransaction(async (tx) => {
+ 487|           const key = tx as unknown as object;
+ 488|           if (!txSeq.has(key)) {
+ 489|             nextSeq += 1;
+ 490|             txSeq.set(key, nextSeq);
+ 491|           }
+ 492|           const settings = await tx.$queryRawUnsafe<{ transaction_read_only: string }[]>(
+ 493|             <B>SELECT current_setting('transaction_read_only') AS transaction_read_only<B>,
+ 494|           );
+ 495|           // 交错编排：A 先进入自己的只读事务并停住；B 在 A **仍然在事务内**时才开始
+ 496|           if (call === 'A') {
+ 497|             gate.aInside();
+ 498|             await Promise.race([bothRelease, timeout(5000)]);
+ 499|           } else if (call === 'B') {
+...
+ 518|         readPort,
+ 519|         executionContext: { subjectRef: 'runtime-member-1', caller: 'RUNTIME_MEMBER', operationRecheck: 'CONFIRMED_READ_ONLY', resourceScope: scope },
+ 520|         now: () => AT,
+ 521|       });
+ 522| 
+ 523|     // 先启动 A，等它确实进入只读事务后，再启动 B（“后发请求”场景）
+ 524|     const pendingA = mkAdapter(wrap('A'), scopeA).resolve({ organizationId: ORG_A, actionType: 'recovery.read', monetaryAction: false });
+ 525|     await Promise.race([aInside, timeout(5000)]);
+ 526|     const pendingB = mkAdapter(wrap('B'), scopeB).resolve({ organizationId: ORG_B, actionType: 'recovery.read', monetaryAction: false });
+ 527|     await Promise.race([bInside, timeout(5000)]);
+ 528|     gate.release();
+ 529|     const [resA, resB] = await Promise.all([pendingA, pendingB]);
+ 530| 
+ 531|     expect(resA.ok && resB.ok).toBe(true);
+ 532|     if (resA.ok && resB.ok) {
+ 533|       // 无跨租户事实串扰：各自拿到本租户的授权行
+ 534|       expect(resA.provenance.authorizationActive?.authorizationId).toBe(rowA.id);
+ 535|       expect(resB.provenance.authorizationActive?.authorizationId).toBe(rowB.id);
+ 536|       expect(resA.provenance.authorizationActive?.authorizationVersion).toBe(3);
+ 537|       expect(resB.provenance.authorizationActive?.authorizationVersion).toBe(5);
+ 538|     }
+ 539|     // 事务归属独立：并发调用不得复用同一事务句柄
+ 540|     expect(handles).toHaveLength(2);
+ 541|     const seqA = handles.find((h) => h.call === 'A')!.seq;
+ 542|     const seqB = handles.find((h) => h.call === 'B')!.seq;
+ 543|     expect(seqA).not.toBe(seqB);
+ 544|     expect(handles.every((h) => h.readOnly === 'on')).toBe(true);
+ 545|     expect(handles.every((h) => h.writeRejected)).toBe(true);
+ 546| 
+ 547|     // 异常路径 fail-closed：不存在的组织被拒绝，且后续调用获得**全新**独立事务（无残留句柄复用）
+
+== D. U1-DB10 同一调用链嵌套复用（只开一个事务）==
+ 580|   it('U1-DB10（CHANGE 33）同一调用链内嵌套 withReadOnlyTransaction 复用同一事务（只开一个事务）', async () => {
+ 581|     await seedOrganization(ORG_A);
+ 582|     const port = createPrismaTrustedFactsReadPort({ prisma });
+ 583|     const txSeq = new WeakMap<object, number>();
+ 584|     let txCounter = 0;
+ 585|     const seqOf = (tx: unknown): number => {
+ 586|       const key = tx as object;
+ 587|       if (!txSeq.has(key)) {
+ 588|         txCounter += 1;
+ 589|         txSeq.set(key, txCounter);
+ 590|       }
+ 591|       return txSeq.get(key)!;
+ 592|     };
+ 593|     const seen: number[] = [];
+ 594|     let opened = 0;
+ 595| 
+ 596|     const result = await port.withReadOnlyTransaction(async (tx) => {
+ 597|       opened += 1;
+ 598|       seen.push(seqOf(tx));
+ 599|       // 同一调用链内再次进入 ⇒ 必须复用同一事务句柄，且不得新开第二个只读事务
+ 600|       const inner = await port.withReadOnlyTransaction(async (tx2) => {
+ 601|         seen.push(seqOf(tx2));
+ 602|         // 通过端口读取：db() 应命中当前调用链的事务（而非裸 client / 别人的事务）
+ 603|         const org = await port.findOrganization({ organizationId: ORG_A });
+ 604|         return org === null ? 'MISS' : 'HIT';
+ 605|       });
+ 606|       return inner;
+ 607|     });
+ 608| 
+ 609|     expect(result).toBe('HIT');
+ 610|     expect(opened).toBe(1);
+ 611|     expect(seen).toEqual([1, 1]);
+ 612|     evidence({
+ 613|       kind: 'NESTED_TRANSACTION_REUSE',
+ 614|       sameCallChain: true,
+ 615|       transactionsOpened: opened,
+ 616|       handleSequences: seen,
+ 617|       reusedSameHandle: seen[0] === seen[1],
+ 618|       readInsideNestedCall: result === 'HIT',
+ 619|     });
+
+== E. U1-DB11 事务结束后脱离生命周期的任务 fail-closed ==
+ 622|   it('U1-DB11（CHANGE 33）事务结束后脱离生命周期的异步任务不得回落裸 client（fail-closed）', async () => {
+ 623|     await seedOrganization(ORG_A);
+ 624|     const port = createPrismaTrustedFactsReadPort({ prisma });
+ 625|     let leaked: Promise<unknown> | null = null;
+ 626| 
+ 627|     await port.withReadOnlyTransaction(async () => {
+ 628|       // 在事务作用域内派生一个“超出事务生命周期”的任务：事务提交后才尝试读取
+ 629|       leaked = (async () => {
+ 630|         await new Promise((resolve) => setTimeout(resolve, 60));
+ 631|         return port.findOrganization({ organizationId: ORG_A });
+ 632|       })();
+ 633|       return true;
+ 634|     });
+ 635| 
+ 636|     let threw = false;
+ 637|     let value: unknown = null;
+ 638|     try {
+ 639|       value = await leaked;
+ 640|     } catch {
+ 641|       threw = true;
+ 642|     }
+ 643|     // 已失效事务句柄必须报错（fail-closed）；不得静默改用裸 client 返回数据
+ 644|     expect(threw).toBe(true);
+ 645|     expect(value).toBeNull();
+ 646|     evidence({
+ 647|       kind: 'DEAD_TRANSACTION_ACCESS',
+ 648|       detachedFromTransactionLifecycle: true,
+ 649|       threw,
+ 650|       returnedValue: value,
+ 651|       failClosed: threw && value === null,
+
+== F. 负向对照：相对固定实现被还原的**唯一**改动 ==
+diff --git "a/D:\\crossclaim-ai\\tools\\verification\\self-repair\\phase3a-u1-final-r6-negative-control-adapter.ts" "b/D:\\crossclaim-ai\\apps\\api\\src\\services\\self-repair\\trusted-facts-adapter.ts"
+index 2d113a88..0c302553 100644
+--- "a/D:\\crossclaim-ai\\tools\\verification\\self-repair\\phase3a-u1-final-r6-negative-control-adapter.ts"
++++ "b/D:\\crossclaim-ai\\apps\\api\\src\\services\\self-repair\\trusted-facts-adapter.ts"
+@@ -40,4 +40,5 @@
+ 
+ import type { Prisma, PrismaClient } from '@prisma/client';
++import { AsyncLocalStorage } from 'node:async_hooks';
+ 
+ import type { TriageTrustedFacts } from './fault-triage';
+@@ -554,8 +555,7 @@ export function createPrismaTrustedFactsReadPort(input: { prisma: PrismaClient }
+    * - 异常：上下文随调用链退出自动失效，不存在“残留句柄被后续请求复用”的路径。
+    */
+-  // NEGATIVE CONTROL（CHANGE 32 之前的行为）：实例级字段保存“当前事务句柄”
+-  let activeTransaction: Prisma.TransactionClient | null = null;
++  const transactionScope = new AsyncLocalStorage<Prisma.TransactionClient>();
+   const db = (): Prisma.TransactionClient =>
+-    activeTransaction ?? (input.prisma as unknown as Prisma.TransactionClient);
++    transactionScope.getStore() ?? (input.prisma as unknown as Prisma.TransactionClient);
+ 
+   return {
+@@ -608,14 +608,9 @@ export function createPrismaTrustedFactsReadPort(input: { prisma: PrismaClient }
+     },
+     async withReadOnlyTransaction(run) {
+-      // NEGATIVE CONTROL：并发调用会复用同一个事务句柄（正是评审指出的缺陷）
+-      if (activeTransaction !== null) return run(activeTransaction);
+-      return runInReadOnlyTransaction(input.prisma, async (tx) => {
+-        activeTransaction = tx;
+-        try {
+-          return await run(tx);
+-        } finally {
+-          activeTransaction = null;
+-        }
+-      });
++      // 同一调用链已在只读事务内 ⇒ 复用（不得嵌套开启第二个事务）
++      const existing = transactionScope.getStore();
++      if (existing !== undefined) return run(existing);
++      // 新调用链 ⇒ 开启只读事务，并把该事务绑定到**本调用链**的上下文
++      return runInReadOnlyTransaction(input.prisma, (tx) => transactionScope.run(tx, () => run(tx)));
+     },
+
+== G. 原始输出摘要与数据库探针（U1_EVIDENCE）==
+ Test Files  2 passed (2)
+      Tests  64 passed (64)
+VITEST_EXIT=0
+TSC_EXIT=0
+TEST_DB_MARKER=127.0.0.1:55432/crossclaim_p3r2_iso
+U1_EVIDENCE {"kind":"CONCURRENT_TRANSACTION_ISOLATION","sameReadPortInstance":true,"forcedInterleaving":true,"mechanism":"AsyncLocalStorage（按调用链隔离事务句柄）","handles":[{"call":"A","seq":1,"readOnly":"on","writeRejected":true},{"call":"B","seq":2,"readOnly":"on","writeRejected":true},{"call":"C","seq":3,"readOnly":"on","writeRejected":true},{"call":"D","seq":4,"readOnly":"on","writeRejected":true}],"distinctHandlesForConcurrentCalls":true,"allReadOnly":true,"writeProbeRejectedPerCall":4,"results":{"A_version":3,"B_version":5,"A_authorizationId":"af8adbc6-abfd-42f8-92da-18dc114c7a6c","B_authorizationId":"4bb05241-1b4d-4c9a-8c5f-dda412837e48"},"crossTenantLeak":false,"exceptionPath":{"org":"org-u1-db-missing","reason":"ORGANIZATION_NOT_FOUND","laterCallFreshTransaction":true}}
+U1_EVIDENCE {"kind":"NESTED_TRANSACTION_REUSE","sameCallChain":true,"transactionsOpened":1,"handleSequences":[1,1],"reusedSameHandle":true,"readInsideNestedCall":true}
+U1_EVIDENCE {"kind":"DEAD_TRANSACTION_ACCESS","detachedFromTransactionLifecycle":true,"threw":true,"returnedValue":null,"failClosed":true}
+（另有 WRITE_PROBE ×2 / PUBLIC_ENTRY_PROBE / TABLE_SNAPSHOT / SCOPE_DECLARATION_CHAIN / SINGLE_AUTHORIZATION_SCOPE_NEGATIVES 共 6 条，见仓库 …-r6-vitest-raw.txt）

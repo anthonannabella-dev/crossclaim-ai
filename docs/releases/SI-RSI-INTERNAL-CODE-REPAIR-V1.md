@@ -1492,3 +1492,42 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.23 MSG-20261009-21 送审（U1 FINAL-R6c：CHANGE 33 证据核验）已投递
+
+> 会话：https://chatgpt.com/c/6ac868a8-46bc-83ec-9c9d-9698131ec0c5（新建）
+> REVIEWED_HEAD = **e7c177a3**（上一轮 23604dcb）；NEXT_AUDIT = MSG-20261009-22
+> 投递方式：M1 送审说明（逐条对应 CHANGE 33 六项与两个易遗漏问题）+ M2 **CHANGE 33 EVIDENCE PACK**（12,835 字符，含行号与 A–G 段；
+> 因体积较大被 ChatGPT 作为「粘贴的文本附件」接收后发送）。原文反引号以 `<B>` 标记；diff 头部路径的双反斜杠粘贴后显示为单反斜杠。
+
+**本轮代码变化（相对 23604dcb）**：仅 `apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts` +75 行，
+新增两个真实 PostgreSQL 证据用例（产品代码未改）：
+
+- **U1-DB10**：同一调用链内嵌套 `withReadOnlyTransaction` **复用同一事务**（`transactionsOpened=1`、`handleSequences=[1,1]`），
+  且嵌套中经端口读取命中该事务（`readInsideNestedCall=true`）——回应「嵌套复用是否合法」。
+- **U1-DB11**：事务结束后，**脱离事务生命周期**的异步任务访问已失效句柄必须**抛错**（`threw=true`、`returnedValue=null`、`failClosed=true`），
+  不得静默回落裸 client ——回应「失效事务访问是否 fail-closed」。
+
+**证据包 A–G 段内容**：A 固定 HEAD 指纹（adapter/db-test 的 sha256 与变更清单）；B `AsyncLocalStorage` 初始化/进入/退出/嵌套/异常路径（第 550–559、609–615 行）；
+C U1-DB9 交错编排（第 523–528 行：先 A 后 B，双方都在事务内再 release）与断言（第 531–545 行）；
+D U1-DB10 全文；E U1-DB11 全文；F 负向对照与固定实现的**完整 diff（仅 2 处：import 与端口内部实现）**；
+G 原始输出摘要（`Tests 64 passed (64)`、`VITEST_EXIT=0`、`TSC_EXIT=0`、隔离库标记）与 3 条关键 `U1_EVIDENCE` 行
+（CONCURRENT_TRANSACTION_ISOLATION / NESTED_TRANSACTION_REUSE / DEAD_TRANSACTION_ACCESS）。
+
+**本轮验证（本机实测）**：端口级 53 + 真实 PostgreSQL 11 = **64/64 PASS**；`apps/api tsc --noEmit` 0 error。
+
+```text
+MSG21_DELIVERY = SENT（M1 说明 + M2 证据包附件；会话 6ac868a8）
+MSG21_REVIEWED_HEAD = e7c177a3
+MSG21_PREVIOUS_HEAD = 23604dcb
+MSG21_NEXT_AUDIT = MSG-20261009-22
+CHANGE33_EVIDENCE_PACK = work/self-repair/u1-r6/out/msg21-evidence.txt（12,835 chars；含行号 A–G 段）
+PHASE3_U1_FINAL_R6_TESTS = 端口级 53 + 真实 PG 11 = 64/64 PASS；api tsc 0
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO（等待 MSG-20261009-22 裁决）
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```
