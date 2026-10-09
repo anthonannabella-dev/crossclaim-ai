@@ -1101,3 +1101,49 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.17 PHASE 3-A · U1 FINAL-R4（CHANGE 26–28）—— 范围声明链闭合 + 可独立复核的原始材料
+
+> 授权：MSG-20261009-17 → `NEXT_AUTHORIZED = PHASE3_A_U1_FINAL_R4_EVIDENCE_VERIFICATION_ONLY`
+> 代码 commit（REVIEWED_HEAD）= `68f8f5a9`；证据包 = `tools/verification/self-repair/phase3a-u1-final-r4-evidence.json`
+> （+ `phase3a-u1-final-r4-vitest-raw.txt` / `phase3a-u1-final-r4-tsc-raw.txt`；内联材料 `out/msg18-inline.txt`）
+> 范围：**仅** U1 只读代码 + 关联测试 + 审计文档；不构成队列 / Runtime / Prisma schema / 写路径修改授权。
+
+**CHANGE 27（P0）范围声明链闭合**（不改变已批准的动作策略，只消除「没传 = 放宽」这一隐式通道）
+
+- 可选维度必须**二选一**：提供具体值，或由服务端在可信上下文显式声明不适用
+  （`executionContext.notApplicableScopeDimensions`）；两者皆无 ⇒ `OPTIONAL_SCOPE_UNDECLARED`（fail-closed）。
+- 必需维度缺失 / 空串 / 被声明不适用 ⇒ `REQUIRED_SCOPE_MISSING`；
+  同一维度既提供又声明不适用 ⇒ `SCOPE_DECLARATION_CONFLICT`（自洽性检查）。
+- `provenance.scopePolicy` 新增 `notApplicableDimensions`，与 `providedDimensions` 一起留痕：
+  「哪些维度参与匹配、哪些被显式排除」可审计，省略成为**显式决定**而非静默放宽。
+- 新增负向用例：请求侧夹带 `resourceScope`（如 provider=SHOPIFY / 攻击者账户）**不改变匹配结果**，
+  也**不能**替代可信上下文满足必需维度（仍报 `REQUIRED_SCOPE_MISSING`）。
+- 诚实边界：U1 尚未接线到任何生产调用点（U2–U5 未授权），因此「resourceScope 由可信服务端构造」的
+  本轮证据形式为：源码只从 executionContext 取值 + 两条请求侧夹带无用例；端到端可信装配链属 U2 范围。
+
+**CHANGE 26（P0）+ CHANGE 28（P1）**：证据包重建为 R4 版本（`crossclaim.si-rsi.u1-final-r4-evidence/1`），
+绑定固定 HEAD `68f8f5a9`（`codeCommit` / `u1FileSha256` / `u1DiffFromCommit`）；
+并新增 `inlineEvidenceForAuditChannel`（关键源码原文、61 项逐项用例名称、原始输出摘要、全部 6 条 `U1_EVIDENCE` 行），
+用于**在审计会话正文内内联**（评审方无法读取本仓库）。送审 = MSG-20261009-18（两条消息：请求 + 内联原始材料）。
+
+**验证结果（本机实测）**：端口级 **53/53 PASS**、真实 PostgreSQL **8/8 PASS**（隔离库 `crossclaim_p3r2_iso`）、
+`apps/api tsc --noEmit` **0 error**；`VITEST_EXIT=0` / `TSC_EXIT=0`；证据行 6 条。
+
+**未验证项（如实标注）**：Linux / systemd 实机、真实浏览器端到端、真实 Provider / 模型调用（HOLD）、CI、生产环境 = **NOT VERIFIED**。
+
+```text
+PHASE3_U1_FINAL_R4_PROGRESS = CHANGE 26 OK / CHANGE 27 OK / CHANGE 28 OK
+PHASE3_U1_FINAL_R4_CODE_COMMIT = 68f8f5a9
+PHASE3_U1_FINAL_R4_TESTS = 端口级 53/53 + 真实 PG 8/8 = 61/61 PASS；api tsc 0
+PHASE3_U1_SCOPE_OPTIONAL_DIMENSION_RULE = 提供值 XOR 服务端显式声明不适用；两者皆无 ⇒ OPTIONAL_SCOPE_UNDECLARED
+PHASE3_U1_REQUEST_SIDE_SCOPE = 无效（不能改变匹配，也不能满足必需维度）
+PHASE3_U1_EVIDENCE_INLINE = out/msg18-inline.txt（13907 chars；随 MSG-20261009-18 第二条消息内联）
+NEXT_UNIT = 送审 MSG-20261009-18（申请 PHASE3_U1_IMPLEMENTATION_CLOSED=YES；U2–U5 仍 NO）
+NEXT_AUDIT = MSG-20261009-18
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```

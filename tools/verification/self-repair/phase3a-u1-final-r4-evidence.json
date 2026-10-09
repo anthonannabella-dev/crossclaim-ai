@@ -1,0 +1,546 @@
+{
+  "schema": "crossclaim.si-rsi.u1-final-r4-evidence/1",
+  "generatedAt": "2026-10-09T03:21:01.266Z",
+  "auditId": "MSG-20261009-18",
+  "authorizedUnit": "PHASE3_A_U1_FINAL_R4_EVIDENCE_VERIFICATION_ONLY",
+  "supersedes": "crossclaim.si-rsi.u1-final-r3-evidence/1",
+  "codeCommit": "68f8f5a9",
+  "codeCommitSubject": "feat(self-repair): PHASE 3-A U1 FINAL-R4（CHANGE 26–28）—— CHANGE 27 范围声明链闭合：可选维度省略必须由服务端在可信上下文显式声明不适用（否则 OPTIONAL_SCOPE_UNDECLARED），必需维度缺失/空串/被声明不适用 ⇒ REQUIRED_SCOPE_MISSING，同一维度既提供又声明不适用 ⇒ SCOPE_DECLARATION_CONFLICT；provenance 增 notApplicableDimensions 留痕，使「省略」成为显式决定而非静默放宽；新增请求侧夹带 resourceScope 无效且不能替代可信必需维度的负向用例；端口级 53/53 + 真实 PG 8/8 = 61/61 + api tsc 0",
+  "codeBranch": "feat/si-rsi-internal-code-repair-v1",
+  "u1FileSha256": {
+    "apps/api/src/services/self-repair/trusted-facts-adapter.ts": "47ac5d21946a66eeb7d02b492d5397449d52d44dce0fc8121fd6c378e1925b7a",
+    "apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts": "4dabe3f4f29a3ded6d9fc5f72235b964fb04c850c0c6ee27445899e3813b9c8a",
+    "apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts": "f868e59cadd914165be6e2ad620751a79962de27d2217159c5619c1c117f0d33"
+  },
+  "u1DiffFromCommit": "diff --git a/apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts b/apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts\nindex b1223a4f..0abe189a 100644\n--- a/apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts\n+++ b/apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts\n@@ -21,6 +21,7 @@ import {\n   runInReadOnlyTransaction,\n   type TrustedFactsReadPort,\n   type TrustedFactsResourceScope,\n+  type TrustedFactsScopeDimension,\n } from '../services/self-repair/trusted-facts-adapter';\n \n import { testDatabaseMarker } from './si-rsi-test-db.helper';\n@@ -43,6 +44,7 @@ const adapter = (\n   options: {\n     caller?: string;\n     scope?: TrustedFactsResourceScope;\n+    notApplicable?: readonly TrustedFactsScopeDimension[];\n     wrapPort?: (port: TrustedFactsReadPort) => TrustedFactsReadPort;\n   } = {},\n ) => {\n@@ -55,6 +57,7 @@ const adapter = (\n       caller: options.caller ?? 'RUNTIME_MEMBER',\n       operationRecheck: 'CONFIRMED_READ_ONLY',\n       resourceScope: 'scope' in options ? options.scope : SCOPE,\n+      notApplicableScopeDimensions: options.notApplicable,\n     },\n     now: () => AT,\n   });\n@@ -337,4 +340,58 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat\n     expect(after).toEqual(before);\n     evidence({ kind: 'TABLE_SNAPSHOT', before, after, identical: JSON.stringify(before) === JSON.stringify(after) });\n   });\n+\n+  it('U1-DB8（CHANGE 27）范围声明链：省略可选维度必须显式声明不适用；请求侧夹带 resourceScope 无效', async () => {\n+    await seedAuthorization();\n+    const observed: Record<string, string> = {};\n+\n+    // ① 省略可选维度且未声明不适用 ⇒ fail-closed（不得靠「没传」放大范围）\n+    const undeclared = await adapter({ scope: { platformAccountId: 'acct-u1', provider: 'AMAZON' } }).resolve({\n+      organizationId: ORG,\n+      actionType: 'recovery.read',\n+      monetaryAction: false,\n+    });\n+    observed.omittedOptionalWithoutDeclaration = undeclared.ok ? 'OK' : undeclared.reason;\n+    expect(!undeclared.ok && undeclared.reason).toBe('OPTIONAL_SCOPE_UNDECLARED');\n+\n+    // ② 同一省略 + 服务端显式声明不适用 ⇒ 通过，且 provenance 留痕\n+    const declared = await adapter({\n+      scope: { platformAccountId: 'acct-u1', provider: 'AMAZON' },\n+      notApplicable: ['domain', 'jurisdiction'],\n+    }).resolve({ organizationId: ORG, actionType: 'recovery.read', monetaryAction: false });\n+    expect(declared.ok).toBe(true);\n+    if (declared.ok) {\n+      observed.explicitNotApplicable = 'OK';\n+      observed.providedDimensions = declared.provenance.scopePolicy.providedDimensions.join('+');\n+      observed.notApplicableDimensions = declared.provenance.scopePolicy.notApplicableDimensions.join('+');\n+      expect(declared.provenance.scopePolicy.providedDimensions).toEqual(['provider', 'platformAccountId']);\n+      expect(declared.provenance.scopePolicy.notApplicableDimensions).toEqual(['domain', 'jurisdiction']);\n+    }\n+\n+    // ③ 请求侧夹带 resourceScope：既不改变匹配结果，也不能替代可信上下文的必需维度\n+    const smuggled = await adapter().resolve({\n+      organizationId: ORG,\n+      actionType: 'recovery.read',\n+      monetaryAction: false,\n+      resourceScope: { provider: 'SHOPIFY', platformAccountId: 'acct-other' },\n+    } as never);\n+    expect(smuggled.ok).toBe(true);\n+    observed.requestSideScopeIgnored = smuggled.ok ? 'IGNORED_OK' : 'NOT_OK';\n+\n+    const smuggledCannotSatisfyRequired = await adapter({ scope: { provider: 'AMAZON' } }).resolve({\n+      organizationId: ORG,\n+      actionType: 'recovery.read',\n+      monetaryAction: false,\n+      resourceScope: { platformAccountId: 'acct-u1' },\n+    } as never);\n+    expect(!smuggledCannotSatisfyRequired.ok && smuggledCannotSatisfyRequired.reason).toBe('REQUIRED_SCOPE_MISSING');\n+    observed.requestSideScopeCannotSatisfyRequired = 'REQUIRED_SCOPE_MISSING';\n+\n+    evidence({\n+      kind: 'SCOPE_DECLARATION_CHAIN',\n+      scopeSource: 'executionContext.resourceScope（服务端注入）；请求入参无该字段',\n+      notApplicableSource: 'executionContext.notApplicableScopeDimensions（服务端显式声明）',\n+      results: observed,\n+    });\n+  });\n });\ndiff --git a/apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts b/apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts\nindex 4895d7cc..f6c570c7 100644\n--- a/apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts\n+++ b/apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts\n@@ -17,12 +17,13 @@ import {\n   TRUSTED_FACTS_ADAPTER_BOUNDARY,\n   TRUSTED_FACTS_CALLERS,\n   TRUSTED_FACTS_SCOPE_DIMENSIONS,\n+  checkScopeDeclaration,\n   createTrustedFactsAdapter,\n   exceedsMonetaryLimit,\n-  missingRequiredScopeDimensions,\n   type StandingAuthorizationRecord,\n   type TrustedFactsReadPort,\n   type TrustedFactsResourceScope,\n+  type TrustedFactsScopeDimension,\n } from '../services/self-repair/trusted-facts-adapter';\n \n const AT = new Date('2026-10-09T03:00:00.000Z');\n@@ -90,6 +91,7 @@ const adapter = (\n     caller?: string;\n     recheck?: 'CONFIRMED_READ_ONLY' | 'NOT_CONFIRMED';\n     scope?: TrustedFactsResourceScope;\n+    notApplicable?: readonly TrustedFactsScopeDimension[];\n   } = {},\n ) =>\n   createTrustedFactsAdapter({\n@@ -99,6 +101,7 @@ const adapter = (\n       caller: options.caller ?? 'RUNTIME_MEMBER',\n       operationRecheck: options.recheck ?? 'CONFIRMED_READ_ONLY',\n       resourceScope: 'scope' in options ? options.scope : TRUSTED_SCOPE,\n+      notApplicableScopeDimensions: options.notApplicable,\n     },\n     now: () => AT,\n   });\n@@ -113,6 +116,7 @@ interface FailureCase {\n   caller?: string;\n   recheck?: 'CONFIRMED_READ_ONLY' | 'NOT_CONFIRMED';\n   scope?: TrustedFactsResourceScope;\n+  notApplicable?: readonly TrustedFactsScopeDimension[];\n   reason: string;\n }\n \n@@ -132,6 +136,31 @@ const failureCases: FailureCase[] = [\n     scope: { platformAccountId: 'acct-1', provider: '   ' },\n     reason: 'REQUIRED_SCOPE_MISSING',\n   },\n+  {\n+    label: 'CHANGE 27：可选维度整体省略且未声明不适用（不得靠「没传」放大范围）',\n+    request: base,\n+    scope: { platformAccountId: 'acct-1', provider: 'AMAZON' },\n+    reason: 'OPTIONAL_SCOPE_UNDECLARED',\n+  },\n+  {\n+    label: 'CHANGE 27：仅省略一个可选维度（jurisdiction）且未声明不适用',\n+    request: base,\n+    scope: { platformAccountId: 'acct-1', provider: 'AMAZON', domain: 'LOGISTICS' },\n+    reason: 'OPTIONAL_SCOPE_UNDECLARED',\n+  },\n+  {\n+    label: 'CHANGE 27：必需维度被声明为不适用',\n+    request: base,\n+    scope: { platformAccountId: 'acct-1' },\n+    notApplicable: ['provider'],\n+    reason: 'REQUIRED_SCOPE_MISSING',\n+  },\n+  {\n+    label: 'CHANGE 27：同一维度既提供又声明不适用（声明冲突）',\n+    request: base,\n+    notApplicable: ['jurisdiction'],\n+    reason: 'SCOPE_DECLARATION_CONFLICT',\n+  },\n   { label: '组织不存在', request: { ...base, organizationId: 'missing' }, overrides: { org: null }, reason: 'ORGANIZATION_NOT_FOUND' },\n   { label: '该组织无任何授权行', request: base, overrides: { auths: [] }, reason: 'AUTHORIZATION_NOT_FOUND' },\n   {\n@@ -159,10 +188,10 @@ const failureCases: FailureCase[] = [\n     reason: 'AUTHORIZATION_NOT_FOUND',\n   },\n   {\n-    label: '可选维度提供了空串',\n+    label: '可选维度提供了空串（视为未提供且未声明不适用）',\n     request: base,\n     scope: { ...TRUSTED_SCOPE, jurisdiction: '  ' },\n-    reason: 'AUTHORIZATION_NOT_FOUND',\n+    reason: 'OPTIONAL_SCOPE_UNDECLARED',\n   },\n   { label: '授权已撤销', request: base, overrides: { auths: [auth({ revocationState: 'REVOKED' })] }, reason: 'AUTHORIZATION_REVOKED' },\n   {\n@@ -253,6 +282,7 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）\n       required: ['platformAccountId', 'provider'],\n       optional: ['domain', 'jurisdiction'],\n       providedDimensions: ['provider', 'platformAccountId', 'domain', 'jurisdiction'],\n+      notApplicableDimensions: [],\n       resolvedAt: AT.toISOString(),\n     });\n     expect(result.provenance.operationRecheck).toMatchObject({\n@@ -278,13 +308,41 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）\n     expect(exact.ok).toBe(true);\n   });\n \n-  it('仅提供策略要求的必需维度（省略可选维度）⇒ 通过；期望事实版本一致 ⇒ 通过', async () => {\n+  it('CHANGE 27：可选维度省略但由服务端显式声明不适用 ⇒ 通过，且 provenance 留痕', async () => {\n     const matched = await adapter(makePort().readPort, {\n       scope: { platformAccountId: 'acct-1', provider: 'AMAZON' },\n+      notApplicable: ['domain', 'jurisdiction'],\n     }).resolve({ ...base, expectedFactVersion: 'org:idv-1|auth:7' });\n     expect(matched.ok).toBe(true);\n     if (!matched.ok) throw new Error('expected ok');\n     expect(matched.provenance.scopePolicy.providedDimensions).toEqual(['provider', 'platformAccountId']);\n+    expect(matched.provenance.scopePolicy.notApplicableDimensions).toEqual(['domain', 'jurisdiction']);\n+    expect(matched.provenance.scopePolicy.required).toEqual(['platformAccountId', 'provider']);\n+  });\n+\n+  it('CHANGE 27：请求侧夹带 resourceScope 不影响结果（范围只取可信上下文）', async () => {\n+    const smuggled = await adapter(makePort().readPort).resolve({\n+      ...base,\n+      resourceScope: { provider: 'SHOPIFY', platformAccountId: 'acct-attacker' },\n+    } as never);\n+    expect(smuggled.ok).toBe(true);\n+    if (!smuggled.ok) throw new Error('expected ok');\n+    // 实际参与匹配的仍是可信上下文提供的维度与值（provider=AMAZON / acct-1），请求夹带被忽略\n+    expect(smuggled.provenance.scopePolicy.providedDimensions).toEqual([\n+      'provider',\n+      'platformAccountId',\n+      'domain',\n+      'jurisdiction',\n+    ]);\n+    expect(smuggled.provenance.authorizationActive?.authorizationId).toBe('auth-1');\n+\n+    // 请求夹带也不能替代可信上下文的必需维度：可信范围缺失时依旧 fail-closed\n+    const missing = await adapter(makePort().readPort, { scope: { provider: 'AMAZON' } }).resolve({\n+      ...base,\n+      resourceScope: { platformAccountId: 'acct-1' },\n+    } as never);\n+    expect(missing.ok).toBe(false);\n+    if (!missing.ok) expect(missing.reason).toBe('REQUIRED_SCOPE_MISSING');\n   });\n \n   it.each(failureCases)('$label ⇒ fail-closed（$reason）', async (testCase) => {\n@@ -293,6 +351,7 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）\n       caller: testCase.caller,\n       recheck: testCase.recheck,\n       ...('scope' in testCase ? { scope: testCase.scope } : {}),\n+      ...('notApplicable' in testCase ? { notApplicable: testCase.notApplicable } : {}),\n     }).resolve(testCase.request as never);\n     expect(result.ok).toBe(false);\n     if (result.ok) throw new Error('expected failure');\n@@ -330,19 +389,36 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）\n     expect(exceedsMonetaryLimit('1e3', '100.0000')).toBe(true);\n   });\n \n-  it('CHANGE 24：策略与必需维度检查（未知动作 ⇒ 无策略；缺失 / 空串 ⇒ 报告缺失）', () => {\n+  it('CHANGE 24/27：策略与范围声明检查（缺失 / 空串 / 未声明省略 / 声明冲突）', () => {\n     expect(TRUSTED_FACTS_ACTION_SCOPE_POLICY['recovery.read']?.required).toEqual(['platformAccountId', 'provider']);\n+    expect(TRUSTED_FACTS_ACTION_SCOPE_POLICY['recovery.read']?.optional).toEqual(['domain', 'jurisdiction']);\n     expect(TRUSTED_FACTS_SCOPE_DIMENSIONS).toEqual(['provider', 'platformAccountId', 'domain', 'jurisdiction']);\n-    expect(missingRequiredScopeDimensions({ required: ['platformAccountId', 'provider'] }, undefined)).toEqual([\n-      'platformAccountId',\n-      'provider',\n-    ]);\n+    const policy = { required: ['platformAccountId', 'provider'] as const, optional: ['domain', 'jurisdiction'] as const };\n+\n+    expect(checkScopeDeclaration(policy, undefined, undefined)).toEqual({ ok: false, reason: 'REQUIRED_SCOPE_MISSING' });\n     expect(\n-      missingRequiredScopeDimensions({ required: ['platformAccountId', 'provider'] }, { platformAccountId: '', provider: 'AMAZON' }),\n-    ).toEqual(['platformAccountId']);\n+      checkScopeDeclaration(policy, { platformAccountId: '', provider: 'AMAZON' }, ['domain', 'jurisdiction']),\n+    ).toEqual({ ok: false, reason: 'REQUIRED_SCOPE_MISSING' });\n+    // 可选维度省略且未声明不适用 ⇒ 拒绝（不得靠「没传」放大范围）\n+    expect(\n+      checkScopeDeclaration(policy, { platformAccountId: 'acct-1', provider: 'AMAZON' }, undefined),\n+    ).toEqual({ ok: false, reason: 'OPTIONAL_SCOPE_UNDECLARED' });\n+    // 显式声明不适用 ⇒ 通过并留痕\n+    expect(\n+      checkScopeDeclaration(policy, { platformAccountId: 'acct-1', provider: 'AMAZON' }, ['domain', 'jurisdiction']),\n+    ).toEqual({\n+      ok: true,\n+      providedDimensions: ['provider', 'platformAccountId'],\n+      notApplicableDimensions: ['domain', 'jurisdiction'],\n+    });\n+    // 既提供又声明不适用 ⇒ 冲突\n     expect(\n-      missingRequiredScopeDimensions({ required: ['platformAccountId', 'provider'] }, { platformAccountId: 'acct-1', provider: 'AMAZON' }),\n-    ).toEqual([]);\n+      checkScopeDeclaration(\n+        policy,\n+        { platformAccountId: 'acct-1', provider: 'AMAZON', jurisdiction: 'US' },\n+        ['jurisdiction'],\n+      ),\n+    ).toEqual({ ok: false, reason: 'SCOPE_DECLARATION_CONFLICT' });\n   });\n \n   it('接口不接受候选载荷 / 模型输出；唯一原生 SQL 是只读事务语句', () => {\n@@ -377,6 +453,8 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）\n       requiresServerScopePolicy: true,\n       requiresTrustedResourceScope: true,\n       scopeValuesFromTrustedContextOnly: true,\n+      requiresExplicitNotApplicableDeclaration: true,\n+      scopeOmissionCannotWidenMatch: true,\n     });\n   });\n });\ndiff --git a/apps/api/src/services/self-repair/trusted-facts-adapter.ts b/apps/api/src/services/self-repair/trusted-facts-adapter.ts\nindex 722021bb..41aa45b7 100644\n--- a/apps/api/src/services/self-repair/trusted-facts-adapter.ts\n+++ b/apps/api/src/services/self-repair/trusted-facts-adapter.ts\n@@ -3,7 +3,17 @@\n  * ---------------------------------------------------------------\n  * 授权依据（历史）：MSG-20261009-14 `PHASE3_A_MINIMAL_SCOPE_AUTHORIZED = YES`，授权单元 = `U1_READ_ONLY_SUBSET`。\n  * 修订依据：MSG-20261009-15 → **CHANGE 17–20**（设计文档 §17）；\n- *           MSG-20261009-16 → **CHANGE 24–25**（U1 FINAL-R3，设计文档 §18）。\n+ *           MSG-20261009-16 → **CHANGE 24–25**（U1 FINAL-R3，设计文档 §18）；\n+ *           MSG-20261009-17 → **CHANGE 26–28**（U1 FINAL-R4：可独立复核的原始材料 + 范围声明链核验）。\n+ *\n+ * **CHANGE 27 要点（范围不给「没传」留放大口子）**\n+ *   - 必需维度：必须由可信上下文提供，缺失 / 空串 / 声明为不适用 ⇒ fail-closed；\n+ *   - 可选维度：**必须二选一** —— 要么提供具体值，要么由服务端**显式声明「不适用」**；\n+ *     两者皆无 ⇒ `OPTIONAL_SCOPE_UNDECLARED`（fail-closed）。\n+ *     即：**不能仅凭「字段没传」来放大授权匹配面**；省略必须是一次显式的服务端决定。\n+ *   - 同一维度既提供又声明不适用 ⇒ `SCOPE_DECLARATION_CONFLICT`（fail-closed）。\n+ *   - `resourceScope` / `notApplicableScopeDimensions` 均只能来自**可信执行上下文**，\n+ *     请求入参中不存在这两个字段；请求侧夹带同名属性不会改变匹配结果（有用例证明）。\n  *\n  * **只读边界（硬约束）**\n  *   - 只执行 SELECT：读取 Organization 身份 + 该组织**全部** StandingAuthorization 行；\n@@ -111,6 +121,11 @@ export interface TrustedExecutionContext {\n   operationRecheck: 'CONFIRMED_READ_ONLY' | 'CONFIRMED_IDEMPOTENT_NOT_APPLIED' | 'NOT_CONFIRMED';\n   /** CHANGE 24：**可信资源范围**（服务端解析注入；策略要求的维度必须齐备）。 */\n   resourceScope?: TrustedFactsResourceScope;\n+  /**\n+   * CHANGE 27：服务端对**可选维度**的显式「不适用」声明。\n+   * 可选维度若既不提供值、也不在此声明，则解析 fail-closed（防止用「没传」放大授权范围）。\n+   */\n+  notApplicableScopeDimensions?: readonly TrustedFactsScopeDimension[];\n }\n \n export interface TrustedFactsProvenance {\n@@ -144,6 +159,8 @@ export interface TrustedFactsProvenance {\n     required: readonly TrustedFactsScopeDimension[];\n     optional: readonly TrustedFactsScopeDimension[];\n     providedDimensions: readonly TrustedFactsScopeDimension[];\n+    /** CHANGE 27：服务端显式声明「不适用」的可选维度（省略即此处留痕，而非静默放宽）。 */\n+    notApplicableDimensions: readonly TrustedFactsScopeDimension[];\n     resolvedAt: string;\n   };\n   operationRecheck: {\n@@ -174,6 +191,8 @@ export type TrustedFactsFailureReason =\n   | 'ACTION_TYPE_NOT_ALLOWED'\n   | 'SCOPE_POLICY_NOT_DEFINED'\n   | 'REQUIRED_SCOPE_MISSING'\n+  | 'OPTIONAL_SCOPE_UNDECLARED'\n+  | 'SCOPE_DECLARATION_CONFLICT'\n   | 'MONETARY_INPUT_INVALID'\n   | 'MONETARY_LIMIT_EXCEEDED'\n   | 'STALE_FACT_VERSION'\n@@ -263,17 +282,55 @@ function parseMonetaryInput(request: {\n }\n \n /**\n- * CHANGE 24：校验策略要求的**必需范围维度**是否齐备（缺失 / 空串 / 非法类型 ⇒ fail-closed）。\n+ * CHANGE 24 + CHANGE 27：校验范围**声明**是否完整且自洽。\n+ *   必需维度：必须提供且不得声明不适用；\n+ *   可选维度：必须「提供值」或「显式声明不适用」二选一（两者皆无 ⇒ OPTIONAL_SCOPE_UNDECLARED）；\n+ *   同一维度既提供又声明不适用 ⇒ SCOPE_DECLARATION_CONFLICT。\n  * 注意：范围值来自**可信执行上下文**，而不是请求；调用者无法通过省略维度放大匹配面。\n  */\n-export function missingRequiredScopeDimensions(\n-  policy: { required: readonly TrustedFactsScopeDimension[] },\n+export type ScopeDeclarationCheck =\n+  | {\n+      ok: true;\n+      providedDimensions: readonly TrustedFactsScopeDimension[];\n+      notApplicableDimensions: readonly TrustedFactsScopeDimension[];\n+    }\n+  | {\n+      ok: false;\n+      reason: 'REQUIRED_SCOPE_MISSING' | 'OPTIONAL_SCOPE_UNDECLARED' | 'SCOPE_DECLARATION_CONFLICT';\n+    };\n+\n+export function checkScopeDeclaration(\n+  policy: { required: readonly TrustedFactsScopeDimension[]; optional: readonly TrustedFactsScopeDimension[] },\n   scope: TrustedFactsResourceScope | undefined,\n-): readonly TrustedFactsScopeDimension[] {\n-  return policy.required.filter((dimension) => {\n+  notApplicable: readonly TrustedFactsScopeDimension[] | undefined,\n+): ScopeDeclarationCheck {\n+  const isProvided = (dimension: TrustedFactsScopeDimension): boolean => {\n     const value = scope === undefined ? undefined : scope[dimension];\n-    return typeof value !== 'string' || value.trim() === '';\n-  });\n+    return typeof value === 'string' && value.trim() !== '';\n+  };\n+  const isNotApplicable = (dimension: TrustedFactsScopeDimension): boolean =>\n+    (notApplicable ?? []).includes(dimension);\n+\n+  for (const dimension of TRUSTED_FACTS_SCOPE_DIMENSIONS) {\n+    if (isProvided(dimension) && isNotApplicable(dimension)) {\n+      return { ok: false, reason: 'SCOPE_DECLARATION_CONFLICT' };\n+    }\n+  }\n+  for (const dimension of policy.required) {\n+    if (!isProvided(dimension) || isNotApplicable(dimension)) {\n+      return { ok: false, reason: 'REQUIRED_SCOPE_MISSING' };\n+    }\n+  }\n+  for (const dimension of policy.optional) {\n+    if (!isProvided(dimension) && !isNotApplicable(dimension)) {\n+      return { ok: false, reason: 'OPTIONAL_SCOPE_UNDECLARED' };\n+    }\n+  }\n+  return {\n+    ok: true,\n+    providedDimensions: TRUSTED_FACTS_SCOPE_DIMENSIONS.filter((dimension) => isProvided(dimension)),\n+    notApplicableDimensions: TRUSTED_FACTS_SCOPE_DIMENSIONS.filter((dimension) => isNotApplicable(dimension)),\n+  };\n }\n \n /** CHANGE 17：资源范围匹配（未提供的维度不构成约束；提供了但为空串 = 不匹配）。 */\n@@ -357,11 +414,12 @@ export function createTrustedFactsAdapter(input: {\n         return fail('OPERATION_RECHECK_NOT_CONFIRMED');\n       }\n \n-      // ③ CHANGE 24：服务端动作策略决定必需范围维度；必需维度必须由可信上下文提供\n+      // ③ CHANGE 24 + 27：服务端动作策略决定范围维度；省略必须是一次显式声明，不能靠「没传」放宽\n       const policy = TRUSTED_FACTS_ACTION_SCOPE_POLICY[trimOrEmpty(request.actionType)];\n       if (policy === undefined) return fail('SCOPE_POLICY_NOT_DEFINED');\n       const trustedScope = input.executionContext.resourceScope;\n-      if (missingRequiredScopeDimensions(policy, trustedScope).length > 0) return fail('REQUIRED_SCOPE_MISSING');\n+      const declaration = checkScopeDeclaration(policy, trustedScope, input.executionContext.notApplicableScopeDimensions);\n+      if (!declaration.ok) return fail(declaration.reason);\n \n       // ④ CHANGE 18：金额 / 币种显式规则（先做形态校验，再进只读事务）\n       const monetary = parseMonetaryInput(request);\n@@ -392,11 +450,6 @@ export function createTrustedFactsAdapter(input: {\n           if (trimOrEmpty(request.expectedFactVersion) !== factVersion) return fail('STALE_FACT_VERSION');\n         }\n \n-        const providedDimensions = TRUSTED_FACTS_SCOPE_DIMENSIONS.filter((dimension) => {\n-          const value = trustedScope === undefined ? undefined : trustedScope[dimension];\n-          return typeof value === 'string' && value.trim() !== '';\n-        });\n-\n         const provenance: TrustedFactsProvenance = {\n           organizationIdResolved: {\n             source: 'TRUSTED_PERSISTED_IDENTITY',\n@@ -425,7 +478,8 @@ export function createTrustedFactsAdapter(input: {\n             actionType: trimOrEmpty(request.actionType),\n             required: policy.required,\n             optional: policy.optional,\n-            providedDimensions,\n+            providedDimensions: declaration.providedDimensions,\n+            notApplicableDimensions: declaration.notApplicableDimensions,\n             resolvedAt: at.toISOString(),\n           },\n           operationRecheck: {\n@@ -565,4 +619,7 @@ export const TRUSTED_FACTS_ADAPTER_BOUNDARY = {\n   requiresServerScopePolicy: true,\n   requiresTrustedResourceScope: true,\n   scopeValuesFromTrustedContextOnly: true,\n+  /** CHANGE 27 */\n+  requiresExplicitNotApplicableDeclaration: true,\n+  scopeOmissionCannotWidenMatch: true,\n } as const;\n",
+  "testFileMapping": [
+    "apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts -> 端口级（纯函数，无 DB）",
+    "apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts -> 真实 PostgreSQL 只读端口（隔离库 crossclaim_p3r2_iso）"
+  ],
+  "commands": [
+    {
+      "name": "unit+db targeted vitest (verbose)",
+      "command": "node apps/api/node_modules/vitest/vitest.mjs run --reporter=verbose src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts",
+      "cwd": "D:/crossclaim-ai/apps/api",
+      "databaseUrlDb": "crossclaim_p3r2_iso (isolated)",
+      "exitCode": 0,
+      "databaseMarker": "127.0.0.1:55432/crossclaim_p3r2_iso",
+      "summary": "61 passed (61)",
+      "testFiles": "2 passed (2)",
+      "perFileCounts": {
+        "phase3a-u1-trusted-facts-adapter.test.ts": 53,
+        "phase3a-u1-trusted-facts-adapter-db.test.ts": 8
+      },
+      "rawOutput": "\n RUN  v2.1.9 D:/crossclaim-ai/apps/api\n\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 可信事实齐备 ⇒ 返回 facts 与 provenance（含 authorizationId / caller / scopePolicy / readScope）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > SERVER_REQUEST_GATE 也在白名单内，且金额等于上限（不超限）时通过\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > CHANGE 27：可选维度省略但由服务端显式声明不适用 ⇒ 通过，且 provenance 留痕\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > CHANGE 27：请求侧夹带 resourceScope 不影响结果（范围只取可信上下文）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '缺 organizationId（无法判定租户上下文）' ⇒ fail-closed（'TENANT_CONTEXT_REQUIRED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方不在白名单（MODEL）' ⇒ fail-closed（'CALLER_NOT_TRUSTED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方不在白名单（BUILDER）' ⇒ fail-closed（'CALLER_NOT_TRUSTED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方不在白名单（CLIENT）' ⇒ fail-closed（'CALLER_NOT_TRUSTED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方为空' ⇒ fail-closed（'CALLER_NOT_TRUSTED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '动作类型无服务端范围策略' ⇒ fail-closed（'SCOPE_POLICY_NOT_DEFINED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '可信范围整体缺失' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '必需维度缺失（platformAccountId）' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '必需维度缺失（provider）' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '必需维度为空串' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：可选维度整体省略且未声明不适用（不得靠「没传」放大范围）' ⇒ fail-closed（'OPTIONAL_SCOPE_UNDECLARED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：仅省略一个可选维度（jurisdiction）且未声明…' ⇒ fail-closed（'OPTIONAL_SCOPE_UNDECLARED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：必需维度被声明为不适用' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：同一维度既提供又声明不适用（声明冲突）' ⇒ fail-closed（'SCOPE_DECLARATION_CONFLICT'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '组织不存在' ⇒ fail-closed（'ORGANIZATION_NOT_FOUND'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '该组织无任何授权行' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但 Provider 不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但账户不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但可选维度 jurisdiction 不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但可选维度 domain 不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '可选维度提供了空串（视为未提供且未声明不适用）' ⇒ fail-closed（'OPTIONAL_SCOPE_UNDECLARED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权已撤销' ⇒ fail-closed（'AUTHORIZATION_REVOKED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权未生效（未来生效）' ⇒ fail-closed（'AUTHORIZATION_NOT_EFFECTIVE'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权已过期' ⇒ fail-closed（'AUTHORIZATION_NOT_EFFECTIVE'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '多授权冲突（同范围两条有效记录）' ⇒ fail-closed（'AUTHORIZATION_AMBIGUOUS'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '动作类型不在授权范围' ⇒ fail-closed（'SCOPE_POLICY_NOT_DEFINED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '策略内动作但授权行不允许该动作' ⇒ fail-closed（'ACTION_TYPE_NOT_ALLOWED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '缺 monetaryAction（默认一律失败，不猜）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'monetaryAction 非布尔' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额动作缺金额' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额动作缺币种' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（科学计数法）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（负号）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（小数超 4 位）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（空串）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '请求币种非 USD' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权行币种非 USD' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '非金额动作却携带金额' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '非金额动作却携带币种' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额超过授权上限' ⇒ fail-closed（'MONETARY_LIMIT_EXCEEDED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权上限不可解析' ⇒ fail-closed（'MONETARY_LIMIT_EXCEEDED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '期望事实版本不一致（陈旧事实）' ⇒ fail-closed（'STALE_FACT_VERSION'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '期望事实版本为空串' ⇒ fail-closed（'STALE_FACT_VERSION'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '运行时复核未确认' ⇒ fail-closed（'OPERATION_RECHECK_NOT_CONFIRMED'）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 全部读取在只读事务内执行，且不嵌套开启第二个事务\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 失败路径（组织不存在）同样在只读事务内向端口读取\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 十进制比较：等值不超限，超限 / 不可解析一律按超限处理\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > CHANGE 24/27：策略与范围声明检查（缺失 / 空串 / 未声明省略 / 声明冲突）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 接口不接受候选载荷 / 模型输出；唯一原生 SQL 是只读事务语句\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB1 真实组织 + 有效授权 + 可信范围 ⇒ 解析成功，provenance 含 authorizationId / scopePolicy / factVersion\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB2 组织不存在 ⇒ ORGANIZATION_NOT_FOUND（fail-closed）\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB3 撤销 / 过期 / 动作不允许 / 币种不符 / 超限 / 缺金额声明 / 缺必需范围 ⇒ 一律 fail-closed\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB4 同组织同范围两条有效授权 ⇒ AUTHORIZATION_AMBIGUOUS（不取「最高版本」）\nstdout | src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB5（CHANGE 24）单授权错误范围：跨账户 / 跨 Provider / 跨 jurisdiction / 跨 domain 一律 fail-closed\nU1_EVIDENCE {\"kind\":\"SINGLE_AUTHORIZATION_SCOPE_NEGATIVES\",\"org\":\"org-u1-db\",\"results\":[\"跨账户=AUTHORIZATION_NOT_FOUND\",\"跨 Provider=AUTHORIZATION_NOT_FOUND\",\"跨 jurisdiction（可选维度）=AUTHORIZATION_NOT_FOUND\",\"跨 domain（可选维度）=AUTHORIZATION_NOT_FOUND\"]}\n\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB5（CHANGE 24）单授权错误范围：跨账户 / 跨 Provider / 跨 jurisdiction / 跨 domain 一律 fail-closed\nstdout | src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB6（CHANGE 20/25）只读证据：两条独立事务拒写探针 + 公共入口事务内写入被拒\nU1_EVIDENCE {\"kind\":\"WRITE_PROBE\",\"label\":\"DELETE_IN_READ_ONLY_TX\",\"verb\":\"DELETE\",\"independentTransaction\":true,\"statement\":\"DELETE FROM \\\"StandingAuthorization\\\" WHERE \\\"id\\\" = 'u1-probe-nonexistent'\",\"errorName\":\"PrismaClientKnownRequestError\",\"errorMessage\":\"\\nInvalid `prisma.$executeRawUnsafe()` invocation:\\n\\n\\nRaw query failed. Code: `25006`. Message: `ERROR: cannot execute DELETE in a read-only transaction`\"}\n\nstdout | src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB6（CHANGE 20/25）只读证据：两条独立事务拒写探针 + 公共入口事务内写入被拒\nU1_EVIDENCE {\"kind\":\"WRITE_PROBE\",\"label\":\"CREATE_TABLE_IN_READ_ONLY_TX\",\"verb\":\"CREATE TABLE\",\"independentTransaction\":true,\"statement\":\"CREATE TABLE IF NOT EXISTS \\\"u1_readonly_probe\\\" (\\\"x\\\" int)\",\"errorName\":\"PrismaClientKnownRequestError\",\"errorMessage\":\"\\nInvalid `prisma.$executeRawUnsafe()` invocation:\\n\\n\\nRaw query failed. Code: `25006`. Message: `ERROR: cannot execute CREATE TABLE in a read-only transaction`\"}\n\nstdout | src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB6（CHANGE 20/25）只读证据：两条独立事务拒写探针 + 公共入口事务内写入被拒\nU1_EVIDENCE {\"kind\":\"PUBLIC_ENTRY_PROBE\",\"path\":\"createTrustedFactsAdapter.resolve → TrustedFactsReadPort.withReadOnlyTransaction\",\"transactionReadOnly\":\"on\",\"resolvedOk\":true,\"writeRejected\":true,\"writeErrorName\":\"PrismaClientKnownRequestError\",\"writeErrorMessage\":\"\\nInvalid `prisma.$executeRawUnsafe()` invocation:\\n\\n\\nRaw query failed. Code: `25006`. Message: `ERROR: cannot execute DELETE in a read-only transaction`\",\"independentTransaction\":false}\n\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB6（CHANGE 20/25）只读证据：两条独立事务拒写探针 + 公共入口事务内写入被拒\nstdout | src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB7（CHANGE 20/25）解析前后七张相关表计数与关键记录摘要一致\nU1_EVIDENCE {\"kind\":\"TABLE_SNAPSHOT\",\"before\":{\"counts\":{\"organization\":2,\"standingAuthorization\":1,\"auditLog\":1,\"recoveryOpportunity\":0,\"autonomyTask\":0,\"autonomyLease\":0,\"autonomyIncident\":1},\"organization\":{\"id\":\"org-u1-db\",\"updatedAt\":\"2026-10-09T03:19:16.977Z\"},\"authorizationDigests\":[\"d2c61943-fad8-4b4a-980f-03e4b4d9663a:3:ACTIVE:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]},\"after\":{\"counts\":{\"organization\":2,\"standingAuthorization\":1,\"auditLog\":1,\"recoveryOpportunity\":0,\"autonomyTask\":0,\"autonomyLease\":0,\"autonomyIncident\":1},\"organization\":{\"id\":\"org-u1-db\",\"updatedAt\":\"2026-10-09T03:19:16.977Z\"},\"authorizationDigests\":[\"d2c61943-fad8-4b4a-980f-03e4b4d9663a:3:ACTIVE:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]},\"identical\":true}\n\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB7（CHANGE 20/25）解析前后七张相关表计数与关键记录摘要一致\nstdout | src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB8（CHANGE 27）范围声明链：省略可选维度必须显式声明不适用；请求侧夹带 resourceScope 无效\nU1_EVIDENCE {\"kind\":\"SCOPE_DECLARATION_CHAIN\",\"scopeSource\":\"executionContext.resourceScope（服务端注入）；请求入参无该字段\",\"notApplicableSource\":\"executionContext.notApplicableScopeDimensions（服务端显式声明）\",\"results\":{\"omittedOptionalWithoutDeclaration\":\"OPTIONAL_SCOPE_UNDECLARED\",\"explicitNotApplicable\":\"OK\",\"providedDimensions\":\"provider+platformAccountId\",\"notApplicableDimensions\":\"domain+jurisdiction\",\"requestSideScopeIgnored\":\"IGNORED_OK\",\"requestSideScopeCannotSatisfyRequired\":\"REQUIRED_SCOPE_MISSING\"}}\n\n ✓ src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB8（CHANGE 27）范围声明链：省略可选维度必须显式声明不适用；请求侧夹带 resourceScope 无效\n\n Test Files  2 passed (2)\n      Tests  61 passed (61)\n   Start at  12:19:15\n   Duration  1.30s (transform 92ms, setup 24ms, collect 143ms, tests 542ms, environment 0ms, prepare 196ms)\n\n\u001b[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.\u001b[39m\n"
+    },
+    {
+      "name": "apps/api tsc --noEmit",
+      "command": "node apps/api/node_modules/typescript/bin/tsc --noEmit -p apps/api/tsconfig.json",
+      "cwd": "D:/crossclaim-ai/apps/api",
+      "exitCode": 0,
+      "rawOutput": ""
+    }
+  ],
+  "tests": [
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 可信事实齐备 ⇒ 返回 facts 与 provenance（含 authorizationId / caller / scopePolicy / readScope）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > SERVER_REQUEST_GATE 也在白名单内，且金额等于上限（不超限）时通过",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > CHANGE 27：可选维度省略但由服务端显式声明不适用 ⇒ 通过，且 provenance 留痕",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > CHANGE 27：请求侧夹带 resourceScope 不影响结果（范围只取可信上下文）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '缺 organizationId（无法判定租户上下文）' ⇒ fail-closed（'TENANT_CONTEXT_REQUIRED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方不在白名单（MODEL）' ⇒ fail-closed（'CALLER_NOT_TRUSTED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方不在白名单（BUILDER）' ⇒ fail-closed（'CALLER_NOT_TRUSTED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方不在白名单（CLIENT）' ⇒ fail-closed（'CALLER_NOT_TRUSTED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方为空' ⇒ fail-closed（'CALLER_NOT_TRUSTED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '动作类型无服务端范围策略' ⇒ fail-closed（'SCOPE_POLICY_NOT_DEFINED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '可信范围整体缺失' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '必需维度缺失（platformAccountId）' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '必需维度缺失（provider）' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '必需维度为空串' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：可选维度整体省略且未声明不适用（不得靠「没传」放大范围）' ⇒ fail-closed（'OPTIONAL_SCOPE_UNDECLARED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：仅省略一个可选维度（jurisdiction）且未声明…' ⇒ fail-closed（'OPTIONAL_SCOPE_UNDECLARED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：必需维度被声明为不适用' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：同一维度既提供又声明不适用（声明冲突）' ⇒ fail-closed（'SCOPE_DECLARATION_CONFLICT'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '组织不存在' ⇒ fail-closed（'ORGANIZATION_NOT_FOUND'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '该组织无任何授权行' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但 Provider 不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但账户不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但可选维度 jurisdiction 不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但可选维度 domain 不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '可选维度提供了空串（视为未提供且未声明不适用）' ⇒ fail-closed（'OPTIONAL_SCOPE_UNDECLARED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权已撤销' ⇒ fail-closed（'AUTHORIZATION_REVOKED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权未生效（未来生效）' ⇒ fail-closed（'AUTHORIZATION_NOT_EFFECTIVE'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权已过期' ⇒ fail-closed（'AUTHORIZATION_NOT_EFFECTIVE'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '多授权冲突（同范围两条有效记录）' ⇒ fail-closed（'AUTHORIZATION_AMBIGUOUS'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '动作类型不在授权范围' ⇒ fail-closed（'SCOPE_POLICY_NOT_DEFINED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '策略内动作但授权行不允许该动作' ⇒ fail-closed（'ACTION_TYPE_NOT_ALLOWED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '缺 monetaryAction（默认一律失败，不猜）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'monetaryAction 非布尔' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额动作缺金额' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额动作缺币种' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（科学计数法）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（负号）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（小数超 4 位）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（空串）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '请求币种非 USD' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权行币种非 USD' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '非金额动作却携带金额' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '非金额动作却携带币种' ⇒ fail-closed（'MONETARY_INPUT_INVALID'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额超过授权上限' ⇒ fail-closed（'MONETARY_LIMIT_EXCEEDED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权上限不可解析' ⇒ fail-closed（'MONETARY_LIMIT_EXCEEDED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '期望事实版本不一致（陈旧事实）' ⇒ fail-closed（'STALE_FACT_VERSION'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '期望事实版本为空串' ⇒ fail-closed（'STALE_FACT_VERSION'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '运行时复核未确认' ⇒ fail-closed（'OPERATION_RECHECK_NOT_CONFIRMED'）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 全部读取在只读事务内执行，且不嵌套开启第二个事务",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 失败路径（组织不存在）同样在只读事务内向端口读取",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 十进制比较：等值不超限，超限 / 不可解析一律按超限处理",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > CHANGE 24/27：策略与范围声明检查（缺失 / 空串 / 未声明省略 / 声明冲突）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 接口不接受候选载荷 / 模型输出；唯一原生 SQL 是只读事务语句",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB1 真实组织 + 有效授权 + 可信范围 ⇒ 解析成功，provenance 含 authorizationId / scopePolicy / factVersion",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB2 组织不存在 ⇒ ORGANIZATION_NOT_FOUND（fail-closed）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB3 撤销 / 过期 / 动作不允许 / 币种不符 / 超限 / 缺金额声明 / 缺必需范围 ⇒ 一律 fail-closed",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB4 同组织同范围两条有效授权 ⇒ AUTHORIZATION_AMBIGUOUS（不取「最高版本」）",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB5（CHANGE 24）单授权错误范围：跨账户 / 跨 Provider / 跨 jurisdiction / 跨 domain 一律 fail-closed",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB6（CHANGE 20/25）只读证据：两条独立事务拒写探针 + 公共入口事务内写入被拒",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB7（CHANGE 20/25）解析前后七张相关表计数与关键记录摘要一致",
+      "status": "passed"
+    },
+    {
+      "file": "src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts",
+      "name": "PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB8（CHANGE 27）范围声明链：省略可选维度必须显式声明不适用；请求侧夹带 resourceScope 无效",
+      "status": "passed"
+    }
+  ],
+  "dbProbeEvidence": [
+    {
+      "kind": "SINGLE_AUTHORIZATION_SCOPE_NEGATIVES",
+      "org": "org-u1-db",
+      "results": [
+        "跨账户=AUTHORIZATION_NOT_FOUND",
+        "跨 Provider=AUTHORIZATION_NOT_FOUND",
+        "跨 jurisdiction（可选维度）=AUTHORIZATION_NOT_FOUND",
+        "跨 domain（可选维度）=AUTHORIZATION_NOT_FOUND"
+      ]
+    },
+    {
+      "kind": "WRITE_PROBE",
+      "label": "DELETE_IN_READ_ONLY_TX",
+      "verb": "DELETE",
+      "independentTransaction": true,
+      "statement": "DELETE FROM \"StandingAuthorization\" WHERE \"id\" = 'u1-probe-nonexistent'",
+      "errorName": "PrismaClientKnownRequestError",
+      "errorMessage": "\nInvalid `prisma.$executeRawUnsafe()` invocation:\n\n\nRaw query failed. Code: `25006`. Message: `ERROR: cannot execute DELETE in a read-only transaction`"
+    },
+    {
+      "kind": "WRITE_PROBE",
+      "label": "CREATE_TABLE_IN_READ_ONLY_TX",
+      "verb": "CREATE TABLE",
+      "independentTransaction": true,
+      "statement": "CREATE TABLE IF NOT EXISTS \"u1_readonly_probe\" (\"x\" int)",
+      "errorName": "PrismaClientKnownRequestError",
+      "errorMessage": "\nInvalid `prisma.$executeRawUnsafe()` invocation:\n\n\nRaw query failed. Code: `25006`. Message: `ERROR: cannot execute CREATE TABLE in a read-only transaction`"
+    },
+    {
+      "kind": "PUBLIC_ENTRY_PROBE",
+      "path": "createTrustedFactsAdapter.resolve → TrustedFactsReadPort.withReadOnlyTransaction",
+      "transactionReadOnly": "on",
+      "resolvedOk": true,
+      "writeRejected": true,
+      "writeErrorName": "PrismaClientKnownRequestError",
+      "writeErrorMessage": "\nInvalid `prisma.$executeRawUnsafe()` invocation:\n\n\nRaw query failed. Code: `25006`. Message: `ERROR: cannot execute DELETE in a read-only transaction`",
+      "independentTransaction": false
+    },
+    {
+      "kind": "TABLE_SNAPSHOT",
+      "before": {
+        "counts": {
+          "organization": 2,
+          "standingAuthorization": 1,
+          "auditLog": 1,
+          "recoveryOpportunity": 0,
+          "autonomyTask": 0,
+          "autonomyLease": 0,
+          "autonomyIncident": 1
+        },
+        "organization": {
+          "id": "org-u1-db",
+          "updatedAt": "2026-10-09T03:19:16.977Z"
+        },
+        "authorizationDigests": [
+          "d2c61943-fad8-4b4a-980f-03e4b4d9663a:3:ACTIVE:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
+      },
+      "after": {
+        "counts": {
+          "organization": 2,
+          "standingAuthorization": 1,
+          "auditLog": 1,
+          "recoveryOpportunity": 0,
+          "autonomyTask": 0,
+          "autonomyLease": 0,
+          "autonomyIncident": 1
+        },
+        "organization": {
+          "id": "org-u1-db",
+          "updatedAt": "2026-10-09T03:19:16.977Z"
+        },
+        "authorizationDigests": [
+          "d2c61943-fad8-4b4a-980f-03e4b4d9663a:3:ACTIVE:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
+      },
+      "identical": true
+    },
+    {
+      "kind": "SCOPE_DECLARATION_CHAIN",
+      "scopeSource": "executionContext.resourceScope（服务端注入）；请求入参无该字段",
+      "notApplicableSource": "executionContext.notApplicableScopeDimensions（服务端显式声明）",
+      "results": {
+        "omittedOptionalWithoutDeclaration": "OPTIONAL_SCOPE_UNDECLARED",
+        "explicitNotApplicable": "OK",
+        "providedDimensions": "provider+platformAccountId",
+        "notApplicableDimensions": "domain+jurisdiction",
+        "requestSideScopeIgnored": "IGNORED_OK",
+        "requestSideScopeCannotSatisfyRequired": "REQUIRED_SCOPE_MISSING"
+      }
+    }
+  ],
+  "inlineEvidenceForAuditChannel": {
+    "adapterFile": "apps/api/src/services/self-repair/trusted-facts-adapter.ts",
+    "adapterSha256": "47ac5d21946a66eeb7d02b492d5397449d52d44dce0fc8121fd6c378e1925b7a",
+    "adapterCriticalSource": "export const TRUSTED_FACTS_ACTION_SCOPE_POLICY: Readonly<\n  Record<string, { required: readonly TrustedFactsScopeDimension[]; optional: readonly TrustedFactsScopeDimension[] }>\n> = {\n  'recovery.read': { required: ['platformAccountId', 'provider'], optional: ['domain', 'jurisdiction'] },\n  'internal.repair.propose': { required: ['platformAccountId', 'provider'], optional: ['domain', 'jurisdiction'] },\n};\n\n// ---\n\nexport function checkScopeDeclaration(\n  policy: { required: readonly TrustedFactsScopeDimension[]; optional: readonly TrustedFactsScopeDimension[] },\n  scope: TrustedFactsResourceScope | undefined,\n  notApplicable: readonly TrustedFactsScopeDimension[] | undefined,\n): ScopeDeclarationCheck {\n  const isProvided = (dimension: TrustedFactsScopeDimension): boolean => {\n    const value = scope === undefined ? undefined : scope[dimension];\n    return typeof value === 'string' && value.trim() !== '';\n  };\n  const isNotApplicable = (dimension: TrustedFactsScopeDimension): boolean =>\n    (notApplicable ?? []).includes(dimension);\n\n  for (const dimension of TRUSTED_FACTS_SCOPE_DIMENSIONS) {\n    if (isProvided(dimension) && isNotApplicable(dimension)) {\n      return { ok: false, reason: 'SCOPE_DECLARATION_CONFLICT' };\n    }\n  }\n  for (const dimension of policy.required) {\n    if (!isProvided(dimension) || isNotApplicable(dimension)) {\n      return { ok: false, reason: 'REQUIRED_SCOPE_MISSING' };\n    }\n  }\n  for (const dimension of policy.optional) {\n    if (!isProvided(dimension) && !isNotApplicable(dimension)) {\n      return { ok: false, reason: 'OPTIONAL_SCOPE_UNDECLARED' };\n    }\n  }\n  return {\n    ok: true,\n    providedDimensions: TRUSTED_FACTS_SCOPE_DIMENSIONS.filter((dimension) => isProvided(dimension)),\n    notApplicableDimensions: TRUSTED_FACTS_SCOPE_DIMENSIONS.filter((dimension) => isNotApplicable(dimension)),\n  };\n}\n\n// ---\n\n      // ③ CHANGE 24 + 27：服务端动作策略决定范围维度；省略必须是一次显式声明，不能靠「没传」放宽\n      const policy = TRUSTED_FACTS_ACTION_SCOPE_POLICY[trimOrEmpty(request.actionType)];\n      if (policy === undefined) return fail('SCOPE_POLICY_NOT_DEFINED');\n      const trustedScope = input.executionContext.resourceScope;\n      const declaration = checkScopeDeclaration(policy, trustedScope, input.executionContext.notApplicableScopeDimensions);\n      if (!declaration.ok) return fail(declaration.reason);\n\n// ---\n\n          scopePolicy: {\n            source: 'SERVER_ACTION_POLICY',\n            actionType: trimOrEmpty(request.actionType),\n            required: policy.required,\n            optional: policy.optional,\n            providedDimensions: declaration.providedDimensions,\n            notApplicableDimensions: declaration.notApplicableDimensions,\n            resolvedAt: at.toISOString(),\n          },\n\n// ---\n\nexport async function runInReadOnlyTransaction<T>(\n  prisma: PrismaClient,\n  run: (tx: Prisma.TransactionClient) => Promise<T>,\n): Promise<T> {\n  return prisma.$transaction(async (tx) => {\n    await tx.$executeRawUnsafe(READ_ONLY_TRANSACTION_SQL);\n    return run(tx);\n  });\n}",
+    "dbTestNames": [
+      "1. PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB1 真实组织 + 有效授权 + 可信范围 ⇒ 解析成功，provenance 含 authorizationId / scopePolicy / factVersion [passed]",
+      "2. PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB2 组织不存在 ⇒ ORGANIZATION_NOT_FOUND（fail-closed） [passed]",
+      "3. PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB3 撤销 / 过期 / 动作不允许 / 币种不符 / 超限 / 缺金额声明 / 缺必需范围 ⇒ 一律 fail-closed [passed]",
+      "4. PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB4 同组织同范围两条有效授权 ⇒ AUTHORIZATION_AMBIGUOUS（不取「最高版本」） [passed]",
+      "5. PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB5（CHANGE 24）单授权错误范围：跨账户 / 跨 Provider / 跨 jurisdiction / 跨 domain 一律 fail-closed [passed]",
+      "6. PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB6（CHANGE 20/25）只读证据：两条独立事务拒写探针 + 公共入口事务内写入被拒 [passed]",
+      "7. PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB7（CHANGE 20/25）解析前后七张相关表计数与关键记录摘要一致 [passed]",
+      "8. PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB8（CHANGE 27）范围声明链：省略可选维度必须显式声明不适用；请求侧夹带 resourceScope 无效 [passed]"
+    ],
+    "unitTestNames": [
+      "1. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 可信事实齐备 ⇒ 返回 facts 与 provenance（含 authorizationId / caller / scopePolicy / readScope） [passed]",
+      "2. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > SERVER_REQUEST_GATE 也在白名单内，且金额等于上限（不超限）时通过 [passed]",
+      "3. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > CHANGE 27：可选维度省略但由服务端显式声明不适用 ⇒ 通过，且 provenance 留痕 [passed]",
+      "4. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > CHANGE 27：请求侧夹带 resourceScope 不影响结果（范围只取可信上下文） [passed]",
+      "5. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '缺 organizationId（无法判定租户上下文）' ⇒ fail-closed（'TENANT_CONTEXT_REQUIRED'） [passed]",
+      "6. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方不在白名单（MODEL）' ⇒ fail-closed（'CALLER_NOT_TRUSTED'） [passed]",
+      "7. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方不在白名单（BUILDER）' ⇒ fail-closed（'CALLER_NOT_TRUSTED'） [passed]",
+      "8. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方不在白名单（CLIENT）' ⇒ fail-closed（'CALLER_NOT_TRUSTED'） [passed]",
+      "9. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '调用方为空' ⇒ fail-closed（'CALLER_NOT_TRUSTED'） [passed]",
+      "10. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '动作类型无服务端范围策略' ⇒ fail-closed（'SCOPE_POLICY_NOT_DEFINED'） [passed]",
+      "11. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '可信范围整体缺失' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'） [passed]",
+      "12. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '必需维度缺失（platformAccountId）' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'） [passed]",
+      "13. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '必需维度缺失（provider）' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'） [passed]",
+      "14. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '必需维度为空串' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'） [passed]",
+      "15. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：可选维度整体省略且未声明不适用（不得靠「没传」放大范围）' ⇒ fail-closed（'OPTIONAL_SCOPE_UNDECLARED'） [passed]",
+      "16. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：仅省略一个可选维度（jurisdiction）且未声明…' ⇒ fail-closed（'OPTIONAL_SCOPE_UNDECLARED'） [passed]",
+      "17. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：必需维度被声明为不适用' ⇒ fail-closed（'REQUIRED_SCOPE_MISSING'） [passed]",
+      "18. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'CHANGE 27：同一维度既提供又声明不适用（声明冲突）' ⇒ fail-closed（'SCOPE_DECLARATION_CONFLICT'） [passed]",
+      "19. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '组织不存在' ⇒ fail-closed（'ORGANIZATION_NOT_FOUND'） [passed]",
+      "20. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '该组织无任何授权行' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'） [passed]",
+      "21. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但 Provider 不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'） [passed]",
+      "22. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但账户不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'） [passed]",
+      "23. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但可选维度 jurisdiction 不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'） [passed]",
+      "24. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '单授权但可选维度 domain 不匹配' ⇒ fail-closed（'AUTHORIZATION_NOT_FOUND'） [passed]",
+      "25. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '可选维度提供了空串（视为未提供且未声明不适用）' ⇒ fail-closed（'OPTIONAL_SCOPE_UNDECLARED'） [passed]",
+      "26. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权已撤销' ⇒ fail-closed（'AUTHORIZATION_REVOKED'） [passed]",
+      "27. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权未生效（未来生效）' ⇒ fail-closed（'AUTHORIZATION_NOT_EFFECTIVE'） [passed]",
+      "28. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权已过期' ⇒ fail-closed（'AUTHORIZATION_NOT_EFFECTIVE'） [passed]",
+      "29. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '多授权冲突（同范围两条有效记录）' ⇒ fail-closed（'AUTHORIZATION_AMBIGUOUS'） [passed]",
+      "30. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '动作类型不在授权范围' ⇒ fail-closed（'SCOPE_POLICY_NOT_DEFINED'） [passed]",
+      "31. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '策略内动作但授权行不允许该动作' ⇒ fail-closed（'ACTION_TYPE_NOT_ALLOWED'） [passed]",
+      "32. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '缺 monetaryAction（默认一律失败，不猜）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "33. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 'monetaryAction 非布尔' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "34. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额动作缺金额' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "35. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额动作缺币种' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "36. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（科学计数法）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "37. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（负号）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "38. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（小数超 4 位）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "39. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额形态非法（空串）' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "40. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '请求币种非 USD' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "41. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权行币种非 USD' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "42. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '非金额动作却携带金额' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "43. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '非金额动作却携带币种' ⇒ fail-closed（'MONETARY_INPUT_INVALID'） [passed]",
+      "44. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '金额超过授权上限' ⇒ fail-closed（'MONETARY_LIMIT_EXCEEDED'） [passed]",
+      "45. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '授权上限不可解析' ⇒ fail-closed（'MONETARY_LIMIT_EXCEEDED'） [passed]",
+      "46. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '期望事实版本不一致（陈旧事实）' ⇒ fail-closed（'STALE_FACT_VERSION'） [passed]",
+      "47. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '期望事实版本为空串' ⇒ fail-closed（'STALE_FACT_VERSION'） [passed]",
+      "48. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > '运行时复核未确认' ⇒ fail-closed（'OPERATION_RECHECK_NOT_CONFIRMED'） [passed]",
+      "49. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 全部读取在只读事务内执行，且不嵌套开启第二个事务 [passed]",
+      "50. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 失败路径（组织不存在）同样在只读事务内向端口读取 [passed]",
+      "51. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 十进制比较：等值不超限，超限 / 不可解析一律按超限处理 [passed]",
+      "52. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > CHANGE 24/27：策略与范围声明检查（缺失 / 空串 / 未声明省略 / 声明冲突） [passed]",
+      "53. PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 接口不接受候选载荷 / 模型输出；唯一原生 SQL 是只读事务语句 [passed]"
+    ],
+    "summaryLines": [
+      "61 passed (61)",
+      "2 passed (2)",
+      "VITEST_EXIT=0",
+      "TSC_EXIT=0",
+      "DB=127.0.0.1:55432/crossclaim_p3r2_iso"
+    ],
+    "probeLines": [
+      "{\"kind\":\"SINGLE_AUTHORIZATION_SCOPE_NEGATIVES\",\"org\":\"org-u1-db\",\"results\":[\"跨账户=AUTHORIZATION_NOT_FOUND\",\"跨 Provider=AUTHORIZATION_NOT_FOUND\",\"跨 jurisdiction（可选维度）=AUTHORIZATION_NOT_FOUND\",\"跨 domain（可选维度）=AUTHORIZATION_NOT_FOUND\"]}",
+      "{\"kind\":\"WRITE_PROBE\",\"label\":\"DELETE_IN_READ_ONLY_TX\",\"verb\":\"DELETE\",\"independentTransaction\":true,\"statement\":\"DELETE FROM \\\"StandingAuthorization\\\" WHERE \\\"id\\\" = 'u1-probe-nonexistent'\",\"errorName\":\"PrismaClientKnownRequestError\",\"errorMessage\":\"\\nInvalid `prisma.$executeRawUnsafe()` invocation:\\n\\n\\nRaw query failed. Code: `25006`. Message: `ERROR: cannot execute DELETE in a read-only transaction`\"}",
+      "{\"kind\":\"WRITE_PROBE\",\"label\":\"CREATE_TABLE_IN_READ_ONLY_TX\",\"verb\":\"CREATE TABLE\",\"independentTransaction\":true,\"statement\":\"CREATE TABLE IF NOT EXISTS \\\"u1_readonly_probe\\\" (\\\"x\\\" int)\",\"errorName\":\"PrismaClientKnownRequestError\",\"errorMessage\":\"\\nInvalid `prisma.$executeRawUnsafe()` invocation:\\n\\n\\nRaw query failed. Code: `25006`. Message: `ERROR: cannot execute CREATE TABLE in a read-only transaction`\"}",
+      "{\"kind\":\"PUBLIC_ENTRY_PROBE\",\"path\":\"createTrustedFactsAdapter.resolve → TrustedFactsReadPort.withReadOnlyTransaction\",\"transactionReadOnly\":\"on\",\"resolvedOk\":true,\"writeRejected\":true,\"writeErrorName\":\"PrismaClientKnownRequestError\",\"writeErrorMessage\":\"\\nInvalid `prisma.$executeRawUnsafe()` invocation:\\n\\n\\nRaw query failed. Code: `25006`. Message: `ERROR: cannot execute DELETE in a read-only transaction`\",\"independentTransaction\":false}",
+      "{\"kind\":\"TABLE_SNAPSHOT\",\"before\":{\"counts\":{\"organization\":2,\"standingAuthorization\":1,\"auditLog\":1,\"recoveryOpportunity\":0,\"autonomyTask\":0,\"autonomyLease\":0,\"autonomyIncident\":1},\"organization\":{\"id\":\"org-u1-db\",\"updatedAt\":\"2026-10-09T03:19:16.977Z\"},\"authorizationDigests\":[\"d2c61943-fad8-4b4a-980f-03e4b4d9663a:3:ACTIVE:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]},\"after\":{\"counts\":{\"organization\":2,\"standingAuthorization\":1,\"auditLog\":1,\"recoveryOpportunity\":0,\"autonomyTask\":0,\"autonomyLease\":0,\"autonomyIncident\":1},\"organization\":{\"id\":\"org-u1-db\",\"updatedAt\":\"2026-10-09T03:19:16.977Z\"},\"authorizationDigests\":[\"d2c61943-fad8-4b4a-980f-03e4b4d9663a:3:ACTIVE:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]},\"identical\":true}",
+      "{\"kind\":\"SCOPE_DECLARATION_CHAIN\",\"scopeSource\":\"executionContext.resourceScope（服务端注入）；请求入参无该字段\",\"notApplicableSource\":\"executionContext.notApplicableScopeDimensions（服务端显式声明）\",\"results\":{\"omittedOptionalWithoutDeclaration\":\"OPTIONAL_SCOPE_UNDECLARED\",\"explicitNotApplicable\":\"OK\",\"providedDimensions\":\"provider+platformAccountId\",\"notApplicableDimensions\":\"domain+jurisdiction\",\"requestSideScopeIgnored\":\"IGNORED_OK\",\"requestSideScopeCannotSatisfyRequired\":\"REQUIRED_SCOPE_MISSING\"}}"
+    ]
+  },
+  "notVerified": [
+    "Linux / systemd 实机验收",
+    "真实浏览器端到端验收",
+    "真实 Provider / 模型调用（REAL_PROVIDER_WRITE 等一律 HOLD）",
+    "CI 流水线",
+    "生产环境与生产迁移"
+  ],
+  "declaredBoundaries": {
+    "readOnly": true,
+    "writesBusinessData": false,
+    "createsSchedulerControllerOrRuntime": false,
+    "changesPrismaSchemaOrMigration": false,
+    "externalWrite": "HOLD",
+    "autoMerge": "FORBIDDEN",
+    "autoDeploy": "FORBIDDEN",
+    "productionReady": false
+  }
+}
