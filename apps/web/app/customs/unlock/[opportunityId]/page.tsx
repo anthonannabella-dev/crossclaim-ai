@@ -52,6 +52,23 @@ export default async function CustomsUnlockPage({
   );
   const item = list?.items?.find((row) => row.id === opportunityId) ?? null;
 
+  /**
+   * V2-HANDOFF-03：真实权益读取（只读）。
+   * 端点未接线 / 读取失败 → 一律按"未知"处理：
+   * **不得**把它当作"没有权益"（那会诱导重复购买），也不得声称"已覆盖"。
+   */
+  const entitlementRead = await apiGet<{
+    state: string;
+    shouldOfferPurchase: boolean;
+  }>(`/customs/unlock/entitlement?opportunityId=${encodeURIComponent(opportunityId)}`, cookieStore.toString());
+  const entitlementUnknown =
+    entitlementRead === null ||
+    entitlementRead.state === 'UNKNOWN' ||
+    entitlementRead.state === 'TENANT_MISMATCH';
+  const alreadyCovered = entitlementRead?.state === 'ACTIVE_WITH_QUOTA';
+  const showPurchaseEntry =
+    !entitlementUnknown && !alreadyCovered && entitlementRead?.shouldOfferPurchase === true;
+
   if (item === null) {
     return (
       <main className="mx-auto max-w-2xl space-y-4 p-6">
@@ -108,13 +125,18 @@ export default async function CustomsUnlockPage({
         付费入口只在存在可信预估时出现（业务规则 4）。
         额度感知（已购用户不再被要求重复购买）需要权益读取端点，当前未接（见 V2-06 文档 BLOCKED）。
       */}
-      {hasTrustworthyEstimate ? (
+      {hasTrustworthyEstimate && showPurchaseEntry ? (
         <CustomsUnlockPanel
           copy={copy}
           paymentsEnabled={paymentsEnabled}
-          alreadyCovered={false}
+          alreadyCovered={alreadyCovered}
           basis={basis}
         />
+      ) : null}
+
+      {alreadyCovered ? <p className="text-sm text-slate-700">{copy.alreadyCovered}</p> : null}
+      {entitlementUnknown ? (
+        <p className="text-sm text-slate-500">{copy.entitlementUnknown}</p>
       ) : null}
     </main>
   );

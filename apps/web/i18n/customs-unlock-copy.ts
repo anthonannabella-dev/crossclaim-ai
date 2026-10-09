@@ -37,6 +37,7 @@ export interface CustomsUnlockCopy {
   paymentHold: string;
   purchaseDisabled: string;
   alreadyCovered: string;
+  entitlementUnknown: string;
   basisHeading: string;
 }
 
@@ -66,6 +67,7 @@ export const CUSTOMS_UNLOCK_COPY: Record<Locale, CustomsUnlockCopy> = {
     paymentHold: '支付通道当前未启用，暂不可购买。',
     purchaseDisabled: '暂不可购买',
     alreadyCovered: '你已有可用权益，无需重复购买同一服务。',
+    entitlementUnknown: '暂时无法确认你的权益状态，因此不显示购买入口，也不会重复扣费。请稍后重试。',
     basisHeading: '计算依据',
   },
   'en-US': {
@@ -97,6 +99,8 @@ export const CUSTOMS_UNLOCK_COPY: Record<Locale, CustomsUnlockCopy> = {
     paymentHold: 'Payment channel is currently disabled; purchase is unavailable.',
     purchaseDisabled: 'Not purchasable yet',
     alreadyCovered: 'You already have usable credits; no need to buy the same service again.',
+    entitlementUnknown:
+      'We cannot confirm your entitlement status right now, so no purchase entry is shown and nothing will be charged again. Please retry later.',
     basisHeading: 'Calculation basis',
   },
   de: {
@@ -128,6 +132,8 @@ export const CUSTOMS_UNLOCK_COPY: Record<Locale, CustomsUnlockCopy> = {
     paymentHold: 'Zahlungskanal derzeit deaktiviert; Kauf nicht möglich.',
     purchaseDisabled: 'Noch nicht käuflich',
     alreadyCovered: 'Sie haben bereits nutzbare Guthaben; kein erneuter Kauf nötig.',
+    entitlementUnknown:
+      'Ihr Guthabenstatus lässt sich derzeit nicht bestätigen. Daher wird kein Kaufeingang angezeigt und nichts erneut berechnet. Bitte später erneut versuchen.',
     basisHeading: 'Berechnungsgrundlage',
   },
   ja: {
@@ -157,6 +163,8 @@ export const CUSTOMS_UNLOCK_COPY: Record<Locale, CustomsUnlockCopy> = {
     paymentHold: '決済チャネルは現在無効のため、購入できません。',
     purchaseDisabled: '現在購入できません',
     alreadyCovered: '利用可能な権益が既にあります。同一サービスの再購入は不要です。',
+    entitlementUnknown:
+      '現在、権益の状態を確認できません。そのため購入導線は表示せず、重複請求も行いません。しばらくしてから再度お試しください。',
     basisHeading: '算定根拠',
   },
   es: {
@@ -188,6 +196,8 @@ export const CUSTOMS_UNLOCK_COPY: Record<Locale, CustomsUnlockCopy> = {
     paymentHold: 'El canal de pago está deshabilitado; la compra no está disponible.',
     purchaseDisabled: 'Aún no comprable',
     alreadyCovered: 'Ya tiene créditos disponibles; no necesita comprar el mismo servicio otra vez.',
+    entitlementUnknown:
+      'No podemos confirmar el estado de sus créditos en este momento; por eso no mostramos la entrada de compra y no se volverá a cobrar nada. Inténtelo más tarde.',
     basisHeading: 'Base de cálculo',
   },
 };
