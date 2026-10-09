@@ -180129,3 +180129,419 @@ PRODUCTION_READY=NO
 
 本次仅进行了只读审计，没有修改你的 GitHub 仓库。
 ```
+
+### [MSG-20261009-44] U2 设计 R19 = **REVISE**（**首次出现 CLOSED**：`CHANGE 73 = CLOSED`、`CHANGE 74 = CLOSED_SCOPED`；`CHANGE 75/76/77/78 = REVISE`；新增 **CHANGE 79/80/81（P0）+ 82（P1）**）—— **独立核验全部 PASS**：`AUDIT_SCOPE = 2 commits / 3 files`（PASS）、`SINGLE_COMMIT = 1 commit / 1 file`（PASS）、R19 差异 `+227 / −8`（PASS）、**R19 Git blob `4dda5961…4770d9`（PASS）**、比较范围内**产品代码变更 0**（PASS）、**既有唯一约束（schema 与迁移 SQL 均存在）PASS**；未独立完成：文档 SHA-256、PostgreSQL 运行验证；审计方边界声明：「PASS 是版本、文档与静态约束核验，**不代表数据库已完成迁移，也不代表实际运行中的约束、权限或锁机制已验证**」；**逐项**：`CHANGE 73（P2 独立性）= PASS`（独立 `open`、禁止共享 OFD、负面用例已定义）、`CHANGE 74（协议边界）= PASS_SCOPED`（清单与拒绝策略已设计，部署证据未验证）、`CHANGE 75 = REVISE`（**最终探针与 `COMMIT` 之间仍存在未封闭窗口**）、`CHANGE 76 = REVISE`（**去重权威成立，但跨实例恢复阻断权威不足**）、`CHANGE 77 = REVISE`（**epoch 范围检查不能构成可靠的行版本归因证明**）、`CHANGE 78 = REVISE`（**U2-50j 的"必然检出"断言不成立**）；**新增 REQUIRED_CHANGES**：**CHANGE 79（P0）最终 P2 到 COMMIT 的排他保证**——R19 §27.3 承认用户态 TOCTOU 与 §27.6 的「提交前 P2 必须检出」**只有在释放发生于最终 P2 之前**才同时成立；反例：`T1: 最终 P2 通过 → 原 flock 因边界失效被释放 → T2 成功取得 flock 并提交 → T1 发出 COMMIT 并成功 → 提交后 P2 才发现异常`（最后一步只能发现异常，**不能撤销已完成的提交**）⇒ 必须①把 U2-50j 拆为「最终 P2 **前**释放」与「最终 P2 **后**释放」两个时序；②**不得**再声明提交前 P2 必然检出所有提前释放；③明确真正的安全前提是「**整个提交窗口内锁不得被意外释放**」，或采用**数据库端可执行的 fencing/串行化**机制；④若该前提不能证明 ⇒ `EXCLUSIVE_WINDOW_UNAVAILABLE` 不得写入；⑤**不得**以「缩小微观窗口」或「提交后检查」替代互斥安全证明；**CHANGE 80（P0）M1 跨实例恢复阻断**——已有唯一索引（`CREATE UNIQUE INDEX "AutonomyCandidate_dedupeKey_key" ON "AutonomyCandidate"("dedupeKey")`）可防止两个成功提交建立同键候选，但**无法保证两个执行实例共享同一个恢复状态判断**：在 E1 结果未知、E2 遇唯一键冲突时可确认「目标记录存在」，但**不一定能确认哪个执行提交**，**不得**据唯一键冲突把 E1 标记为成功；本地文件**不能**天然成为所有实例共享的阻断权威 ⇒ 必须明确**可执行的跨实例恢复控制方案**（在受控执行范围内实现**单一恢复协调者 + 持久阻断机制**，或明确将不可归因状态转人工），在跨实例互认未实现前**不得**授权并发恢复、自动重试或后续自动化推进，并规定**本地意图记录与数据库提交不一致时的确定性处置**；**CHANGE 81（P0）XID/xmin 归因证明边界**——R19 对冻结语义的更正方向正确，但 `xmin == low32(capturedXid8) ∧ currentXid8 − capturedXid8 < 2^31 ∧ freezing_impossible` **仍不足以独立证明目标行由该执行创建**（`xmin` 是**行版本**事务标识而非业务执行标识；时间窗限制不能独立证明该行未被更新/重写/替换；当前与历史事务 ID 的差距不能证明行的完整来源；冻结参数与 XID 消耗速度只能**辅助评估风险**）⇒ 必须把 `xmin` **定位为辅助证据**而非独立归因权威，并明确：执行身份与数据库事务之间的**可信绑定来源**、**原行版本连续性如何证明**、哪些证据只能证明存在、哪些可证明本执行提交；关键证据缺失保持 `UNKNOWN`；须在**目标 PostgreSQL 版本**上验证实际 SQL 与事务语义后方可提升证明等级；**CHANGE 82（P1）修正 U2-50j 与 U2-51b 的验收语义**——U2-50g/50h/50i 负面方向保留；U2-50j 必须覆盖 CHANGE 79 的**两个竞争时序**；U2-51b 的 `outcome='REJECTED'` 应定义为**安全验收拒绝**而**不能**直接表达数据库事务已回滚——若数据库已提交须**分列** `safetyOutcome=REJECTED`、`dbCommitOutcome=COMMITTED|UNKNOWN`、`exclusiveWindowViolated=true`、`downstreamAutomation=BLOCKED`，**不得**把「安全拒绝」混写为「数据库未提交」；**授权**：`U2_DESIGN_R19_ACCEPTED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`U1_REOPEN=NO`、`SCHEMA_MIGRATION=HOLD`、`RUNTIME_WIRING/MODEL_CALL/PROVIDER_CALL=FORBIDDEN`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`；审计方最终强调：**最重要的安全条件是「不能把事后发现锁失效当成提交期间始终具有排他权的证明」**，下一轮应集中解决该问题与**崩溃归因权威**，而**不是**继续扩充无法提供更强安全保证的检查规则；`REQUIRED_CHANGES=CHANGE_79_P0,CHANGE_80_P0,CHANGE_81_P0,CHANGE_82_P1`、`NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R20_READ_ONLY_CHANGES_79_TO_82` / `NEXT_AUDIT=MSG-20261009-45`；reviewed ref `824ac88666d8d76f18ef9eeb22319847718d868b`
+
+```text
+MSG-20261009-44｜CrossClaim AI · U2 设计 R19 独立审计裁决
+REVISE — 暂不授权实施
+
+审计对象： SI/RSI INTERNAL CODE REPAIR V1 · PHASE 3-A · U2 DESIGN R19
+
+固定审计 HEAD： 824ac88666d8d76f18ef9eeb22319847718d868b
+
+审计结论： R19 已正确回应多项关键问题，但仍存在提交窗口互斥保证、崩溃恢复权威、事务归因三方面的设计缺口。因此不能宣告全部闭合，也不能授权 U2_PLATFORM_ONLY_INSERT_SUBSET。
+
+一、GitHub 独立核验结果
+
+已通过连接的 GitHub 仓库直接读取固定提交与设计文档，而非仅依据送审描述。
+
+核验项目
+
+
+
+独立结果
+
+
+
+
+AUDIT_SCOPE
+
+
+
+PASS，2 commits / 3 files
+
+
+
+
+SINGLE_COMMIT
+
+
+
+PASS，1 commit / 1 file
+
+
+
+
+R19 设计差异
+
+
+
+PASS，+227 / −8
+
+
+
+
+R19 Git blob
+
+
+
+PASS，4dda5961...4770d9
+
+
+
+
+产品代码变更
+
+
+
+PASS，比较范围内为 0
+
+
+
+
+既有唯一约束
+
+
+
+PASS，schema 与迁移 SQL 均存在
+
+
+
+
+文档 SHA-256
+
+
+
+NOT INDEPENDENTLY VERIFIED
+
+
+
+
+PostgreSQL 运行验证
+
+
+
+NOT VERIFIED
+
+已核对的 GitHub 证据：
+
+R19 固定提交
+
+R19 设计正文
+
+Prisma schema
+
+核验边界： 上述 PASS 是版本、文档和静态约束核验，不代表数据库已完成迁移，也不代表实际运行中的约束、权限或锁机制已验证。
+
+二、CHANGE 73–78 逐项裁决
+
+CHANGE
+
+
+
+优先级
+
+
+
+裁决
+
+
+
+说明
+
+
+
+
+73 · P2 独立性
+
+
+
+P1
+
+
+
+PASS
+
+
+
+独立 open、OFD 禁止共享、负面用例已定义
+
+
+
+
+74 · 协议边界
+
+
+
+P1
+
+
+
+PASS_SCOPED
+
+
+
+清单与拒绝策略已设计，部署证据仍未验证
+
+
+
+
+75 · FD 写入保证
+
+
+
+P0
+
+
+
+REVISE
+
+
+
+最终探针与 COMMIT 之间仍存在未封闭窗口
+
+
+
+
+76 · M1 恢复状态机
+
+
+
+P0
+
+
+
+REVISE
+
+
+
+去重权威成立，跨实例恢复阻断权威不足
+
+
+
+
+77 · XID 版本归因
+
+
+
+P0
+
+
+
+REVISE
+
+
+
+epoch 范围检查尚不能构成可靠的行版本归因证明
+
+
+
+
+78 · 反例验收
+
+
+
+P1
+
+
+
+REVISE
+
+
+
+用例已列出，但 U2-50j 的必然检出断言不成立
+
+以下仅登记需要继续修改的项目，不重开 CHANGE 73，也不重复已接受条款。
+
+三、新增 REQUIRED_CHANGES
+CHANGE 79（P0）— 最终 P2 到 COMMIT 的排他保证
+
+R19 §27.3 正确承认用户态检查存在 TOCTOU，但 §27.6 的 U2-50j 又要求提交前 P2 必须检出提前释放。
+
+这两个要求只有在释放发生于最终 P2 之前时才能同时成立。
+
+反例：
+
+纯文本
+T1: 最终 P2 检查通过
+T1: 原 flock 因边界失效被释放
+T2: 成功取得 flock
+T2: 提交自己的写入
+T1: 发出 COMMIT
+T1: COMMIT 成功
+T1: 提交后 P2 检出异常
+
+最后一步只能发现异常，不能撤销 T1 已完成的提交。
+
+必须修改：
+
+将 U2-50j 拆为“最终 P2 前释放”和“最终 P2 后释放”两个时序。
+
+不能再声明提交前 P2 必然检出所有提前释放。
+
+明确真正的安全前提：整个提交窗口内，锁不得被意外释放；或采用数据库端可执行的 fencing/串行化机制。
+
+若上述前提不能证明，EXCLUSIVE_WINDOW_UNAVAILABLE，不得写入。
+
+不能以缩小微观窗口或提交后检查替代互斥安全证明。
+
+CHANGE 80（P0）— M1 跨实例恢复阻断
+
+R19 已正确区分数据库唯一约束与外部意图记录。
+
+核验也确认存在：
+
+SQL
+CREATE UNIQUE INDEX "AutonomyCandidate_dedupeKey_key"
+ON "AutonomyCandidate"("dedupeKey");
+
+这可以防止两个成功提交的事务建立相同 dedupeKey 的候选记录，但无法保证两个执行实例共享同一个恢复状态判断。
+
+尤其在 E1 结果未知、E2 发现唯一键冲突时：
+
+可以确认目标记录存在。
+
+不一定能确认哪个执行提交。
+
+不能根据唯一键冲突直接将 E1 标记为成功。
+
+本地文件不能天然成为所有实例共享的阻断权威。
+
+必须修改：
+
+明确一个可执行的跨实例恢复控制方案。可选择在 U2 受控执行范围内实现单一恢复协调者与持久阻断机制，或明确将不可归因状态转入人工处理。
+
+在跨实例互认未实现之前，不得授权并发恢复、自动重试或后续自动化推进。
+
+同时规定本地意图记录与数据库提交不一致时的确定性处置。
+
+CHANGE 81（P0）— XID / xmin 归因证明边界
+
+R19 修正现代 PostgreSQL 的冻结语义，这是正确方向。
+
+但以下判断：
+
+纯文本
+xmin == low32(capturedXid8)
+AND currentXid8 - capturedXid8 < 2^31
+AND freezing_impossible
+
+仍不足以独立证明目标行一定由该执行创建。
+
+原因包括：
+
+xmin 是行版本事务标识，不是业务执行标识。
+
+时间窗口限制并不能独立证明目标行没有被更新、重写或替换。
+
+当前事务 ID 与历史事务 ID 的差距，不能证明目标行的完整来源。
+
+冻结参数和 XID 消耗速度只能辅助评估风险，不能直接证明某个历史行版本未被改变。
+
+必须修改：
+
+将 xmin 定位为辅助证据，而不是独立归因权威。
+
+本轮需要明确：
+
+执行身份与数据库事务之间的可信绑定来源。
+
+原行版本连续性如何得到证明。
+
+哪些证据只能证明存在，哪些可以证明本执行提交。
+
+任何关键证据缺失时保持 UNKNOWN。
+
+在目标 PostgreSQL 版本上验证实际 SQL 与事务语义后，才能提升证明等级。
+
+CHANGE 82（P1）— 修正 U2-50j 与 U2-51b 的验收语义
+
+U2-50g、50h、50i 的负面方向可以保留。
+
+U2-50j 必须覆盖 CHANGE 79 的两个竞争时序。
+
+U2-51b 中的 outcome='REJECTED' 应定义为安全验收拒绝，而不能直接表达数据库事务已经回滚。
+
+如果数据库已经提交，应分别记录：
+
+纯文本
+safetyOutcome = REJECTED
+dbCommitOutcome = COMMITTED | UNKNOWN
+exclusiveWindowViolated = true
+downstreamAutomation = BLOCKED
+
+不能将“安全拒绝”混写为“数据库未提交”。
+
+四、实施授权裁决
+
+U2 DESIGN R19
+
+REVISE
+
+CHANGE 73
+
+CLOSED
+
+CHANGE 74
+
+CLOSED_SCOPED
+
+CHANGE 75–78
+
+NOT FULLY CLOSED
+
+U2 实施授权
+
+NO
+
+U1 封板
+
+保持不变
+
+允许继续进行 R20 只读设计修订，范围限于 CHANGE 79–82。不授权 U2 产品代码实施、Schema Migration、Runtime Wiring、Provider Call、自动合并或部署。
+
+五、机器可读裁决
+纯文本
+AUDIT_ID=MSG-20261009-44
+REVIEWED_HEAD=824ac88666d8d76f18ef9eeb22319847718d868b
+AUDIT_VERDICT=REVISE
+
+AUDIT_SCOPE_VERIFIED=YES
+SINGLE_COMMIT_SCOPE_VERIFIED=YES
+U2_DESIGN_BLOB_VERIFIED=YES
+DOCUMENT_SHA256_VERIFIED=NO
+PRODUCT_CODE_CHANGES=0
+
+CHANGE_73=CLOSED
+CHANGE_74=CLOSED_SCOPED
+CHANGE_75=REVISE
+CHANGE_76=REVISE
+CHANGE_77=REVISE
+CHANGE_78=REVISE
+
+REQUIRED_CHANGES=CHANGE_79_P0,CHANGE_80_P0,CHANGE_81_P0,CHANGE_82_P1
+
+U2_DESIGN_R19_ACCEPTED=NO
+U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED
+
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R20_READ_ONLY_CHANGES_79_TO_82
+NEXT_AUDIT=MSG-20261009-45
+
+U1_CODE_HEAD=9ee36837
+U1_REOPEN=NO
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终裁决：R19 = REVISE。
+
+本轮已经实质性改善设计，但最重要的安全条件仍是：不能把“事后发现锁失效”当成“提交期间始终具有排他权”的证明。 下一轮应集中解决这个问题及崩溃归因权威，而不是继续扩充无法提供更强安全保证的检查规则。
+
+本次仅作只读审计，未修改 GitHub 仓库。
+```

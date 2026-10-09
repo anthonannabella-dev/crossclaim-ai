@@ -3083,3 +3083,92 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.48 MSG-20261009-44 裁决归档 = **REVISE**（**首次出现 CLOSED**：`73 = CLOSED`、`74 = CLOSED_SCOPED`；`75/76/77/78 = REVISE`；新增 CHANGE 79/80/81（P0）+ 82（P1））
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-44] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（176/176，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=3996 / NORM_LINES=176 / FNV=13d72802`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R18=c391245e`、`REVIEWED_HEAD=824ac886`。
+> 通道操作备注（供后续轮次复用）：本轮长文本经粘贴后成为**附件（"在文本框中显示"）**，**直接按 Enter 未发出**；
+> 改用页面「**发送**」按钮点击后才成功提交（新会话 `6ac8bbfc…`）。后续送审应直接点发送按钮并核验 URL 变化 + `working=true`。
+
+**审计方独立核验（全部 PASS）**：`AUDIT_SCOPE` = **2 commits / 3 files**、`SINGLE_COMMIT` = **1 commit / 1 file**、
+R19 设计差异 `+227 / −8`、**R19 Git blob `4dda5961…4770d9`**、比较范围内**产品代码变更 0**、
+**既有唯一约束（schema 与迁移 SQL 均存在）PASS**；未独立完成：**文档 SHA-256**、**PostgreSQL 运行验证**。
+审计方边界声明：「上述 PASS 是**版本、文档和静态约束核验**，**不代表数据库已完成迁移**，
+也**不代表实际运行中的约束、权限或锁机制已验证**。」
+
+**逐项裁决**：`CHANGE 73（P2 独立性）= PASS`、`CHANGE 74（协议边界）= PASS_SCOPED`（清单与拒绝策略已设计，部署证据仍未验证）、
+`CHANGE 75 = REVISE`、`CHANGE 76 = REVISE`、`CHANGE 77 = REVISE`、`CHANGE 78 = REVISE`。
+`U2_DESIGN_R19_ACCEPTED = NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED`、`U1_REOPEN = NO`。
+
+#### 2.48.1 新增 REQUIRED_CHANGES（下一轮 MSG-20261009-45 只做这四项）
+
+- **CHANGE 79（P0）最终 `P2` 到 `COMMIT` 的排他保证**：R19 §27.3 承认用户态检查存在 **TOCTOU**，
+  但 §27.6 的 **U2-50j** 又要求「提交前 `P2` 必须检出提前释放」——**两者只有在释放发生于最终 `P2` 之前时才同时成立**。
+  反例（审计方给出）：
+
+```text
+T1: 最终 P2 检查通过
+T1: 原 flock 因边界失效被释放
+T2: 成功取得 flock
+T2: 提交自己的写入
+T1: 发出 COMMIT
+T1: COMMIT 成功
+T1: 提交后 P2 检出异常        # 只能发现异常，不能撤销 T1 已完成的提交
+```
+
+  必须：①把 **U2-50j 拆为「最终 `P2` 前释放」与「最终 `P2` 后释放」两个时序**；
+  ②**不得**再声明「提交前 `P2` 必然检出所有提前释放」；
+  ③明确真正的安全前提：**整个提交窗口内锁不得被意外释放**，或采用**数据库端可执行的 fencing/串行化机制**；
+  ④若该前提不能证明 ⇒ **`EXCLUSIVE_WINDOW_UNAVAILABLE`，不得写入**；
+  ⑤**不得**以「缩小微观窗口」或「提交后检查」**替代**互斥安全证明。
+- **CHANGE 80（P0）M1 跨实例恢复阻断**：仓库中**确实存在** `CREATE UNIQUE INDEX "AutonomyCandidate_dedupeKey_key" ON "AutonomyCandidate"("dedupeKey")`，
+  它能**防止两个成功提交的事务建立相同 `dedupeKey` 的候选记录**，但**无法保证两个执行实例共享同一个恢复状态判断**：
+  在「E1 结果未知、E2 发现唯一键冲突」时可确认**目标记录存在**，但**不一定能确认哪个执行提交**，
+  **不得**根据唯一键冲突直接把 E1 标记为成功；**本地文件不能天然成为所有实例共享的阻断权威**。
+  必须：①明确**可执行的跨实例恢复控制方案**——在 U2 受控执行范围内实现**单一恢复协调者 + 持久阻断机制**，
+  或明确将**不可归因状态转入人工处理**；②在**跨实例互认未实现之前**，**不得**授权**并发恢复、自动重试或后续自动化推进**；
+  ③规定**本地意图记录与数据库提交不一致时的确定性处置**。
+- **CHANGE 81（P0）`XID`/`xmin` 归因证明边界**：R19 对冻结语义的更正方向正确，但
+  `xmin == low32(capturedXid8)` ∧ `currentXid8 − capturedXid8 < 2^31` ∧ `freezing_impossible`
+  **仍不足以独立证明目标行一定由该执行创建**，原因：①`xmin` 是**行版本**事务标识，**不是业务执行标识**；
+  ②时间窗口限制**不能独立证明**目标行未被更新、重写或替换；③当前与历史事务 ID 的差距**不能证明行的完整来源**；
+  ④冻结参数与 XID 消耗速度**只能辅助评估风险**，不能直接证明某个历史行版本未被改变。
+  必须：①把 `xmin` 定位为**辅助证据**而非独立归因权威；②明确**执行身份与数据库事务之间的可信绑定来源**；
+  ③明确**原行版本连续性如何得到证明**；④区分「哪些证据只能证明存在」「哪些可以证明本执行提交」；
+  ⑤任一关键证据缺失 ⇒ **保持 `UNKNOWN`**；⑥在**目标 PostgreSQL 版本**上验证实际 SQL 与事务语义后，**才能提升证明等级**。
+- **CHANGE 82（P1）修正 U2-50j 与 U2-51b 的验收语义**：`U2-50g/50h/50i` 的负面方向保留；
+  **U2-50j 必须覆盖 CHANGE 79 的两个竞争时序**；**U2-51b 的 `outcome='REJECTED'` 应定义为「安全验收拒绝」**，
+  **不能**直接表达数据库事务已经回滚；若数据库已提交，必须**分列**：
+
+```text
+safetyOutcome        = REJECTED
+dbCommitOutcome      = COMMITTED | UNKNOWN
+exclusiveWindowViolated = true
+downstreamAutomation = BLOCKED
+```
+
+  即**不得**把「安全拒绝」混写为「数据库未提交」。
+
+**审计方最终意见（原文要点）**：本轮已实质性改善设计，但**最重要的安全条件仍是：
+不能把「事后发现锁失效」当成「提交期间始终具有排他权」的证明**；
+下一轮应集中解决该问题与**崩溃归因权威**，而**不是**继续扩充**无法提供更强安全保证**的检查规则。
+
+```text
+MSG-20261009-44_FINAL_VERDICT = REVISE
+MSG-20261009-44_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 176/176；FNV1A 13d72802）
+CHANGE_73=CLOSED · CHANGE_74=CLOSED_SCOPED · CHANGE_75=REVISE · CHANGE_76=REVISE · CHANGE_77=REVISE · CHANGE_78=REVISE
+AUDIT_SCOPE_VERIFIED=YES · SINGLE_COMMIT_SCOPE_VERIFIED=YES · U2_DESIGN_BLOB_VERIFIED=YES
+DOCUMENT_SHA256_VERIFIED=NO · PRODUCT_CODE_CHANGES=0
+U2_DESIGN_R19_ACCEPTED = NO · U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED · U1_REOPEN = NO
+REQUIRED_CHANGES = CHANGE_79_P0 ; CHANGE_80_P0 ; CHANGE_81_P0 ; CHANGE_82_P1
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R20_READ_ONLY_CHANGES_79_TO_82
+NEXT_AUDIT = MSG-20261009-45
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
