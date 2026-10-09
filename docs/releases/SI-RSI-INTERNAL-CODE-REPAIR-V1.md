@@ -3707,3 +3707,62 @@ EXTERNAL_WRITE=HOLD · AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN
 U1_REOPEN=NO · U2_DESIGN_R21=NOT_REOPENED · HEARTBEAT_RESTORED=NO · OS_TIMER_RESTORED=NO · PRODUCTION_READY=NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.57 R4 只读证据收口交付（授权 `PHASE3_A_U2_PRECONDITION_R4_READ_ONLY_EVIDENCE_CLOSURE`）
+
+> 交付物：①`docs/releases/SI-RSI-R4-WRITE-DOMAIN-MAP.md`（R4-03）
+> ②`docs/releases/SI-RSI-R4-F01-EVIDENCE-MATRIX.md`（R4-05，含 R4-01/R4-02/R4-04 汇总）
+> 基线 `7485f1bd`；U1 封板 `9ee36837` 未改动；冻结条件全部保持不变。
+> 本轮**仅只读勘验 + 文档交付**：未连接任何数据库（含未执行只读查询）、未运行任何实验、未修改产品代码、未启动业务调度器/Runtime/OS 定时任务。
+
+**R4-03 写入域映射（关键事实）**
+
+1. **RSI 域已有 CAS + 租约 fencing 惯用法**（`apps/api/src/runtime/rsi-durable-task-source.ts`）：
+   - `claim`（`:234-276`）：同一 `$transaction` 内「`AutonomyTask` 状态 CAS（`READY→IN_PROGRESS`，`cas.count!==1 ⇒ 已被领取`）」+「`AutonomyLease` upsert（`ownerRef/expiresAt/status='ACTIVE'`）」；
+   - `reclaimExpired`（`:295-321`）：同一事务两步 CAS（租约 `ACTIVE+expiresAt<=now→EXPIRED`；任务 `IN_PROGRESS→READY`）；
+   - `settle`（`:328-392`）：同事务「租约 CAS 释放（`status:'ACTIVE' AND ownerRef=:me AND expiresAt>now → 'RELEASED'`）」+「任务 CAS 终态」，
+     并显式拒绝 `LEASE_MISSING` / `LEASE_NOT_ACTIVE` / `**FENCED_OWNER_MISMATCH**` / `**FENCED_LEASE_EXPIRED**` / `**FENCED_LEASE_RACE**`；
+     代码注释写明「**C2 fencing**：旧 worker 被接管后提交会被拒绝，不会覆盖新 owner 结果，也不产生重复副作用」。
+2. **产品代码中不存在任何 `AutonomyCandidate` 写入**（仅测试有 `.create`）；`apps/api/src` 中**不存在**原始 SQL 写语句；
+   仓库内**不存在** `flock`/`LOCK_EX`/`O_CLOEXEC`/`SCM_RIGHTS`。
+3. 其他业务写入域已清点（Claims / Claim items / Billing / Appeals / Commercial / Acquisition / Audit 横切），均走 Prisma API 且关键路径带状态 CAS。
+4. 现有 fencing 的**语义边界**：基于 **`ownerRef + status + expiresAt` + 受影响行数**，**没有 `fenceGeneration` 单调版本**。
+
+**R4-04 路线 A 载体评估结论（`AutonomyLease`）**
+
+```text
+① 资源身份           = PROVEN（taskId），但与 U2 拟用身份【不一致】
+② 行锁/可序列化约束  = DESIGN_ONLY（现状是 CAS 而非 FOR UPDATE）
+③ generation 单调性  = NOT_PROVEN（schema 无 generation 列）
+④ 事务边界           = PROVEN（claim/reclaim/settle 三处均 $transaction）
+⑤ 权限闭环           = BLOCKED（仓库无角色/GRANT 定义；需 E-08）
+⑥ 切换与旧主隔离     = BLOCKED（需 E-09）
+⑦ 全入口覆盖         = NOT_PROVEN（候选写入路径不存在；仓库外写入者未知）
+CARRIER_DECISION = HOLD（仅 ④ 为 PROVEN；不得仅凭"已存在 AutonomyLease"决定复用）
+```
+
+**R4-01 / R4-02 证据状态**
+
+- **仓库可确认**：E-10（lease 状态转移代码路径）、E-12（迁移中的 `cc_append_only__*`、judge 分离触发器、状态 CHECK）标注 `PARTIAL_REPO`；
+  E-02（仓库内写入者）已清点，仓库外写者 `WAITING_ON_HOST_EVIDENCE`。
+- **待宿主**：E-01（实例数）、E-03（角色↔unit）、E-08（权限与对象所有权）、E-11（部署 SHA 与迁移状态）⇒ `WAITING_ON_HOST_EVIDENCE`。
+- **未证**：**E-09**（故障切换仲裁、同步/异步复制、防旧主继续写入）= `NOT_PROVEN`；**E-14**（提交结果归因能力）= `NOT_PROVEN`。
+- 关键纪律：**`INTERNAL_READ_ONLY_WORK_COMPLETE` ≠ `HOST_EVIDENCE_VERIFIED`**；`E-10/E-12` 的仓库部分仅代表代码/迁移文本，**不代表目标数据库已部署或生效**。
+
+**F-01 未获证不变量（U-1~U-10）**：资源身份统一 / 单调 fencing 版本 / 提交时刻覆盖 / 全入口覆盖 / 崩溃与重连不变量 /
+主节点切换后 generation 单调性 / 权限闭环 / `SERIALIZABLE` 实际约束与外部副作用隔离 / 租约时间语义与 fail-closed /
+去重·排他·归因三项互不推导 —— 全部仍为 `NOT_PROVEN` 或 `BLOCKED`。
+
+```text
+R4_INTERNAL_WORK_COMPLETE = YES（仓库侧五项均已产出）
+HOST_EVIDENCE_COMPLETE = NO（E-01/E-02(外)/E-03/E-08/E-09/E-11/E-12(外)/E-14 待宿主）
+F01_STATUS = OPEN_P0 · CARRIER_DECISION = HOLD
+P3_EXPERIMENT_AUTHORIZED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · PRODUCTION_WRITE_AUTHORIZED = NO
+MULTI_INSTANCE_AUTOMATED_WRITE = NOT_AUTHORIZED · SCHEMA_MIGRATION = HOLD
+RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN · EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · U1_CODE_CLOSURE = UNCHANGED · U2_DESIGN_R21 = 未重开
+BUSINESS_HEARTBEAT_RESTORED = NO · OS_TIMER_RESTORED = NO · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
