@@ -310,6 +310,53 @@ describe('V2-01 PAID_CUSTOMS_API_GATE — 缺失证据一律 fail-closed', () =>
       ]),
     );
   });
+
+  // V2-R1 / CHANGE 05：空值不得被当成"通过"。
+  it('报价缺少有效截止时间 → HOLD(PROVIDER_QUOTE_VALIDITY_REQUIRED)', () => {
+    const result = evaluatePaidCustomsApiGate(
+      input({
+        provider: {
+          providerId: 'provider-sandbox',
+          available: true,
+          quotedCost: '12.00',
+          quoteCurrency: 'USD',
+          quoteValidUntil: null,
+        },
+      }),
+    );
+    expect(result.decision).toBe('HOLD');
+    expect(result.reasonCodes).toContain('PROVIDER_QUOTE_VALIDITY_REQUIRED');
+  });
+
+  it('缺少机会标识 → HOLD(OPPORTUNITY_REFERENCE_REQUIRED)', () => {
+    const result = evaluatePaidCustomsApiGate(
+      input({
+        scope: {
+          organizationId: 'org-1',
+          opportunityId: null,
+          ownerOrganizationId: null,
+          caseFound: true,
+        },
+      }),
+    );
+    expect(result.decision).toBe('HOLD');
+    expect(result.reasonCodes).toContain('OPPORTUNITY_REFERENCE_REQUIRED');
+  });
+
+  it('机会归属未知 → HOLD(OPPORTUNITY_OWNERSHIP_UNKNOWN)', () => {
+    const result = evaluatePaidCustomsApiGate(
+      input({
+        scope: {
+          organizationId: 'org-1',
+          opportunityId: 'opp-1',
+          ownerOrganizationId: null,
+          caseFound: true,
+        },
+      }),
+    );
+    expect(result.decision).toBe('HOLD');
+    expect(result.reasonCodes).toContain('OPPORTUNITY_OWNERSHIP_UNKNOWN');
+  });
 });
 
 describe('V2-01 定点数工具 — 不使用浮点', () => {

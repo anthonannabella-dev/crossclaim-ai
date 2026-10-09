@@ -55,6 +55,8 @@ export type CustomsCallerPath = (typeof CUSTOMS_CALLER_PATHS)[number];
 export type CustomsPaidGateReasonCode =
   | 'FREE_PATH_CANNOT_CALL_PAID_OPERATION'
   | 'OPPORTUNITY_NOT_FOUND'
+  | 'OPPORTUNITY_REFERENCE_REQUIRED'
+  | 'OPPORTUNITY_OWNERSHIP_UNKNOWN'
   | 'OPPORTUNITY_NOT_OWNED'
   | 'NO_ACTIVE_PAID_ENTITLEMENT'
   | 'INSUFFICIENT_VERIFICATION_QUOTA'
@@ -63,6 +65,7 @@ export type CustomsPaidGateReasonCode =
   | 'PROVIDER_NOT_AVAILABLE'
   | 'PROVIDER_QUOTE_MISSING'
   | 'PROVIDER_QUOTE_INVALID'
+  | 'PROVIDER_QUOTE_VALIDITY_REQUIRED'
   | 'PROVIDER_QUOTE_CURRENCY_MISMATCH'
   | 'PROVIDER_QUOTE_EXPIRED'
   | 'PER_CHECK_BUDGET_EXCEEDED'
@@ -207,7 +210,10 @@ function evaluateQuote(
   if (provider.quoteCurrency === null || provider.quoteCurrency !== budget.currency) {
     reasons.push('PROVIDER_QUOTE_CURRENCY_MISMATCH');
   }
-  if (provider.quoteValidUntil !== null) {
+  // V2-R1 / CHANGE 05：报价**必须**带截止时间；缺失不得视为"永不过期"。
+  if (provider.quoteValidUntil === null) {
+    reasons.push('PROVIDER_QUOTE_VALIDITY_REQUIRED');
+  } else {
     const validUntil = Date.parse(provider.quoteValidUntil);
     if (Number.isNaN(validUntil) || validUntil <= now.getTime()) {
       reasons.push('PROVIDER_QUOTE_EXPIRED');
@@ -228,6 +234,13 @@ export function evaluatePaidCustomsApiGate(input: PaidCustomsApiGateInput): Paid
     reasons.push('FREE_PATH_CANNOT_CALL_PAID_OPERATION');
   } else {
     if (!input.scope.caseFound) reasons.push('OPPORTUNITY_NOT_FOUND');
+    // V2-R1 / CHANGE 05：收费操作必须带机会标识与可判定的归属，缺一即 HOLD。
+    if (input.scope.opportunityId === null) {
+      reasons.push('OPPORTUNITY_REFERENCE_REQUIRED');
+    }
+    if (input.scope.opportunityId !== null && input.scope.ownerOrganizationId === null) {
+      reasons.push('OPPORTUNITY_OWNERSHIP_UNKNOWN');
+    }
     if (
       input.scope.opportunityId !== null &&
       input.scope.ownerOrganizationId !== input.scope.organizationId
