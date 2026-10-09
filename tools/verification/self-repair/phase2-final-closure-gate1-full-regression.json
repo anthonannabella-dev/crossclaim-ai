@@ -1,0 +1,42 @@
+{
+  "gate": "CHANGE 4（MSG-20261009-10）/ GATE-1 全量 API 回归 —— 当前（最终候选）HEAD 版本",
+  "issuedBy": "MSG-20261009-10（CHANGE 4：补齐当前 HEAD 的 GATE-1 全量回归；不得以旧 HEAD 结果替代）",
+  "reviewedHead": "c5d05fd4a3a8ddf014ea07c30a1010ca9253e402",
+  "reviewedHeadShort": "c5d05fd4",
+  "branch": "feat/si-rsi-internal-code-repair-v1",
+  "command": "vitest run（apps/api 全量）",
+  "worktreeState": "clean（运行前 git status 为空；HEAD = c5d05fd4）",
+  "database": "隔离库 crossclaim_p3r2_iso（本任务自建；未触碰共享开发库）",
+  "databaseMarker": "127.0.0.1:55432/crossclaim_p3r2_iso",
+  "result": {
+    "testFilesPassed": 491,
+    "testFilesFailed": 0,
+    "testsPassed": 4956,
+    "testsFailed": 0,
+    "exitCode": 0,
+    "durationSeconds": 1534.67
+  },
+  "deltaVsBaseline": "基线（3acfb195）为 490 文件 / 4926 用例；本 HEAD 增加 1 文件 / 30 用例，全部为 PHASE 2 期间新增的 self-repair 测试（分流/扫描/契约），无删除、无失败。",
+  "log": {
+    "name": "full-regression-2026-10-09T01-39-06-737Z.log",
+    "bytes": 173492,
+    "sha256_16": "03255d36e99450f9",
+    "location": "work/self-repair/logs/（工作区，非仓库；未入库以免污染仓库）"
+  },
+  "falsePositiveNote": "汇总脚本按关键字命中的 4 条 “FAIL” 全部是**测试名称**中含 FAILED/fail-closed 的正常通过用例（行首均为 ✓），真实失败数为 0。",
+  "knownHistoricalDebt": "历史登记的 P2E-DB5 隔离债与 broker authorization hook 超时债在本轮全量运行中**未复现**；仍不视为关闭（单次通过不足以关闭历史测试债）。",
+  "notVerified": [
+    "Linux/systemd 实机验收",
+    "真实 Provider / 真实模型联调（REAL_MODEL_INTEGRATION = HOLD）",
+    "生产环境任何行为",
+    "GitHub Actions（本记录仅代表本机隔离库证据）"
+  ],
+  "boundaries": {
+    "modifiedReleaseBranch": false,
+    "modifiedMain": false,
+    "secondRuntimeCreated": false,
+    "prismaSchemaOrMigrationChanged": false,
+    "realProviderWrite": false,
+    "productionDeployment": false
+  }
+}

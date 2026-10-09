@@ -466,9 +466,17 @@ PHASE 3 自动代码修复的错误传播（P0 未来）。
 | --- | --- | --- |
 | 5 声明不是运行时授权（强制条款） | **本轮完成** | 契约常量 `declarationIsNotAuthorization = true`；契约文档 §6.1 写入强制条款（**来源声明只约束解析器**配置；PHASE 3 必须经**受信服务端适配器**取事实并在**执行前重新读取与校验**；禁止以声明对象、登记快照或模型输出代替授权）；测试断言文档含该条款原文 |
 | 6 来源伪装负向断言 | **本轮完成（含如实登记前置条件）** | 形态变体（大小写 / 首尾空白 / 前后缀伪装）一律判违规；静态边界断言：扫描模块中三个事实键**各只出现一次**（仅 fail-closed 默认值），**绝不存在**从载荷 / sourceRefs 反推事实的代码路径；并**如实登记** `runtimeSourceIsolationImplemented = false`、`PHASE3_IMPLEMENTATION_PREREQUISITE = TRUSTED_ADAPTER_SOURCE_PROVENANCE_EXECUTION_TIME_RECHECK`（字符串级声明不能证明来源真实性，故本层不虚报已具备运行时隔离） |
-| 4 当前 HEAD 全量回归 | **PENDING（下一单元）** | 将在一个**包含 CHANGE 5/6 的最终候选 HEAD** 上运行一次完整 API 回归（而非分别跑两次），保存 SHA / 命令 / 退出码 / 统计 / 失败详情 / 证据摘要 |
+| 4 当前 HEAD 全量回归 | **本轮完成** | 在**最终候选 HEAD `c5d05fd4`**（含 CHANGE 5/6）上运行一次完整 API 回归：**491 / 491 测试文件、4956 / 4956 用例全部通过、exit 0**，耗时 1534.67s；证据文件 `tools/verification/self-repair/phase2-final-closure-gate1-full-regression.json`（含日志 SHA256 前 16 位 `03255d36e99450f9`、字节数 173492、运行前工作树 clean） |
 
 门禁：PHASE 2 四套件 **60/60 PASS**；`apps/api tsc --noEmit` **0 error**。
+
+**CHANGE 4 细节（如实登记）**：
+
+- 与基线（`3acfb195`：490 文件 / 4926 用例）相比，本 HEAD 多出 1 个文件 / 30 个用例，**全部是 PHASE 2 期间新增的 self-repair 测试**，
+  无删除、无失败；旧 HEAD 结果不再作为关闭依据（按审计要求）。
+- 汇总脚本按关键字命中的 4 条 “FAIL” 经逐条核对**全部是测试名称**含 `FAILED` / `fail-closed` 的正常通过用例，真实失败数为 0。
+- 历史登记的 P2E-DB5 隔离债与 broker hook 超时债本轮**未复现**；仍**不视为关闭**。
+- 未验证（如实声明）：Linux/systemd 实机、真实 Provider/模型联调（HOLD）、生产环境、GitHub Actions（本记录仅代表本机隔离库证据）。
 
 ## 3. 状态（截至本文件提交）
 
@@ -564,9 +572,10 @@ PHASE2_CLOSED = NO（待 CHANGE 4–6 后最终关闭复审 MSG-20261009-11）
 PHASE3_DESIGN_AUTHORIZED = YES_READ_ONLY（仅只读方案设计；实现授权 NO）
 PHASE2_FINAL_R2_PROGRESS = CHANGE 1 ✅ + CHANGE 2 ✅ + CHANGE 3 ✅（三项 P1 修订全部完成）
 PHASE2_REVIEW_VERDICT = MSG-20261009-10 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A 83707404）
-PHASE2_FINAL_CLOSURE_PROGRESS = CHANGE 5 ✅ / CHANGE 6 ✅ → NEXT = CHANGE 4（最终候选 HEAD 全量回归，不得用旧 HEAD 替代）
+PHASE2_FINAL_CLOSURE_PROGRESS = CHANGE 4 ✅ / CHANGE 5 ✅ / CHANGE 6 ✅（三项 P1 全部完成）
+GATE1_AT_FINAL_HEAD = PASS（c5d05fd4：491/491 文件、4956/4956 用例、exit 0；证据 tools/verification/self-repair/phase2-final-closure-gate1-full-regression.json）
 PHASE3_IMPLEMENTATION_PREREQUISITE = TRUSTED_ADAPTER_SOURCE_PROVENANCE_EXECUTION_TIME_RECHECK（如实登记，未实现）
-NEXT_UNIT = PHASE 2 FINAL CLOSURE：CHANGE 4（在最终候选 HEAD 上跑全量 API 回归并留证）→ 送 MSG-20261009-11
+NEXT_UNIT = 整理并投递 PHASE 2 最终关闭复审（MSG-20261009-11）
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
