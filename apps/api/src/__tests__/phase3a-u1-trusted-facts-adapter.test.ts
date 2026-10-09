@@ -1,8 +1,9 @@
 /**
- * PHASE 3-A — U1：只读权威可信事实适配器 → 端口级单元测试（CHANGE 17–20 修订版）
- * 授权：MSG-20261009-14（U1_READ_ONLY_SUBSET）+ MSG-20261009-15（CHANGE 17–20）
- * 覆盖：授权唯一性 / 多授权冲突 fail-closed、金额与币种显式规则、调用方边界与版本失效、
- *       只读事务包裹全部读取、静态来源断言（不接受候选载荷 / 模型输出，唯一原生 SQL 为只读语句）。
+ * PHASE 3-A — U1：只读权威可信事实适配器 → 端口级单元测试（CHANGE 17–20 + CHANGE 24 修订版）
+ * 授权：MSG-20261009-14（U1_READ_ONLY_SUBSET）+ MSG-20261009-15（CHANGE 17–20）+ MSG-20261009-16（CHANGE 24–25）
+ * 覆盖：授权唯一性 / 多授权冲突 fail-closed、服务端范围策略与必需维度、金额与币种显式规则、
+ *       调用方边界与版本失效、只读事务包裹全部读取、单授权错误范围 fail-closed、
+ *       静态来源断言（不接受候选载荷 / 模型输出，唯一原生 SQL 为只读语句）。
  */
 
 import { readFileSync } from 'node:fs';
@@ -12,17 +13,28 @@ import { describe, expect, it } from 'vitest';
 
 import {
   READ_ONLY_TRANSACTION_SQL,
+  TRUSTED_FACTS_ACTION_SCOPE_POLICY,
   TRUSTED_FACTS_ADAPTER_BOUNDARY,
   TRUSTED_FACTS_CALLERS,
+  TRUSTED_FACTS_SCOPE_DIMENSIONS,
   createTrustedFactsAdapter,
   exceedsMonetaryLimit,
+  missingRequiredScopeDimensions,
   type StandingAuthorizationRecord,
   type TrustedFactsReadPort,
+  type TrustedFactsResourceScope,
 } from '../services/self-repair/trusted-facts-adapter';
 
 const AT = new Date('2026-10-09T03:00:00.000Z');
 
 const org = { id: 'org-u1', identityVersion: 'idv-1' };
+/** 策略要求的必需维度（platformAccountId + provider）齐备的可信范围 */
+const TRUSTED_SCOPE: TrustedFactsResourceScope = {
+  platformAccountId: 'acct-1',
+  provider: 'AMAZON',
+  domain: 'LOGISTICS',
+  jurisdiction: 'US',
+};
 
 const auth = (overrides: Partial<StandingAuthorizationRecord> = {}): StandingAuthorizationRecord => ({
   authorizationId: 'auth-1',
@@ -62,7 +74,7 @@ const makePort = (
         calls.push('withReadOnlyTransaction:enter');
         insideTransaction = true;
         try {
-          return await run();
+          return await run(undefined as never);
         } finally {
           insideTransaction = false;
           calls.push('withReadOnlyTransaction:exit');
@@ -74,7 +86,11 @@ const makePort = (
 
 const adapter = (
   readPort: TrustedFactsReadPort,
-  options: { caller?: string; recheck?: 'CONFIRMED_READ_ONLY' | 'NOT_CONFIRMED' } = {},
+  options: {
+    caller?: string;
+    recheck?: 'CONFIRMED_READ_ONLY' | 'NOT_CONFIRMED';
+    scope?: TrustedFactsResourceScope;
+  } = {},
 ) =>
   createTrustedFactsAdapter({
     readPort,
@@ -82,6 +98,7 @@ const adapter = (
       subjectRef: 'runtime-member-1',
       caller: options.caller ?? 'RUNTIME_MEMBER',
       operationRecheck: options.recheck ?? 'CONFIRMED_READ_ONLY',
+      resourceScope: 'scope' in options ? options.scope : TRUSTED_SCOPE,
     },
     now: () => AT,
   });
@@ -95,6 +112,7 @@ interface FailureCase {
   overrides?: { org?: typeof org | null; auths?: readonly StandingAuthorizationRecord[] };
   caller?: string;
   recheck?: 'CONFIRMED_READ_ONLY' | 'NOT_CONFIRMED';
+  scope?: TrustedFactsResourceScope;
   reason: string;
 }
 
@@ -104,10 +122,48 @@ const failureCases: FailureCase[] = [
   { label: '调用方不在白名单（BUILDER）', request: base, caller: 'BUILDER', reason: 'CALLER_NOT_TRUSTED' },
   { label: '调用方不在白名单（CLIENT）', request: base, caller: 'CLIENT', reason: 'CALLER_NOT_TRUSTED' },
   { label: '调用方为空', request: base, caller: '   ', reason: 'CALLER_NOT_TRUSTED' },
+  { label: '动作类型无服务端范围策略', request: { ...base, actionType: 'unknown.action' }, reason: 'SCOPE_POLICY_NOT_DEFINED' },
+  { label: '可信范围整体缺失', request: base, scope: undefined, reason: 'REQUIRED_SCOPE_MISSING' },
+  { label: '必需维度缺失（platformAccountId）', request: base, scope: { provider: 'AMAZON' }, reason: 'REQUIRED_SCOPE_MISSING' },
+  { label: '必需维度缺失（provider）', request: base, scope: { platformAccountId: 'acct-1' }, reason: 'REQUIRED_SCOPE_MISSING' },
+  {
+    label: '必需维度为空串',
+    request: base,
+    scope: { platformAccountId: 'acct-1', provider: '   ' },
+    reason: 'REQUIRED_SCOPE_MISSING',
+  },
   { label: '组织不存在', request: { ...base, organizationId: 'missing' }, overrides: { org: null }, reason: 'ORGANIZATION_NOT_FOUND' },
   { label: '该组织无任何授权行', request: base, overrides: { auths: [] }, reason: 'AUTHORIZATION_NOT_FOUND' },
-  { label: '资源范围无匹配（provider）', request: { ...base, resourceScope: { provider: 'SHOPIFY' } }, reason: 'AUTHORIZATION_NOT_FOUND' },
-  { label: '资源范围提供了空串', request: { ...base, resourceScope: { provider: '   ' } }, reason: 'AUTHORIZATION_NOT_FOUND' },
+  {
+    label: '单授权但 Provider 不匹配',
+    request: base,
+    scope: { ...TRUSTED_SCOPE, provider: 'SHOPIFY' },
+    reason: 'AUTHORIZATION_NOT_FOUND',
+  },
+  {
+    label: '单授权但账户不匹配',
+    request: base,
+    scope: { ...TRUSTED_SCOPE, platformAccountId: 'acct-other' },
+    reason: 'AUTHORIZATION_NOT_FOUND',
+  },
+  {
+    label: '单授权但可选维度 jurisdiction 不匹配',
+    request: base,
+    scope: { ...TRUSTED_SCOPE, jurisdiction: 'JP' },
+    reason: 'AUTHORIZATION_NOT_FOUND',
+  },
+  {
+    label: '单授权但可选维度 domain 不匹配',
+    request: base,
+    scope: { ...TRUSTED_SCOPE, domain: 'FINANCE' },
+    reason: 'AUTHORIZATION_NOT_FOUND',
+  },
+  {
+    label: '可选维度提供了空串',
+    request: base,
+    scope: { ...TRUSTED_SCOPE, jurisdiction: '  ' },
+    reason: 'AUTHORIZATION_NOT_FOUND',
+  },
   { label: '授权已撤销', request: base, overrides: { auths: [auth({ revocationState: 'REVOKED' })] }, reason: 'AUTHORIZATION_REVOKED' },
   {
     label: '授权未生效（未来生效）',
@@ -122,12 +178,18 @@ const failureCases: FailureCase[] = [
     reason: 'AUTHORIZATION_NOT_EFFECTIVE',
   },
   {
-    label: '多授权冲突（同请求两条有效记录）',
+    label: '多授权冲突（同范围两条有效记录）',
     request: base,
-    overrides: { auths: [auth(), auth({ authorizationId: 'auth-2', authorizationVersion: 8, platformAccountId: 'acct-2' })] },
+    overrides: { auths: [auth(), auth({ authorizationId: 'auth-2', authorizationVersion: 8 })] },
     reason: 'AUTHORIZATION_AMBIGUOUS',
   },
-  { label: '动作类型不在授权范围', request: { ...base, actionType: 'payment.capture' }, reason: 'ACTION_TYPE_NOT_ALLOWED' },
+  { label: '动作类型不在授权范围', request: { ...base, actionType: 'payment.capture' }, reason: 'SCOPE_POLICY_NOT_DEFINED' },
+  {
+    label: '策略内动作但授权行不允许该动作',
+    request: { ...base, actionType: 'internal.repair.propose' },
+    overrides: { auths: [auth({ allowedActionTypes: ['recovery.read'] })] },
+    reason: 'ACTION_TYPE_NOT_ALLOWED',
+  },
   { label: '缺 monetaryAction（默认一律失败，不猜）', request: { organizationId: 'org-u1', actionType: 'recovery.read' }, reason: 'MONETARY_INPUT_INVALID' },
   { label: 'monetaryAction 非布尔', request: { ...base, monetaryAction: 'false' }, reason: 'MONETARY_INPUT_INVALID' },
   { label: '金额动作缺金额', request: { ...base, monetaryAction: true, currency: 'USD' }, reason: 'MONETARY_INPUT_INVALID' },
@@ -157,8 +219,8 @@ const failureCases: FailureCase[] = [
   { label: '运行时复核未确认', request: base, recheck: 'NOT_CONFIRMED', reason: 'OPERATION_RECHECK_NOT_CONFIRMED' },
 ];
 
-describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20）', () => {
-  it('可信事实齐备 ⇒ 返回 facts 与 provenance（含 authorizationId / caller / readScope）', async () => {
+describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）', () => {
+  it('可信事实齐备 ⇒ 返回 facts 与 provenance（含 authorizationId / caller / scopePolicy / readScope）', async () => {
     const result = await adapter(makePort().readPort).resolve(base);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('expected ok');
@@ -185,6 +247,14 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20）', ()
       caller: 'RUNTIME_MEMBER',
       trusted: true,
     });
+    expect(result.provenance.scopePolicy).toEqual({
+      source: 'SERVER_ACTION_POLICY',
+      actionType: 'recovery.read',
+      required: ['platformAccountId', 'provider'],
+      optional: ['domain', 'jurisdiction'],
+      providedDimensions: ['provider', 'platformAccountId', 'domain', 'jurisdiction'],
+      resolvedAt: AT.toISOString(),
+    });
     expect(result.provenance.operationRecheck).toMatchObject({
       source: 'TRUSTED_EXECUTION_CONTEXT',
       recheck: 'CONFIRMED_READ_ONLY',
@@ -208,22 +278,22 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20）', ()
     expect(exact.ok).toBe(true);
   });
 
-  it('期望事实版本与本次读取一致 ⇒ 通过；资源范围提供且匹配 ⇒ 通过', async () => {
-    const matched = await adapter(makePort().readPort).resolve({
-      ...base,
-      expectedFactVersion: 'org:idv-1|auth:7',
-      resourceScope: { provider: 'amazon', platformAccountId: 'acct-1', domain: 'LOGISTICS', jurisdiction: 'US' },
-    });
+  it('仅提供策略要求的必需维度（省略可选维度）⇒ 通过；期望事实版本一致 ⇒ 通过', async () => {
+    const matched = await adapter(makePort().readPort, {
+      scope: { platformAccountId: 'acct-1', provider: 'AMAZON' },
+    }).resolve({ ...base, expectedFactVersion: 'org:idv-1|auth:7' });
     expect(matched.ok).toBe(true);
     if (!matched.ok) throw new Error('expected ok');
-    expect(matched.provenance.factVersion).toBe('org:idv-1|auth:7');
+    expect(matched.provenance.scopePolicy.providedDimensions).toEqual(['provider', 'platformAccountId']);
   });
 
   it.each(failureCases)('$label ⇒ fail-closed（$reason）', async (testCase) => {
     const { readPort } = makePort(testCase.overrides);
-    const result = await adapter(readPort, { caller: testCase.caller, recheck: testCase.recheck }).resolve(
-      testCase.request as never,
-    );
+    const result = await adapter(readPort, {
+      caller: testCase.caller,
+      recheck: testCase.recheck,
+      ...('scope' in testCase ? { scope: testCase.scope } : {}),
+    }).resolve(testCase.request as never);
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('expected failure');
     expect(result.reason).toBe(testCase.reason);
@@ -260,6 +330,21 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20）', ()
     expect(exceedsMonetaryLimit('1e3', '100.0000')).toBe(true);
   });
 
+  it('CHANGE 24：策略与必需维度检查（未知动作 ⇒ 无策略；缺失 / 空串 ⇒ 报告缺失）', () => {
+    expect(TRUSTED_FACTS_ACTION_SCOPE_POLICY['recovery.read']?.required).toEqual(['platformAccountId', 'provider']);
+    expect(TRUSTED_FACTS_SCOPE_DIMENSIONS).toEqual(['provider', 'platformAccountId', 'domain', 'jurisdiction']);
+    expect(missingRequiredScopeDimensions({ required: ['platformAccountId', 'provider'] }, undefined)).toEqual([
+      'platformAccountId',
+      'provider',
+    ]);
+    expect(
+      missingRequiredScopeDimensions({ required: ['platformAccountId', 'provider'] }, { platformAccountId: '', provider: 'AMAZON' }),
+    ).toEqual(['platformAccountId']);
+    expect(
+      missingRequiredScopeDimensions({ required: ['platformAccountId', 'provider'] }, { platformAccountId: 'acct-1', provider: 'AMAZON' }),
+    ).toEqual([]);
+  });
+
   it('接口不接受候选载荷 / 模型输出；唯一原生 SQL 是只读事务语句', () => {
     const source = readFileSync(path.resolve(__dirname, '../services/self-repair/trusted-facts-adapter.ts'), 'utf8');
     expect(source.includes('payload')).toBe(false);
@@ -289,6 +374,9 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20）', ()
       failsClosedOnAuthorizationConflict: true,
       supportsExpectedFactVersion: true,
       allReadsInsideReadOnlyTransaction: true,
+      requiresServerScopePolicy: true,
+      requiresTrustedResourceScope: true,
+      scopeValuesFromTrustedContextOnly: true,
     });
   });
 });

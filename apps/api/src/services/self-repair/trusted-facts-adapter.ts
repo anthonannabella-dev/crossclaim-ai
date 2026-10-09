@@ -2,7 +2,8 @@
  * PHASE 3-A — U1：只读权威可信事实适配器（READ-ONLY）
  * ---------------------------------------------------------------
  * 授权依据（历史）：MSG-20261009-14 `PHASE3_A_MINIMAL_SCOPE_AUTHORIZED = YES`，授权单元 = `U1_READ_ONLY_SUBSET`。
- * 修订依据（本轮）：MSG-20261009-15 → **CHANGE 17–20**，语义与签名收口见设计文档 §17。
+ * 修订依据：MSG-20261009-15 → **CHANGE 17–20**（设计文档 §17）；
+ *           MSG-20261009-16 → **CHANGE 24–25**（U1 FINAL-R3，设计文档 §18）。
  *
  * **只读边界（硬约束）**
  *   - 只执行 SELECT：读取 Organization 身份 + 该组织**全部** StandingAuthorization 行；
@@ -13,11 +14,13 @@
  *
  * **信任边界与来源约束**
  *   - `organizationId` 来自服务端会话 / 授权上下文，不是请求载荷字段；
- *   - `caller` 与 `operationRecheck` 由可信执行上下文注入（**不得**来自请求 / 客户端 / 模型）；
+ *   - `caller` / `operationRecheck` / **`resourceScope`** 由可信执行上下文注入（**不得**来自请求 / 客户端 / 模型）；
  *   - 调用方白名单：`SERVER_REQUEST_GATE` / `RUNTIME_MEMBER`，其余一律 `CALLER_NOT_TRUSTED`；
+ *   - **CHANGE 24**：每个 `actionType` 的**必需范围维度由服务端动作策略决定**（不由调用者决定）；
+ *     必需维度缺失 / 空串 / 来源不可信 ⇒ fail-closed；只有策略判定为可选的维度才允许缺省；
  *   - 任一事实无法由可信来源确定 ⇒ fail-closed（ok:false + 稳定原因码），**不猜测、不降级**。
  *
- * 产出：`TriageTrustedFacts`（直接喂给 `triageFaultIncident`）+ `provenance`（来源、主体、版本、读取范围、读取时间）。
+ * 产出：`TriageTrustedFacts`（直接喂给 `triageFaultIncident`）+ `provenance`（来源、主体、版本、范围策略、读取范围、读取时间）。
  */
 
 import type { Prisma, PrismaClient } from '@prisma/client';
@@ -27,6 +30,22 @@ import type { TriageTrustedFacts } from './fault-triage';
 /** CHANGE 19：可信调用方白名单（由服务端装配注入；不得来自请求 / 客户端 / 模型）。 */
 export const TRUSTED_FACTS_CALLERS = ['SERVER_REQUEST_GATE', 'RUNTIME_MEMBER'] as const;
 export type TrustedFactsCaller = (typeof TRUSTED_FACTS_CALLERS)[number];
+
+/** CHANGE 17：资源范围维度全集。 */
+export const TRUSTED_FACTS_SCOPE_DIMENSIONS = ['provider', 'platformAccountId', 'domain', 'jurisdiction'] as const;
+export type TrustedFactsScopeDimension = (typeof TRUSTED_FACTS_SCOPE_DIMENSIONS)[number];
+
+/**
+ * CHANGE 24：**服务端动作策略** —— 每个 `actionType` 的必需 / 可选范围维度。
+ * 关键点：必需维度由**服务端策略**决定；调用者既不能决定必需维度，也不能通过省略维度放大授权匹配面。
+ * 未登记的动作类型 ⇒ `SCOPE_POLICY_NOT_DEFINED`（fail-closed，不猜测）。
+ */
+export const TRUSTED_FACTS_ACTION_SCOPE_POLICY: Readonly<
+  Record<string, { required: readonly TrustedFactsScopeDimension[]; optional: readonly TrustedFactsScopeDimension[] }>
+> = {
+  'recovery.read': { required: ['platformAccountId', 'provider'], optional: ['domain', 'jurisdiction'] },
+  'internal.repair.propose': { required: ['platformAccountId', 'provider'], optional: ['domain', 'jurisdiction'] },
+};
 
 /** CHANGE 20：只读事务语句（唯一允许的原生 SQL；仅此一条，且为只读约束）。 */
 export const READ_ONLY_TRANSACTION_SQL = 'SET TRANSACTION READ ONLY';
@@ -53,7 +72,7 @@ export interface StandingAuthorizationRecord {
   scopeDigest: string;
 }
 
-/** CHANGE 17：请求侧资源范围约束（**未提供该维度 = 不限该维度**；提供了但为空串 = 不匹配）。 */
+/** CHANGE 24：资源范围（**可信来源**：由服务端执行上下文注入；未提供的可选维度不构成约束）。 */
 export interface TrustedFactsResourceScope {
   provider?: string;
   platformAccountId?: string;
@@ -63,7 +82,8 @@ export interface TrustedFactsResourceScope {
 
 /**
  * 只读读取端口（实现必须只做 SELECT）。
- * `withReadOnlyTransaction` 必须让 `findOrganization` / `listStandingAuthorizations` 在**同一只读事务**内执行。
+ * `withReadOnlyTransaction` 必须让 `findOrganization` / `listStandingAuthorizations` 在**同一只读事务**内执行；
+ * 回调接收该事务句柄，便于**独立证据**在**同一事务**内验证写入被数据库拒绝（CHANGE 25）。
  */
 export interface TrustedFactsReadPort {
   /** 组织是否存在于持久化数据关系（读取 identityVersion）。 */
@@ -78,7 +98,7 @@ export interface TrustedFactsReadPort {
     organizationId: string;
   }): Promise<readonly StandingAuthorizationRecord[]>;
   /** CHANGE 20：把全部读取包在只读事务内。已在只读事务内时可复用（不得重复开启）。 */
-  withReadOnlyTransaction<T>(run: () => Promise<T>): Promise<T>;
+  withReadOnlyTransaction<T>(run: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T>;
 }
 
 /** 可信执行上下文（由服务端装配注入；**不是**请求 / 客户端 / 模型输入）。 */
@@ -89,6 +109,8 @@ export interface TrustedExecutionContext {
   caller: string;
   /** 对「只读 / 幂等未生效 / 未确认」的再次确认结果。 */
   operationRecheck: 'CONFIRMED_READ_ONLY' | 'CONFIRMED_IDEMPOTENT_NOT_APPLIED' | 'NOT_CONFIRMED';
+  /** CHANGE 24：**可信资源范围**（服务端解析注入；策略要求的维度必须齐备）。 */
+  resourceScope?: TrustedFactsResourceScope;
 }
 
 export interface TrustedFactsProvenance {
@@ -113,6 +135,15 @@ export interface TrustedFactsProvenance {
     source: 'TRUSTED_EXECUTION_CONTEXT';
     caller: string;
     trusted: true;
+    resolvedAt: string;
+  };
+  /** CHANGE 24：本次采用的服务端范围策略与已提供的可信范围维度。 */
+  scopePolicy: {
+    source: 'SERVER_ACTION_POLICY';
+    actionType: string;
+    required: readonly TrustedFactsScopeDimension[];
+    optional: readonly TrustedFactsScopeDimension[];
+    providedDimensions: readonly TrustedFactsScopeDimension[];
     resolvedAt: string;
   };
   operationRecheck: {
@@ -141,6 +172,8 @@ export type TrustedFactsFailureReason =
   | 'AUTHORIZATION_NOT_EFFECTIVE'
   | 'AUTHORIZATION_AMBIGUOUS'
   | 'ACTION_TYPE_NOT_ALLOWED'
+  | 'SCOPE_POLICY_NOT_DEFINED'
+  | 'REQUIRED_SCOPE_MISSING'
   | 'MONETARY_INPUT_INVALID'
   | 'MONETARY_LIMIT_EXCEEDED'
   | 'STALE_FACT_VERSION'
@@ -154,7 +187,7 @@ export interface TrustedFactsAdapter {
   resolve(input: {
     /** 由服务端**会话 / 授权上下文**提供（不是候选载荷字段）。 */
     organizationId: string;
-    /** 待判定的动作类型（用于授权范围校验）。 */
+    /** 待判定的动作类型（用于授权范围校验与 CHANGE 24 范围策略查找）。 */
     actionType: string;
     /** CHANGE 18：**显式**声明是否涉及金额动作（缺失 / 非布尔 ⇒ fail-closed）。 */
     monetaryAction: boolean;
@@ -164,8 +197,6 @@ export interface TrustedFactsAdapter {
     currency?: string;
     /** CHANGE 19：调用方期望的事实版本；不一致 ⇒ STALE_FACT_VERSION。 */
     expectedFactVersion?: string;
-    /** CHANGE 17：资源范围约束（未提供该维度 = 不限该维度）。 */
-    resourceScope?: TrustedFactsResourceScope;
   }): Promise<TrustedFactsResolution>;
 }
 
@@ -229,6 +260,20 @@ function parseMonetaryInput(request: {
   if (!DECIMAL_4DP.test(amountUsd)) return { ok: false };
   if (trimOrEmpty(request.currency).toUpperCase() !== 'USD') return { ok: false };
   return { ok: true, amountUsd, currency: 'USD' };
+}
+
+/**
+ * CHANGE 24：校验策略要求的**必需范围维度**是否齐备（缺失 / 空串 / 非法类型 ⇒ fail-closed）。
+ * 注意：范围值来自**可信执行上下文**，而不是请求；调用者无法通过省略维度放大匹配面。
+ */
+export function missingRequiredScopeDimensions(
+  policy: { required: readonly TrustedFactsScopeDimension[] },
+  scope: TrustedFactsResourceScope | undefined,
+): readonly TrustedFactsScopeDimension[] {
+  return policy.required.filter((dimension) => {
+    const value = scope === undefined ? undefined : scope[dimension];
+    return typeof value !== 'string' || value.trim() === '';
+  });
 }
 
 /** CHANGE 17：资源范围匹配（未提供的维度不构成约束；提供了但为空串 = 不匹配）。 */
@@ -312,17 +357,23 @@ export function createTrustedFactsAdapter(input: {
         return fail('OPERATION_RECHECK_NOT_CONFIRMED');
       }
 
-      // ③ CHANGE 18：金额 / 币种显式规则（先做形态校验，再进只读事务）
+      // ③ CHANGE 24：服务端动作策略决定必需范围维度；必需维度必须由可信上下文提供
+      const policy = TRUSTED_FACTS_ACTION_SCOPE_POLICY[trimOrEmpty(request.actionType)];
+      if (policy === undefined) return fail('SCOPE_POLICY_NOT_DEFINED');
+      const trustedScope = input.executionContext.resourceScope;
+      if (missingRequiredScopeDimensions(policy, trustedScope).length > 0) return fail('REQUIRED_SCOPE_MISSING');
+
+      // ④ CHANGE 18：金额 / 币种显式规则（先做形态校验，再进只读事务）
       const monetary = parseMonetaryInput(request);
       if (!monetary.ok) return fail('MONETARY_INPUT_INVALID');
 
-      // ④ CHANGE 20：全部读取置于**只读事务**内
+      // ⑤ CHANGE 20：全部读取置于**只读事务**内
       return input.readPort.withReadOnlyTransaction(async (): Promise<TrustedFactsResolution> => {
         const organization = await input.readPort.findOrganization({ organizationId });
         if (organization === null) return fail('ORGANIZATION_NOT_FOUND');
 
         const rows = await input.readPort.listStandingAuthorizations({ organizationId });
-        const selection = selectAuthorization(rows, request.actionType, request.resourceScope, at);
+        const selection = selectAuthorization(rows, request.actionType, trustedScope, at);
         if (!selection.ok) return fail(selection.reason);
         const authorization = selection.record;
 
@@ -340,6 +391,11 @@ export function createTrustedFactsAdapter(input: {
         if (request.expectedFactVersion !== undefined) {
           if (trimOrEmpty(request.expectedFactVersion) !== factVersion) return fail('STALE_FACT_VERSION');
         }
+
+        const providedDimensions = TRUSTED_FACTS_SCOPE_DIMENSIONS.filter((dimension) => {
+          const value = trustedScope === undefined ? undefined : trustedScope[dimension];
+          return typeof value === 'string' && value.trim() !== '';
+        });
 
         const provenance: TrustedFactsProvenance = {
           organizationIdResolved: {
@@ -362,6 +418,14 @@ export function createTrustedFactsAdapter(input: {
             source: 'TRUSTED_EXECUTION_CONTEXT',
             caller,
             trusted: true,
+            resolvedAt: at.toISOString(),
+          },
+          scopePolicy: {
+            source: 'SERVER_ACTION_POLICY',
+            actionType: trimOrEmpty(request.actionType),
+            required: policy.required,
+            optional: policy.optional,
+            providedDimensions,
             resolvedAt: at.toISOString(),
           },
           operationRecheck: {
@@ -391,7 +455,7 @@ export function createTrustedFactsAdapter(input: {
 }
 
 /**
- * CHANGE 20：在**只读事务**内执行回调（`SET TRANSACTION READ ONLY` 是事务内第一条语句）。
+ * CHANGE 20 / 25：在**只读事务**内执行回调（`SET TRANSACTION READ ONLY` 是事务内第一条语句）。
  * 事务内任何写入（INSERT / UPDATE / DELETE / DDL）都会被 PostgreSQL 直接拒绝 —— 这是可执行的只读证据。
  */
 export async function runInReadOnlyTransaction<T>(
@@ -463,11 +527,12 @@ export function createPrismaTrustedFactsReadPort(input: { prisma: PrismaClient }
     },
     async withReadOnlyTransaction(run) {
       // 已在只读事务内 ⇒ 复用（不得嵌套开启第二个事务）
-      if (activeTransaction !== null) return run();
+      if (activeTransaction !== null) return run(activeTransaction);
       return runInReadOnlyTransaction(input.prisma, async (tx) => {
         activeTransaction = tx;
         try {
-          return await run();
+          // 回调收到的是**同一个**只读事务句柄（CHANGE 25：公共入口证据可在该事务内验证写入被拒）
+          return await run(tx);
         } finally {
           activeTransaction = null;
         }
@@ -496,4 +561,8 @@ export const TRUSTED_FACTS_ADAPTER_BOUNDARY = {
   failsClosedOnAuthorizationConflict: true,
   supportsExpectedFactVersion: true,
   allReadsInsideReadOnlyTransaction: true,
+  /** CHANGE 24 */
+  requiresServerScopePolicy: true,
+  requiresTrustedResourceScope: true,
+  scopeValuesFromTrustedContextOnly: true,
 } as const;
