@@ -3500,3 +3500,97 @@ EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READ
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 HEARTBEAT_RESTORED = NO · OS_TIMER_RESTORED = NO
 ```
+
+---
+
+### 2.54 MSG-20261009-48 裁决归档 = **PASS WITH REVISE**（R2 只读收口有条件接受；新增 CHANGE 91/92（P0）+ 93（P1）；F-01 仍 OPEN_P0）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-48] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（178/178，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=4306 / NORM_LINES=178 / FNV=5d633187`。
+> 锚点：`BASELINE=f611847e`、`REVIEWED_HEAD=f4d83670`、`U1_CODE_HEAD=9ee36837`。
+
+**独立核验**：`f611847e → f4d83670` PASS、差异 **1 提交 / 2 文件**、**产品代码变更 0**、
+**R2 文档 Git blob `a8890f6e…` PASS**；未独立复算 SHA-256、未做实际 PostgreSQL/Linux 验证。
+审计方明确：**本轮不是实施验收通过**，而是前置条件文档的**有条件接受**；且「R2 的设计收口已达到有条件接受标准，**不需要重新开展整轮设计**」。
+
+**逐项**：`CHANGE 86 = PASS_SCOPED`、`CHANGE 87 = REVISE`、`CHANGE 88 = PASS`、`CHANGE 89 = REVISE`、`CHANGE 90 = PASS_SCOPED`。
+
+#### 2.54.1 新增 REQUIRED_CHANGES（91/92 为 P0，93 为 P1）
+
+- **CHANGE 91（P0）CAS 与 `FENCE_CONTRACT` 的等价性必须收紧**：接管侧
+  `UPDATE fence SET owner=:new, gen=gen+1 WHERE gen=:old` **可以**负责**原子版本递增**，
+  但**不能单独视为完整 fencing 等价实现**——仅凭它**无法证明写入事务在提交前一直持有有效栅栏**。必须明确：
+  ①接管侧 CAS 负责原子递增；②写入侧仍必须在**同一事务**中取得**可验证的栅栏保护**；
+  ③保护必须**一直覆盖至提交或回滚**；④**所有**受保护写入入口遵循同一协议；
+  ⑤**不得**因 CAS 返回一行就声称候选写入已安全提交。
+  另：写入事务的校验应包含 **`state`、租约有效性及授权范围**，而不只是 `ownerRef` 与 `generation`。
+- **CHANGE 92（P0）S3 的确定性时序与数据库行锁冲突**：若旧事务**已持有** `FENCE_ROW` 行锁，
+  新持有者**无法**在旧事务结束前完成对同一行的接管——**这正是 fencing 协议应提供的保护**。
+  因此**不能**把「四阶段全部成功发生」设为所有测试路径的前提，否则**正确实现也可能无法完成测试**。
+  必须拆为两个场景：
+
+| 场景 | 预期结果 |
+| --- | --- |
+| 旧事务**先取得**栅栏行锁 | **接管必须等待**旧事务结束；**不得插入**旧事务校验至提交之间 |
+| 新持有者**先完成接管** | 旧事务**不得**以旧 `generation` 成功提交受保护写入 |
+
+  并须区分四种状态：旧事务**已开始但尚未取得栅栏** / **已取得栅栏但尚未提交** / 校验时 **token 已失效** /
+  **旧事务先合法提交、新持有者随后接管**——其中**最后一种不属于违反 fencing 顺序**。
+  测试目标是**证明非法提交不会发生**，而不是要求所有事务按人为指定顺序成功推进。
+- **CHANGE 93（P1）只读取证命令与证据充分性修订**：
+
+| 证据项 | 问题 | 修订要求 |
+| --- | --- | --- |
+| **E-08** | `role_table_grants` 不足以证明完整有效权限 | 补 role membership、schema 权限、对象所有者、继承角色、`SECURITY DEFINER` 函数与 RLS 信息 |
+| **E-09** | 复制状态不足以证明切换期只有一个有效写入主节点 | 补故障切换仲裁、fencing、同步/异步复制、**防止旧主继续写入**的机制 |
+| **E-10** | lease 状态计数不能证明事务边界 | 必须结合真实代码路径与数据库操作语义 |
+| **E-11** | `systemctl cat` 可能含敏感环境配置 | **仅提取必要非秘密字段并脱敏** |
+| **E-12** | 单会话 `session_replication_role` 不代表其他会话 | 补角色与连接池配置、实际触发器生效状态 |
+| **E-14** | `pg_current_xact_id()` **可能分配事务 ID** | 只读取证优先用 **`pg_current_xact_id_if_assigned()`**；**不得**把"事务 ID 存在"当作提交证据 |
+| **E-15** | `systemd-analyze security` 只是配置风险分析 | 须同时核验**实际进程身份、unit 覆盖与生效属性** |
+
+  另：**E-13** 的 inode 核验保留，但**仅重启前后比较不足以**证明运行过程中不会被替换；
+  **E-16** 应增加**阻断传播时间上限、阻断确认信号、失效时默认停止写入**的规则。
+  **关键新增要求**：**只读 SQL ≠ 可在生产随意执行**——即使不修改业务表，也应**先获得宿主只读取证授权**，
+  并限制查询权限、超时与输出内容。
+
+#### 2.54.2 路线 A 的最终技术判断（A-7 / A-8）
+
+建议继续优先评审 **durable lease**，但 **A-1~A-6 只是必要条件框架**，**不能认定已完备或已证明**。建议显式增加：
+
+- **A-7**：数据库**主节点切换**后，已确认的 fencing generation **不得因异步复制回退而失去单调性保证**。
+- **A-8**：数据库角色、对象所有权与特权入口构成**可审计的权限闭环**，**不存在未受控的应用旁路**。
+
+（作为 A-5/A-6 的细化验收条件，**不要求重开 R21**。）
+并特别区分：**已有 `AutonomyLease` 并不意味着该表可直接作为满足 `FENCE_CONTRACT` 的载体**——
+只有在完成**资源身份、行锁、版本单调性、事务边界与权限**的只读设计评审后，
+才能决定是复用既有对象，还是未来申请新增 `FENCE_ROW`。
+
+#### 2.54.3 下一步授权与宿主顺序
+
+```text
+NEXT_AUTHORIZED = PHASE3_A_U2_PRECONDITION_R3_READ_ONLY_CHANGES_91_TO_93
+  （仅修订 CHANGE 91–93；接收宿主已授权采集的只读证据；完成路线 A 静态设计论证与写入域映射）
+不允许：运行 P3 / 创建 FENCE_ROW / 迁移 schema / 恢复 runtime / 开放生产写入
+
+宿主下一步优先提交：E-01、E-02、E-03、E-08、E-10、E-11、E-12 的【只读事实】；
+  E-09、E-14 应在【正式选择 fencing 方案前】完成核验；其余证据在后续授权前补齐。
+修订完成、静态设计论证收口且必要宿主证据充分后，才能提出【单独的隔离 PostgreSQL 16 实验授权申请】。
+
+最终提醒（审计方原文要点）：完成 CHANGE 91–93 【不代表】F-01 自动关闭；F-01 仍须独立评审。
+```
+
+```text
+MSG-20261009-48_FINAL_VERDICT = PASS_WITH_REVISE
+MSG-20261009-48_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 178/178；FNV1A 5d633187）
+CHANGE_86=PASS_SCOPED · CHANGE_87=REVISE · CHANGE_88=PASS · CHANGE_89=REVISE · CHANGE_90=PASS_SCOPED
+REQUIRED_CHANGES=91_P0,92_P0,93_P1
+F01_STATUS=OPEN_P0 · PREFERRED_LOCK_ROUTE=LEASE_REVIEW_FIRST · LOCK_PROTOCOL_UNIFORMITY=NOT_PROVEN
+P3_EXPERIMENT_AUTHORIZED=NO · U2_IMPLEMENTATION_AUTHORIZED=NO · PRODUCTION_WRITE_AUTHORIZED=NO
+U1_REOPEN=NO · U2_DESIGN_R21=NOT_REOPENED · PRODUCTION_READY=NO
+NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R3_READ_ONLY_CHANGES_91_TO_93
+SCHEMA_MIGRATION=HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD · AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```

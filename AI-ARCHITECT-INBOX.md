@@ -182033,3 +182033,481 @@ MSG-20261009-47 = PASS WITH REVISE。
 
 本次仅通过 GitHub 进行只读核验，没有修改仓库、运行测试或连接生产数据库。
 ```
+
+### [MSG-20261009-48] U2 前置条件 R2 只读收口 = **PASS WITH REVISE**（`R2_READONLY_DELIVERABLE=ACCEPTED_WITH_REQUIRED_CHANGES`；逐项：`CHANGE 86 = PASS_SCOPED`、`87 = REVISE`、`88 = PASS`、`89 = REVISE`、`90 = PASS_SCOPED`；新增 **CHANGE 91/92（P0）+ 93（P1）**；`F01_STATUS=OPEN_P0`、`PREFERRED_LOCK_ROUTE=LEASE_REVIEW_FIRST`、`P3_EXPERIMENT_AUTHORIZED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`PRODUCTION_WRITE_AUTHORIZED=NO`）—— **独立核验**：基线 `f611847e → f4d83670` PASS、差异 **1 提交 / 2 文件**、**产品代码变更 0**、**R2 文档 Git blob `a8890f6e…` PASS**；未独立复算 SHA-256、未做实际 PostgreSQL/Linux 验证；审计方明确「本轮**不是实施验收通过**，而是前置条件文档的**有条件接受**」「R2 的设计收口已达到有条件接受标准，不需要重新开展整轮设计」；**三项必须收口的技术问题**：**CHANGE 91（P0）CAS 与 `FENCE_CONTRACT` 的等价性必须收紧**——接管侧 `UPDATE fence SET owner=:new, gen=gen+1 WHERE gen=:old` **可以**负责原子版本递增，但**不能单独视为完整 fencing 等价实现**：仅凭它**无法证明写入事务在提交前一直持有有效栅栏** ⇒ 必须明确①接管侧 CAS 负责原子递增②写入侧仍须在**同一事务**中取得可验证的栅栏保护③保护必须**一直覆盖至提交或回滚**④**所有**受保护写入入口遵循同一协议⑤**不得**因 CAS 返回一行就声称候选写入已安全提交；此外写入事务的校验应包含 **`state`、租约有效性及授权范围**，而不只是 `ownerRef` 与 `generation`；**CHANGE 92（P0）S3 的确定性时序与数据库行锁冲突**——若旧事务**已持有** `FENCE_ROW` 行锁，则新持有者**无法**在旧事务结束前完成对同一行的接管（**这正是 fencing 协议应提供的保护**），因此**不能**把「四阶段全部成功发生」设为所有测试路径的前提，否则**正确实现也可能无法完成测试**；须拆为两个场景：**①旧事务先取得栅栏行锁 ⇒ 接管必须等待旧事务结束，不得插入旧事务校验至提交之间**；**②新持有者先完成接管 ⇒ 旧事务不得以旧 generation 成功提交受保护写入**；并须区分四种状态（旧事务**已开始但未取得栅栏** / **已取得栅栏但未提交** / 校验时 **token 已失效** / **先合法提交随后被合法接管**），其中**「旧写入先提交、随后合法接管」不属于违反 fencing 顺序**；测试目标是**证明非法提交不会发生**，而非要求所有事务按人为指定顺序成功推进；**CHANGE 93（P1）只读取证命令与证据充分性修订**——逐项：**E-08** `role_table_grants` 不足以证明完整有效权限 ⇒ 补 role membership、schema 权限、对象所有者、继承角色、`SECURITY DEFINER` 函数与 RLS 信息；**E-09** 复制状态不足以证明切换期只有一个有效写入主节点 ⇒ 补故障切换仲裁、fencing、同步/异步复制与**防止旧主继续写入**的机制；**E-10** lease 状态计数不能证明事务边界 ⇒ 必须结合真实代码路径与数据库操作语义；**E-11** `systemctl cat` 可能含敏感环境配置 ⇒ **仅提取必要非秘密字段并脱敏**；**E-12** 单会话 `session_replication_role` 不代表其他会话 ⇒ 补角色与连接池配置及实际触发器生效状态；**E-14** `pg_current_xact_id()` **可能分配事务 ID** ⇒ 只读取证优先用 **`pg_current_xact_id_if_assigned()`**，且**不得把事务 ID 存在当作提交证据**；**E-15** `systemd-analyze security` 只是配置风险分析、不是运行时权限的完整证明 ⇒ 须同时核验实际进程身份、unit 覆盖与生效属性；另：**E-13** 的 inode 核验保留，但**仅重启前后比较不足以**证明运行过程中不会被替换；**E-16** 应增加**阻断传播时间上限、阻断确认信号、失效时默认停止写入**的规则；并新增关键要求：**只读 SQL ≠ 可在生产随意执行**——即使不修改业务表，也应**先获得宿主只读取证授权**，并限制查询权限、超时与输出内容；**路线 A 的最终技术判断**：建议继续优先评审 durable lease，但 A-1~A-6 只是**必要条件框架**、**不能认定已完备或已证明**；建议显式增加 **A-7**（主节点切换后已确认的 fencing generation **不得因异步复制回退而失去单调性保证**）与 **A-8**（数据库角色、对象所有权与特权入口构成**可审计的权限闭环**、不存在未受控应用旁路），作为 A-5/A-6 的细化验收条件、**不要求重开 R21**；并特别区分：**已有 `AutonomyLease` 并不意味着该表可直接作为满足 `FENCE_CONTRACT` 的载体**——只有在完成**资源身份、行锁、版本单调性、事务边界与权限**的只读设计评审后，才能决定是复用既有对象还是未来申请新增 `FENCE_ROW`；**下一步授权**：允许进入更接近实施的只读证据核验阶段但授权须严格限定 ⇒ **`NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R3_READ_ONLY_CHANGES_91_TO_93`**（仅修订 CHANGE 91–93、接收宿主已授权采集的只读证据、完成路线 A 的静态设计论证与写入域映射；**不允许**运行 P3、创建 `FENCE_ROW`、迁移 schema、恢复 runtime、开放生产写入）；宿主下一步应优先提交 **E-01/E-02/E-03/E-08/E-10/E-11/E-12 的只读事实**，**E-09/E-14 应在正式选择 fencing 方案前完成核验**，其余证据在后续授权前补齐；修订完成、静态设计论证收口且必要宿主证据充分后，才能提出**单独的隔离 PostgreSQL 16 实验授权申请**；审计方最终强调：**完成 CHANGE 91–93 不代表 F-01 自动关闭，F-01 仍须独立评审**；`U1_REOPEN=NO`、`U2_DESIGN_R21=NOT_REOPENED`、`PRODUCTION_READY=NO`、`SCHEMA_MIGRATION=HOLD`、`RUNTIME_WIRING/MODEL_CALL/PROVIDER_CALL=FORBIDDEN`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`；本轮审计仅阅读 GitHub、**未修改仓库、未连接数据库、未运行测试、未恢复任何定时任务**；reviewed ref `f4d83670785eceaf2040ed0995dd2c21e5dabdf2`
+
+```text
+MSG-20261009-48｜CrossClaim AI 独立审计裁决
+PASS WITH REVISE · 有条件通过
+
+审计对象： SI/RSI INTERNAL CODE REPAIR V1
+审计阶段： PHASE 3-A · U2 前置条件 R2 只读收口
+固定提交： f4d83670785eceaf2040ed0995dd2c21e5dabdf2
+审计日期： 2026-10-09
+
+一、最终裁决
+
+R2 的主要修订方向正确，CHANGE 86–90 的核心要求已经覆盖，允许结束本轮大规模设计讨论。但仍有三项必须收口的技术问题，不批准 F-01 关闭，也不批准进入实施或实验。
+
+本次已通过 GitHub 连接器读取固定提交中的原始 R2 文档，并独立核验 Git 比较结果，不仅依据送审摘要。
+
+核验结果：
+
+核验项目
+
+
+
+独立结果
+
+
+
+
+基线 f611847e → f4d83670
+
+
+
+PASS
+
+
+
+
+差异提交数
+
+
+
+1，PASS
+
+
+
+
+差异文件数
+
+
+
+2，PASS
+
+
+
+
+产品代码变更
+
+
+
+0，PASS
+
+
+
+
+R2 文档 Git blob
+
+
+
+a8890f6e…，PASS
+
+
+
+
+R2 文档 SHA-256
+
+
+
+未独立复算
+
+
+
+
+实际 PostgreSQL / Linux 验证
+
+
+
+NOT VERIFIED
+
+
+
+
+F-01 锁协议统一
+
+
+
+OPEN_P0
+
+
+
+
+R2 只读设计收口
+
+
+
+PASS WITH REVISE
+
+原始核验对象：
+GitHub 固定提交
+
+二、CHANGE 86–90 逐项裁决
+
+Change
+
+
+
+裁决
+
+
+
+说明
+
+
+
+
+86 · F-01 锁协议
+
+
+
+PASS_SCOPED
+
+
+
+三类语义、三条路线及 A-1~A-6 已列明；成立条件需补充主库一致性与权限证据
+
+
+
+
+87 · FENCE_CONTRACT
+
+
+
+REVISE
+
+
+
+行锁方案成立方向正确，但 CAS 等价性及事务全序表述需收紧
+
+
+
+
+88 · 三项独立证明
+
+
+
+PASS
+
+
+
+证明范围与不能互推的规则正确
+
+
+
+
+89 · S3/S7/S8
+
+
+
+REVISE
+
+
+
+S3 存在与行锁方案冲突的执行时序，需明确测试方式
+
+
+
+
+90 · S9/S10/S11
+
+
+
+PASS_SCOPED
+
+
+
+故障场景覆盖适当，尚不能推导生产环境安全
+
+本轮不是实施验收通过，而是前置条件文档的有条件接受。
+
+三、必须修订的技术问题
+CHANGE 91（P0）｜CAS 与 FENCE_CONTRACT 的等价性必须收紧
+
+当前文档的主方案是正确的：
+
+SELECT FOR UPDATE → 校验 owner/generation → 受保护写入 → COMMIT
+
+但文档中列出的替代方案：
+
+SQL
+UPDATE fence
+SET owner = :new,
+    gen = gen + 1
+WHERE gen = :old;
+
+不能单独视为完整 fencing 等价实现。
+
+原因是这条 SQL 可以用于接管时的版本递增，但仅凭它并不能证明写入事务在提交前一直持有有效栅栏。
+
+必须明确：
+
+接管侧 CAS 可以负责原子版本递增。
+
+写入侧仍必须在同一事务中取得可验证的栅栏保护。
+
+栅栏保护必须一直覆盖至提交或回滚。
+
+所有受保护写入入口必须遵循相同协议。
+
+不能因为 CAS 返回一行就声称候选写入已安全提交。
+
+此外，写入事务的校验应包含 state、租约有效性及授权范围，而不只是 ownerRef 和 generation。
+
+裁决：CHANGE 87 = REVISE，登记 CHANGE 91。
+
+CHANGE 92（P0）｜S3 的确定性时序与数据库行锁冲突
+
+当前 S3 要求：
+
+纯文本
+① 旧事务已开始，未提交
+② 旧 token 失效
+③ 新持有者接管并提交
+④ 旧事务再尝试提交
+
+如果旧事务已持有 FENCE_ROW 行锁，那么新持有者无法在旧事务结束之前完成对同一行的接管。
+
+这正是 fencing 协议应当提供的保护。
+
+因此，不能把上述四阶段全部成功发生设为所有测试路径的前提，否则正确实现也可能无法完成测试。
+
+应拆分两个场景：
+
+场景
+
+
+
+预期结果
+
+
+
+
+旧事务先取得栅栏行锁
+
+
+
+接管必须等待旧事务结束；不得插入旧事务校验至提交之间
+
+
+
+
+新持有者先完成接管
+
+
+
+旧事务不得以旧 generation 成功提交受保护写入
+
+同时必须区分：
+
+旧事务已开始，但尚未取得栅栏。
+
+旧事务已取得栅栏，但尚未提交。
+
+旧事务执行校验时 token 已失效。
+
+旧事务先合法提交，新持有者随后接管。
+
+重要：旧写入先提交、随后发生合法接管，不属于违反 fencing 顺序。
+
+测试应证明非法提交不会发生，而不是要求所有事务都按照人为指定的顺序成功推进。
+
+裁决：CHANGE 89 = REVISE，登记 CHANGE 92。
+
+CHANGE 93（P1）｜只读取证命令与证据充分性修订
+
+E-08 至 E-16 的登记方向合格，但以下问题需要修正。
+
+证据项
+
+
+
+问题
+
+
+
+修订要求
+
+
+
+
+E-08
+
+
+
+role_table_grants 不足以证明完整有效权限
+
+
+
+补充 role membership、schema 权限、对象所有者、继承角色、SECURITY DEFINER 函数与 RLS 相关信息
+
+
+
+
+E-09
+
+
+
+复制状态不足以证明切换期间只有一个有效写入主节点
+
+
+
+补充故障切换仲裁、fencing、同步/异步复制与防止旧主继续写入的机制
+
+
+
+
+E-10
+
+
+
+lease 状态计数不能证明事务边界
+
+
+
+必须结合真实代码路径与数据库操作语义
+
+
+
+
+E-11
+
+
+
+systemctl cat 可能包含敏感环境配置
+
+
+
+仅提取必要的非秘密字段，输出前脱敏
+
+
+
+
+E-12
+
+
+
+单个会话的 session_replication_role 不能代表其他会话
+
+
+
+补充角色与连接池配置，以及实际触发器生效状态
+
+
+
+
+E-14
+
+
+
+pg_current_xact_id() 可能分配事务 ID
+
+
+
+只读取证优先使用 pg_current_xact_id_if_assigned()；不得把事务 ID 存在视为提交证据
+
+
+
+
+E-15
+
+
+
+systemd-analyze security 是配置风险分析，不是运行时权限的完整证明
+
+
+
+同时核验实际进程身份、unit 覆盖及生效属性
+
+E-13 的文件 inode 核验可以保留，但仅做重启前后比较不足以证明运行过程中不会被替换。
+
+E-16 应增加明确的阻断传播时间上限、阻断确认信号和失效时默认停止写入的规则。
+
+另一个关键要求是：只读 SQL 不等于可以随意在生产执行。 即使不修改业务表，也应先获得宿主的只读取证授权，并限制查询权限、超时和输出内容。
+
+裁决：材料 3 = PASS WITH REVISE，登记 CHANGE 93。
+
+四、路线 A 的最终技术判断
+
+推荐继续优先评审 durable lease，但当前的 A-1~A-6 只是必要条件框架，不能认定已经完备并获得证明。
+
+建议在后续方案评审中显式增加：
+
+A-7：数据库主节点切换后，已确认的 fencing generation 不会因异步复制回退而失去单调性保证。
+
+A-8：数据库角色、对象所有权和特权入口构成可审计的权限闭环；不存在未受控的应用旁路。
+
+这两项可以作为 A-5/A-6 的细化验收条件，不要求重开已经关闭的 R21 设计。
+
+还需要特别区分：
+
+已有 AutonomyLease 并不意味着该表可以直接作为满足 FENCE_CONTRACT 的载体。
+
+只有在完成资源身份、行锁、版本单调性、事务边界与权限的只读设计评审后，才能决定是复用既有对象，还是未来申请新增 FENCE_ROW。
+
+五、下一步授权裁决
+
+我建议允许进入更接近实施的只读证据核验阶段，但必须把授权限定得足够严格。
+
+允许：R3 最小只读收口
+
+YES
+
+仅修订 CHANGE 91–93；接收宿主已授权采集的只读证据；完成路线 A 的静态设计论证与写入域映射。
+
+不允许：数据库实验与 U2 实施
+
+NO
+
+不运行 P3、不创建 FENCE_ROW、不迁移 schema、不恢复 runtime、不开放生产写入。
+
+宿主下一步应优先提交 E-01、E-02、E-03、E-08、E-10、E-11、E-12 的只读事实。E-09、E-14 应在正式选择 fencing 方案前完成核验。其余证据在后续授权前补齐。
+
+修订完成、静态设计论证收口且必要宿主证据充分后，才能提出单独的隔离 PostgreSQL 16 实验授权申请。
+
+六、机器可读最终裁决
+
+以下裁决可直接交给 Code/Codex 使用。
+
+MSG-20261009-48 · FINAL VERDICT
+
+复制裁决
+
+便于自动归档和下一轮审计
+
+FINAL_VERDICT=PASS_WITH_REVISE
+R2_READONLY_DELIVERABLE=ACCEPTED_WITH_REQUIRED_CHANGES
+
+CHANGE_86=PASS_SCOPED
+CHANGE_87=REVISE
+CHANGE_88=PASS
+CHANGE_89=REVISE
+CHANGE_90=PASS_SCOPED
+
+REQUIRED_CHANGES=91_P0,92_P0,93_P1
+F01_STATUS=OPEN_P0
+PREFERRED_LOCK_ROUTE=LEASE_REVIEW_FIRST
+LOCK_PROTOCOL_UNIFORMITY=NOT_PROVEN
+
+NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R3_READ_ONLY_CHANGES_91_TO_93
+
+P3_EXPERIMENT_AUTHORIZED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PRODUCTION_WRITE_AUTHORIZED=NO
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+
+U1_REOPEN=NO
+U2_DESIGN_R21=NOT_REOPENED
+PRODUCTION_READY=NO
+
+最终审计结论： R2 的设计收口已达到有条件接受标准，不需要重新开展整轮设计。但必须修正 fencing 等价实现、S3 测试顺序和只读取证充分性这三处问题。完成 CHANGE 91–93 不代表 F-01 自动关闭，F-01 仍须独立评审。
+
+本轮没有修改 GitHub 仓库、连接数据库、运行测试或恢复任何定时任务。
+```
