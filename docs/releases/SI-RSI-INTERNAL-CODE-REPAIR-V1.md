@@ -1196,3 +1196,46 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.19 PHASE 3-A · U1 FINAL-R5（CHANGE 29–31）—— 可独立核对的原始材料 + 内容级表快照
+
+> 授权：MSG-20261009-18 → `NEXT_AUTHORIZED = PHASE3_A_U1_FINAL_R5_EVIDENCE_VERIFICATION_ONLY`
+> 代码 commit（REVIEWED_HEAD）= `e4c2f27d`；证据包 = `tools/verification/self-repair/phase3a-u1-final-r5-evidence.json`（147,846 bytes）
+> 分片材料 = `work/self-repair/u1-r5/out/msg19/`（13 片 + manifest.json）
+
+**CHANGE 27 残留项闭合（上一轮要求「展示现有实现并证明不存在绕过路径」）**
+
+- 策略未覆盖的维度：既不能提供取值、也不能声明不适用 ⇒ `SCOPE_DIMENSION_NOT_DECLARED`（fail-closed）。
+- 重复声明按 Set 语义等价、返回值按固定维度顺序去重；维度取值只接受字符串（否则 `REQUIRED_SCOPE_MISSING` / `OPTIONAL_SCOPE_UNDECLARED`）。
+- 授权匹配只使用通过校验的 `providedDimensions`（源码 + 用例双证）。
+
+**CHANGE 29/30/31 交付**
+
+- 证据包新增 `u1FileContents`（三个 U1 文件**完整内容**）与 `fingerprintMethod`（sha256 / raw bytes / node 与 PowerShell 两种算法说明 + `git show HEAD:<path>` 注意事项）。
+- 证据包新增 `inlineEvidenceForAuditChannel` 与 13 个分片文件（每条消息只按行边界切分，标注 part i/N 与总字符数）。
+- 七张相关表改为**内容级**摘要：对每张表执行 count + md5(string_agg(row_to_json 排序))，before/after 逐表 `count:digest` 一致
+  （任何行任何字段变化都会改变 digest）。原始值见 `dbProbeEvidence[kind=TABLE_SNAPSHOT]`。
+- 探针执行路径：两条拒写探针各自独立事务；公共入口探针与 `resolve()` 读取共用同一事务（`transaction_read_only=on` 且写入被拒）。
+
+**验证结果（本机实测）**：端口级 **53/53 PASS**、真实 PostgreSQL **8/8 PASS**（隔离库 `crossclaim_p3r2_iso`）、
+`apps/api tsc --noEmit` **0 error**；`VITEST_EXIT=0` / `TSC_EXIT=0`；`Tests 61 passed (61)` / `Test Files 2 passed (2)`；证据行 6 条。
+
+**通道约束**：网页评审无法读取本仓库（私有远端），故本轮以 **7 条消息**（M1 说明 + M2/M3/M4 三个完整文件 + M5/M6 evidence.json 核心视图 + M7 原始 Vitest 输出）逐字内联原始材料。
+
+**未验证项（如实标注）**：Linux / systemd 实机、真实浏览器端到端、真实 Provider / 模型调用（HOLD）、CI、生产环境 = **NOT VERIFIED**。
+
+```text
+PHASE3_U1_FINAL_R5_PROGRESS = CHANGE 29 OK / CHANGE 30 OK / CHANGE 31 OK / CHANGE 27 残留项 OK
+PHASE3_U1_FINAL_R5_CODE_COMMIT = e4c2f27d
+PHASE3_U1_FINAL_R5_EVIDENCE = tools/verification/self-repair/phase3a-u1-final-r5-evidence.json（含 u1FileContents + fingerprintMethod）
+PHASE3_U1_FINAL_R5_TESTS = 端口级 53/53 + 真实 PG 8/8 = 61/61 PASS；api tsc 0
+PHASE3_U1_TABLE_SNAPSHOT = 七张表内容级 count:md5 摘要一致（不再以计数代替内容）
+PHASE3_U1_UNDECLARED_SCOPE_DIMENSION = SCOPE_DIMENSION_NOT_DECLARED（fail-closed）
+NEXT_UNIT = 送审 MSG-20261009-19（M1–M7 内联原始材料；申请 PHASE3_U1_IMPLEMENTATION_CLOSED=YES）
+NEXT_AUDIT = MSG-20261009-19
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```
