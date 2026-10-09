@@ -3766,3 +3766,96 @@ AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · U1_CODE_CLOSURE = UNCHANGED · U2_DESIGN
 BUSINESS_HEARTBEAT_RESTORED = NO · OS_TIMER_RESTORED = NO · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.58 MSG-20261009-50 裁决归档 = **PASS WITH REVISE**（R4 只读交付受理；新增 CHANGE 94–97 全为 P1、无新增 P0；`CARRIER_DECISION=HOLD`；下一轮 R5 只读收口）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-50] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（193/193，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=5409 / NORM_LINES=193 / FNV=b2ce3763`。
+> 锚点：`BASELINE=7485f1bd`、`REVIEWED_HEAD=e4b4faa3`、`U1_CODE_HEAD=9ee36837`。
+
+**独立核验**：固定提交可访问 PASS、范围 `7485f1bd..e4b4faa3` PASS（1 commit）、**3 files**、**产品代码改动 0**、
+**R4 写入域映射 blob `18a38a66…` PASS**、**R4 F-01 矩阵 blob `c4b9fdd0…` PASS**、两份文档 SHA-256 未独立复算、
+**RSI CAS 与事务实现 = `CODE_VERIFIED`**、目标 PostgreSQL 运行行为与宿主证据 = `NOT_VERIFIED`。
+审计方并声明：`CODE_VERIFIED` **仅表示确认源代码结构与条件更新逻辑**，**不表示**并发安全、旧主隔离或提交时刻保护已获运行时证明。
+
+**逐项**：`R4-01 = PASS_SCOPED`、`R4-02 = PASS_SCOPED`、`R4-03 = PASS_WITH_REVISE`、`R4-04 = PASS_SCOPED`、`R4-05 = PASS_WITH_REVISE`；**`NEW_P0_FINDINGS=NONE`**。
+
+#### 2.58.1 CHANGE 94（P1）—— 写入路径清点必须补齐（**含对我方绝对断言的更正**）
+
+- R4-03 列出了 claim / reclaimExpired / settle，但**未完整列出**：
+  **`fail()`**（含租约释放 CAS、任务重试状态更新及 `$transaction`）、
+  **`renew()`**（含租约到期与 owner 检查、续租 CAS，**但不使用显式 `$transaction`**）、
+  **`rsi-restart-reconcile`**（需确认其重置范围与租约代际的关系）；授权失败路径 `READY → BLOCKED` 已列出，须保留其**非事务**特性。
+- **更正（我方文档错误）**：R4 文档中「`apps/api/src` 不存在原始 SQL 写入」的**绝对断言不成立**——
+  审计方指出仓库实施记录已明确记载 **`fault-incident-intake.ts` 使用 `INSERT ... ON CONFLICT` 原子 upsert**；
+  **不能用若干关键词检索结果证明整个目录不存在原生 SQL 写入**。
+  ⇒ 覆盖声明改为 **`RSI_CORE_PATHS_MAPPED_PARTIAL · ALL_REPO_WRITERS_NOT_EXHAUSTIVELY_PROVEN`**（R5 修订）。
+
+#### 2.58.2 CHANGE 95（P1）—— 载体维度分级更精确
+
+- 维度①：`taskId` 作为现有资源身份**可从代码确认**，但与 U2 拟用身份**尚未统一** ⇒ 应为 **`PARTIAL_PROVEN / IDENTITY_MISMATCH`**（非整体 PROVEN）。
+- 维度②须拆分为三项：**`CAS_PATTERN = CODE_VERIFIED`**、**`ROW_LOCK_OR_SERIALIZABLE_EQUIVALENCE = NOT_PROVEN`**、**`COMMIT_TIME_FENCING = NOT_PROVEN`**
+  （已有事务内 CAS **不天然等于**覆盖提交时刻的 fencing；既不应直接认定不安全，也不能在缺少并发交错验证时认定充分安全）。
+- `CARRIER_DECISION = HOLD` 成立；同意优先解决 generation / 入口覆盖 / 提交时刻保护，
+  但**权限闭环不是可无限期推后的次要条件**——载体最终获批时，它与切换语义均属**必要条件**。
+
+#### 2.58.3 CHANGE 96（P1）—— 证据状态双层分级（仓库侧 / 目标运行侧）
+
+| 证据 | 仓库侧 | 目标运行侧 |
+| --- | --- | --- |
+| E-01 实例数量 | 部署声明可读 | WAITING_ON_HOST |
+| E-02 所有写入者 | PARTIAL_REPO | NOT_PROVEN |
+| E-03 role↔unit | 配置声明可读 | WAITING_ON_HOST |
+| E-08 权限闭环 | NOT_PROVEN | BLOCKED |
+| E-09 故障切换 | NOT_PROVEN | BLOCKED |
+| E-10 租约状态转移 | **CODE_VERIFIED_PARTIAL** | NOT_PROVEN |
+| E-11 版本对应 | Manifest 可读 | WAITING_ON_HOST |
+| E-12 触发器覆盖 | **MIGRATION_TEXT_VERIFIED** | NOT_PROVEN |
+| E-14 提交归因 | DESIGN_ONLY | NOT_AVAILABLE |
+
+（E-10 须明确其**业务性质的端到端验证仍为 `NOT_PROVEN`**；E-12 保留迁移文本证据价值，但**迁移文件存在 ≠ 数据库对象生效**。）
+
+#### 2.58.4 CHANGE 97（P1）—— 追加两项未获证不变量
+
+- **`U-11` 执行身份唯一性与 ABA 防护**：单纯校验 `ownerRef` **不足以**排除同一 owner 标识在不同执行实例、重启或重复领取中被复用
+  ⇒ 须证明**一次执行尝试有独立、不可混淆的身份**，且**旧尝试不能凭"重新出现的相同 `ownerRef`"获得有效写入权**。
+- **`U-12` 部分失败、回滚与负结果的可归因性**：须明确事务内某步 `affectedRows=0`、函数正常返回 `false`、事务异常、事务回滚、结果未知**分别如何处理**；
+  **不得**把"未抛异常"直接推导为"整个协议的预期状态转移已完成"（含 `reclaimExpired` 的两个 CAS 必须**整体**满足协议才算成功；结果未知时**不得**重复任何外部副作用）。
+
+（两项为既有 `U-2/U-3/U-5/U-10` 的**可验证细化**，**不重开 R21**，不改变 R4 的文档/勘验授权边界。）
+
+#### 2.58.5 R5 授权（仅只读）
+
+```text
+NEXT_AUTHORIZED = PHASE3_A_U2_PRECONDITION_R5_READ_ONLY_CLOSURE
+允许：①修订 R4 文档的入口映射、分级与绝对化断言
+      ②只读检查 fail / renew / 重启 reconcile / 原生 SQL 写入及候选对象的可能旁路入口
+      ③接收与审阅【经脱敏】的宿主证据（实际进程、数据库角色、权限、触发器、版本、故障切换配置）
+      ④比较路线 A（数据库 fencing）与路线 B（隔离部署或文件锁等）→ 形成【载体决策建议】
+      ⑤【编写】后续隔离实验申请（不执行）
+不授权：数据库迁移 / 创建实验表 / 执行 P3 / 修改运行时代码 / 恢复定时任务 /
+        启用生产写入 / 调用模型或 Provider / 自动合并部署
+硬要求：R5 若证据不足，必须以 CARRIER_DECISION=HOLD 结案，不得为追求关闭而放行。
+```
+
+```text
+MSG-20261009-50_FINAL_VERDICT = PASS_WITH_REVISE
+MSG-20261009-50_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 193/193；FNV1A b2ce3763）
+R4_01=PASS_SCOPED · R4_02=PASS_SCOPED · R4_03=PASS_WITH_REVISE · R4_04=PASS_SCOPED · R4_05=PASS_WITH_REVISE
+REQUIRED_CHANGES=94_P1,95_P1,96_P1,97_P1 · NEW_P0_FINDINGS=NONE
+R4_INTERNAL_READONLY_DELIVERY=ACCEPTED · R4_FULL_WRITE_COVERAGE_PROVEN=NO · HOST_EVIDENCE_VERIFIED=NO
+RSI_EXISTING_CAS_PATTERN=CODE_VERIFIED · RSI_EXISTING_TRANSACTION_PATHS=CODE_VERIFIED
+MONOTONIC_FENCE_GENERATION=NOT_PROVEN · U2_WRITE_PROTECTION=NOT_IMPLEMENTED
+CARRIER_DECISION=HOLD · F01_STATUS=OPEN_P0
+EXCLUSION_PROOF=NOT_PROVEN · COMMIT_ATTRIBUTION_PROOF=NOT_PROVEN · DEDUPE_PROOF=DESIGN_EVIDENCE_ONLY
+NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R5_READ_ONLY_CLOSURE
+P3_EXPERIMENT_AUTHORIZED=NO · U2_IMPLEMENTATION_AUTHORIZED=NO · PRODUCTION_WRITE_AUTHORIZED=NO
+MULTI_INSTANCE_AUTOMATED_WRITE=NO · SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL=FORBIDDEN · EXTERNAL_WRITE=HOLD
+AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN · U1_REOPEN=NO · U2_DESIGN_R21_REOPEN=NO
+BUSINESS_HEARTBEAT_RESTORED=NO · OS_TIMER_RESTORED=NO · PRODUCTION_READY=NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```

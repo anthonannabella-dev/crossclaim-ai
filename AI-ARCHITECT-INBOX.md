@@ -182902,3 +182902,485 @@ PRODUCTION=NOT_VERIFIED
 
 最终裁决：R3 设计修订通过，允许进入 R4 只读证据收口。F-01 的 P0 风险尚未解除，所有实施和生产权限维持关闭。本轮审计仅进行了 GitHub 读取，没有写入仓库。
 ```
+
+### [MSG-20261009-50] U2 前置条件 R4 只读证据收口 = **PASS WITH REVISE**（`R4_INTERNAL_READONLY_DELIVERY=ACCEPTED`；逐项 `R4-01 = PASS_SCOPED`、`R4-02 = PASS_SCOPED`、`R4-03 = PASS_WITH_REVISE`、`R4-04 = PASS_SCOPED`、`R4-05 = PASS_WITH_REVISE`；**`NEW_P0_FINDINGS=NONE`**；新增 **CHANGE 94/95/96/97（全为 P1）**；`CARRIER_DECISION=HOLD`、`F01_STATUS=OPEN_P0`、`R4_FULL_WRITE_COVERAGE_PROVEN=NO`、`HOST_EVIDENCE_VERIFIED=NO`）—— **独立核验**：固定提交可访问 PASS、`7485f1bd..e4b4faa3` PASS（1 commit）、**3 files**、**产品代码改动 0**、**R4 写入域映射 blob `18a38a66…` PASS**、**R4 F-01 矩阵 blob `c4b9fdd0…` PASS**、两份文档 SHA-256 `NOT_INDEPENDENTLY_VERIFIED`、**RSI CAS 与事务实现 `CODE_VERIFIED`**、目标 PostgreSQL 运行行为 `NOT_VERIFIED`、宿主证据 `NOT_VERIFIED`（并声明 `CODE_VERIFIED` 仅表示确认源代码结构与条件更新逻辑，**不表示**并发安全、旧主隔离或提交时刻保护已获运行时证明）；**四项修订**：**CHANGE 94（P1）写入路径清点必须补齐**——R4-03 列出了 claim/reclaimExpired/settle，但**未完整列出** `fail()`（含租约释放 CAS、任务重试状态更新与 `$transaction`）、`renew()`（含租约到期与 owner 检查、续租 CAS，**但不使用显式 `$transaction`**）、以及 **`rsi-restart-reconcile`**（需确认其重置范围与租约代际的关系）；授权失败路径 `READY → BLOCKED` 已列出须保留其**非事务**特性；**并且**：文档中「`apps/api/src` 不存在原始 SQL 写入」的**绝对断言必须限定范围并复核**——仓库实施记录已明确记载 **`fault-incident-intake.ts` 使用 `INSERT ... ON CONFLICT` 原子 upsert**，**不能用若干关键词检索结果证明整个目录不存在原生 SQL 写入** ⇒ 建议覆盖声明改为 **`RSI_CORE_PATHS_MAPPED_PARTIAL · ALL_REPO_WRITERS_NOT_EXHAUSTIVELY_PROVEN`**；**CHANGE 95（P1）载体维度分级更精确**——维度①：`taskId` 作为现有资源身份可从代码确认，但 U2 与 RSI 的资源身份**尚未统一** ⇒ 最终应为 **`PARTIAL_PROVEN / IDENTITY_MISMATCH`** 而非整体 PROVEN；维度②须拆为 **`CAS_PATTERN = CODE_VERIFIED`**、**`ROW_LOCK_OR_SERIALIZABLE_EQUIVALENCE = NOT_PROVEN`**、**`COMMIT_TIME_FENCING = NOT_PROVEN`**（已有事务内 CAS **不天然等于**覆盖提交时刻的 fencing；既不应直接认定不安全，也不能在缺少并发交错验证时认定充分安全）；`CARRIER_DECISION=HOLD` 成立；同意优先解决 generation/入口覆盖/提交时刻保护，但**权限闭环不能被理解为可无限期推后的次要安全条件**（载体最终获批时，它与切换语义均属**必要条件**）；**CHANGE 96（P1）证据状态采用双层分级**（仓库侧 / 目标运行侧分列，避免 `PARTIAL_REPO` 被误读为功能已通过）：E-01 部署声明可读 / WAITING_ON_HOST；E-02 PARTIAL_REPO / NOT_PROVEN；E-03 配置声明可读 / WAITING_ON_HOST；E-08 NOT_PROVEN / BLOCKED；E-09 NOT_PROVEN / BLOCKED；E-10 **CODE_VERIFIED_PARTIAL** / NOT_PROVEN；E-11 Manifest 可读 / WAITING_ON_HOST；E-12 **MIGRATION_TEXT_VERIFIED** / NOT_PROVEN；E-14 DESIGN_ONLY / NOT_AVAILABLE（其中 E-10 须明确其**业务性质的端到端验证仍为 NOT_PROVEN**；E-12 保留迁移文本的证据价值，但**迁移文件存在 ≠ 数据库对象生效**）；**CHANGE 97（P1）补充两项未获证不变量**：**U-11 执行身份唯一性与 ABA 防护**（单纯校验 `ownerRef` 不足以排除同一 owner 标识在不同执行实例/重启/重复领取中被复用 ⇒ 须证明一次执行尝试有独立不可混淆身份，且旧尝试不能凭"重新出现的相同 `ownerRef`"获得有效写入权）、**U-12 部分失败·回滚·负结果的可归因性**（须明确事务内某步 `affectedRows=0`、函数正常返回 `false`、事务异常、事务回滚、结果未知分别如何处理；**不得把"未抛异常"直接推导为"整个协议的预期状态转移已完成"**；包括 `reclaimExpired` 的两个 CAS 必须**整体**满足协议才算成功，以及结果未知时**不得**重复任何外部副作用）；两项为既有 U-2/U-3/U-5/U-10 的**可验证细化**，**不重开 R21**、不改变 R4 仅文档与勘验的授权边界；**R5 授权（仅只读）**：**`NEXT_AUTHORIZED=PHASE3_A_U2_PRECONDITION_R5_READ_ONLY_CLOSURE`**，允许①修订 R4 文档的入口映射、分级与绝对化断言 ②只读检查 `fail`/`renew`/重启 reconcile/原生 SQL 写入及候选对象的可能旁路入口 ③接收与审阅**经脱敏**的宿主证据（实际进程、数据库角色、权限、触发器、版本、故障切换配置）④比较路线 A（数据库 fencing）与路线 B（隔离部署或文件锁等）形成**载体决策建议** ⑤**编写**后续隔离实验申请但**不执行**；**不授权**数据库迁移、创建实验表、执行 P3、修改运行时代码、恢复定时任务、启用生产写入、调用模型或 Provider、自动合并部署；并明确：**R5 若证据不足必须以 `CARRIER_DECISION=HOLD` 结案，而不是为追求关闭而放行**；机器可读：`R4_INTERNAL_READONLY_DELIVERY=ACCEPTED`、`R4_FULL_WRITE_COVERAGE_PROVEN=NO`、`HOST_EVIDENCE_VERIFIED=NO`、`RSI_EXISTING_CAS_PATTERN=CODE_VERIFIED`、`RSI_EXISTING_TRANSACTION_PATHS=CODE_VERIFIED`、`MONOTONIC_FENCE_GENERATION=NOT_PROVEN`、`U2_WRITE_PROTECTION=NOT_IMPLEMENTED`、`EXCLUSION_PROOF=NOT_PROVEN`、`COMMIT_ATTRIBUTION_PROOF=NOT_PROVEN`、`DEDUPE_PROOF=DESIGN_EVIDENCE_ONLY`、`P3_EXPERIMENT_AUTHORIZED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`PRODUCTION_WRITE_AUTHORIZED=NO`、`MULTI_INSTANCE_AUTOMATED_WRITE=NO`、`SCHEMA_MIGRATION=HOLD`、`RUNTIME_WIRING/MODEL_CALL/PROVIDER_CALL=FORBIDDEN`、`EXTERNAL_WRITE=HOLD`、`U1_REOPEN=NO`、`U2_DESIGN_R21_REOPEN=NO`、`BUSINESS_HEARTBEAT_RESTORED=NO`、`OS_TIMER_RESTORED=NO`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`；审计方最终意见：**本轮没有需要立即实施代码修改的新 P0 问题**（四项修订均为 P1），**最重要的是已确认现有 RSI 确实具备可复用的 CAS、租约与事务基础，同时明确证明这些基础尚不足以独立证明 U2 的跨实例排他安全**；后续**不应再反复修改已接受的设计条款**，应集中解决三个可裁决问题：**统一资源身份、验证数据库实际保护能力、取得宿主故障切换及权限证据**；本次审计仅 GitHub 只读核验，**未对仓库执行任何写入、合并或部署操作**；reviewed ref `e4b4faa3c39f4e7b6c8c89af67bcb87c5443a545`
+
+```text
+MSG-20261009-50｜CrossClaim AI 独立审计裁决
+PASS WITH REVISE · 有条件通过
+
+审计对象： SI/RSI INTERNAL CODE REPAIR V1 — PHASE 3-A · U2 前置条件 R4
+
+固定审计提交： e4b4faa3c39f4e7b6c8c89af67bcb87c5443a545
+
+审计结论：R4 只读证据交付基本成立，允许进入 R5 只读收口，但 R4-03 的完整性声明必须修正。F-01 仍是 P0 阻断项，不允许据此启动实施或生产写入。
+
+一、独立核验结果
+
+我已通过 GitHub 连接器读取固定提交下的两份 R4 文档、RSI 关键实现，并独立比较本轮提交范围。
+
+核验项目
+
+
+
+独立结果
+
+
+
+
+固定提交可访问
+
+
+
+PASS
+
+
+
+
+7485f1bd..e4b4faa3
+
+
+
+PASS：1 commit
+
+
+
+
+变更文件数
+
+
+
+PASS：3 files
+
+
+
+
+产品代码改动
+
+
+
+PASS：0 files
+
+
+
+
+R4 写入域映射文档 Git blob
+
+
+
+PASS：18a38a66…
+
+
+
+
+R4 F-01 证据矩阵 Git blob
+
+
+
+PASS：c4b9fdd0…
+
+
+
+
+两份文档 SHA-256
+
+
+
+NOT_INDEPENDENTLY_VERIFIED
+
+
+
+
+RSI CAS 与事务实现
+
+
+
+CODE_VERIFIED
+
+
+
+
+目标 PostgreSQL 运行行为
+
+
+
+NOT_VERIFIED
+
+
+
+
+宿主证据
+
+
+
+NOT_VERIFIED
+
+对应证据可在固定版本直接查阅：
+
+GitHub R4 写入域映射
+
+GitHub R4 F-01 证据矩阵
+
+这里的 CODE_VERIFIED 仅表示确认了源代码结构和条件更新逻辑，不表示并发安全、旧主隔离或提交时刻保护已获运行时证明。
+
+二、五项审计裁决
+
+审计事项
+
+
+
+裁决
+
+
+
+
+1. R4-03 写入域映射
+
+
+
+PASS WITH REVISE
+
+
+
+
+2. R4-04 七维载体评估
+
+
+
+PASS SCOPED
+
+
+
+
+3. R4-01/02 证据分级
+
+
+
+PASS WITH REVISE
+
+
+
+
+4. R4-05 U-1~U-10
+
+
+
+PASS SCOPED
+
+
+
+
+5. R5 下一步授权
+
+
+
+APPROVED · READ_ONLY ONLY
+
+R4 文档交付可以接受，但不能把“已完成静态清点”升级为“已证明所有写入路径完整覆盖”。这是此次需要重点纠正的边界。
+
+三、具体修订意见
+CHANGE 94（P1）｜写入路径清点必须补齐
+
+独立读取 rsi-durable-task-source.ts 后，发现 R4-03 表格列出了 claim、reclaimExpired、settle，但没有完整列出：
+
+fail()：包含租约释放 CAS、任务重试状态更新及 $transaction。
+
+renew()：包含租约到期和 owner 检查、续租 CAS，但不使用显式 $transaction。
+
+授权失败路径 READY → BLOCKED：文档已列出，须保留其非事务特性。
+
+rsi-restart-reconcile：需要确认它的重置范围以及与租约代际之间的关系。
+
+裁决： R4-03 的格式满足要求，RSI 主要路径的映射正确，但尚不宜声称 RSI 全写入入口已完整列举。
+
+此外，文档关于 apps/api/src 不存在原始 SQL 写入的绝对断言，需要限定范围并复核。仓库实施记录已明确记载 fault-incident-intake.ts 使用 INSERT ... ON CONFLICT 原子 upsert。不能用对若干关键词的检索结果直接证明整个目录不存在原生 SQL 写入。
+
+建议将覆盖声明改为：
+
+RSI_CORE_PATHS_MAPPED_PARTIAL · ALL_REPO_WRITERS_NOT_EXHAUSTIVELY_PROVEN
+
+CHANGE 95（P1）｜载体维度②应使用更精确的分级
+
+同意路线 A 不应因已有 AutonomyLease 而直接获批。
+
+但七维判断有两处需要区分：
+
+维度①： taskId 作为现有资源身份已可从代码确认，但 U2 与 RSI 的资源身份尚未统一，所以最终结论应为 PARTIAL_PROVEN / IDENTITY_MISMATCH，而不是整体 PROVEN。
+
+维度②： CAS 条件更新是真实存在的代码能力，不是纯设计。因此建议拆分为：
+
+CAS_PATTERN = CODE_VERIFIED
+
+ROW_LOCK_OR_SERIALIZABLE_EQUIVALENCE = NOT_PROVEN
+
+COMMIT_TIME_FENCING = NOT_PROVEN
+
+已有事务内的 CAS 并不天然等于覆盖提交时刻的 fencing。不应直接认定不安全，也不能在缺少并发交错验证时认定充分安全。
+
+CARRIER_DECISION=HOLD 成立。
+
+同意优先解决 generation、入口覆盖和提交时刻保护，但权限闭环不能被理解为可无限期推后的次要安全条件。载体最终获批时，它与切换语义均属于必要条件。
+
+CHANGE 96（P1）｜证据状态采用双层分级
+
+建议把“仓库材料已确认”和“目标系统性质已获证”分成两列，避免 PARTIAL_REPO 被误读为功能已通过。
+
+证据
+
+
+
+仓库侧
+
+
+
+目标运行侧
+
+
+
+
+E-01 实例数量
+
+
+
+部署声明可读
+
+
+
+WAITING_ON_HOST
+
+
+
+
+E-02 所有写入者
+
+
+
+PARTIAL_REPO
+
+
+
+NOT_PROVEN
+
+
+
+
+E-03 role↔unit
+
+
+
+配置声明可读
+
+
+
+WAITING_ON_HOST
+
+
+
+
+E-08 权限闭环
+
+
+
+NOT_PROVEN
+
+
+
+BLOCKED
+
+
+
+
+E-09 故障切换
+
+
+
+NOT_PROVEN
+
+
+
+BLOCKED
+
+
+
+
+E-10 租约状态转移
+
+
+
+CODE_VERIFIED_PARTIAL
+
+
+
+NOT_PROVEN
+
+
+
+
+E-11 版本对应
+
+
+
+Manifest 可读
+
+
+
+WAITING_ON_HOST
+
+
+
+
+E-12 触发器覆盖
+
+
+
+MIGRATION_TEXT_VERIFIED
+
+
+
+NOT_PROVEN
+
+
+
+
+E-14 提交归因
+
+
+
+DESIGN_ONLY
+
+
+
+NOT_AVAILABLE
+
+其中 E-10 不应降为“代码路径不存在”，但必须明确：其业务性质的端到端验证仍是 NOT_PROVEN。
+
+E-12 同样应保留迁移文本的证据价值，但不能将迁移文件存在等价于数据库对象生效。
+
+E-09 和 E-14 原分级可以保留。
+
+CHANGE 97（P1）｜补充两项未获证不变量
+
+现有 U-1~U-10 已覆盖主要 P0 风险，可以接受为 R4 阶段的基础清单。建议在 R5 追加：
+
+U-11：执行身份唯一性与 ABA 防护
+
+单纯校验 ownerRef 并不足以排除同一 owner 标识在不同执行实例、重启或重复领取中被复用。应证明一次执行尝试有独立、不可混淆的身份，且旧尝试不能凭重新出现的相同 ownerRef 获得有效写入权。
+
+U-12：部分失败、回滚与负结果的可归因性
+
+应明确事务内某一步 affectedRows=0、函数正常返回 false、事务异常、事务回滚及结果未知分别如何处理。
+
+尤其不能把“未抛异常”直接推导为“整个协议的预期状态转移已经完成”。
+
+这项要求包括 reclaimExpired 的两个 CAS 必须整体满足协议才能被认作成功，也包括在结果未知时不能直接重复任何外部副作用。
+
+这两项是对既有 U-2/U-3/U-5/U-10 的可验证细化，不要求重开 R21 设计，也不改变 R4 仅文档和勘验的授权边界。
+
+四、R5 的明确授权范围
+
+同意进入 R5，但授权仅限只读证据收口、接收宿主证据和载体定型评审。
+
+允许开展：
+
+修订 R4 文档的入口映射、分级和绝对化断言。
+
+只读检查 fail、renew、重启 reconcile、原生 SQL 写入及候选对象的可能旁路入口。
+
+接收和审阅经脱敏的宿主证据，包括实际进程、数据库角色、权限、触发器、版本及故障切换配置。
+
+比较路线 A（数据库 fencing）与路线 B（隔离部署或文件锁等方案），形成载体决策建议。
+
+编写后续隔离实验申请，但不执行实验。
+
+不授权数据库迁移、创建实验表、执行 P3、修改运行时代码、恢复定时任务、启用生产写入、调用模型或 Provider，以及自动合并部署。
+
+R5 可以结束证据归档工作，但没有足够证据时，必须以 CARRIER_DECISION=HOLD 结案，而不是为追求关闭而放行。
+
+五、最终机器可读裁决
+纯文本
+AUDIT_ID=MSG-20261009-50
+AUDIT_RESULT=PASS_WITH_REVISE
+AUDIT_SCOPE=7485f1bd..e4b4faa3
+REVIEWED_HEAD=e4b4faa3c39f4e7b6c8c89af67bcb87c5443a545
+
+GITHUB_READONLY_VERIFICATION=PASS
+AUDIT_SCOPE_COMMITS_VERIFIED=1
+AUDIT_SCOPE_FILES_VERIFIED=3
+PRODUCT_CODE_CHANGES_VERIFIED=0
+
+R4_WRITE_DOMAIN_MAP_BLOB_VERIFIED=YES
+R4_F01_MATRIX_BLOB_VERIFIED=YES
+R4_DOC_SHA256_INDEPENDENTLY_VERIFIED=NO
+
+R4_01=PASS_SCOPED
+R4_02=PASS_SCOPED
+R4_03=PASS_WITH_REVISE
+R4_04=PASS_SCOPED
+R4_05=PASS_WITH_REVISE
+
+REQUIRED_CHANGES=94,95,96,97
+CHANGE_94=P1
+CHANGE_95=P1
+CHANGE_96=P1
+CHANGE_97=P1
+NEW_P0_FINDINGS=NONE
+EXISTING_P0_BLOCKERS=UNCHANGED
+
+R4_INTERNAL_READONLY_DELIVERY=ACCEPTED
+R4_FULL_WRITE_COVERAGE_PROVEN=NO
+HOST_EVIDENCE_VERIFIED=NO
+
+RSI_EXISTING_CAS_PATTERN=CODE_VERIFIED
+RSI_EXISTING_TRANSACTION_PATHS=CODE_VERIFIED
+MONOTONIC_FENCE_GENERATION=NOT_PROVEN
+U2_WRITE_PROTECTION=NOT_IMPLEMENTED
+
+CARRIER_DECISION=HOLD
+F01_STATUS=OPEN_P0
+EXCLUSION_PROOF=NOT_PROVEN
+COMMIT_ATTRIBUTION_PROOF=NOT_PROVEN
+DEDUPE_PROOF=DESIGN_EVIDENCE_ONLY
+
+NEXT_AUTHORIZED=
+PHASE3_A_U2_PRECONDITION_R5_READ_ONLY_CLOSURE
+
+R5_READONLY_REVISIONS=YES
+R5_HOST_EVIDENCE_RECEPTION=YES
+R5_CARRIER_REVIEW=YES
+R5_IMPLEMENTATION=NO
+
+P3_EXPERIMENT_AUTHORIZED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PRODUCTION_WRITE_AUTHORIZED=NO
+MULTI_INSTANCE_AUTOMATED_WRITE=NO
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+
+U1_REOPEN=NO
+U2_DESIGN_R21_REOPEN=NO
+BUSINESS_HEARTBEAT_RESTORED=NO
+OS_TIMER_RESTORED=NO
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+
+POSTGRESQL_INTEGRATION_TEST=NOT_VERIFIED
+VITEST=NOT_VERIFIED
+TSC=NOT_VERIFIED
+LINUX_SYSTEMD=NOT_VERIFIED
+CI=NOT_VERIFIED
+PRODUCTION_READY=NO
+六、审计方最终意见
+
+MSG-20261009-50 = PASS WITH REVISE。
+
+本轮没有发现需要立即实施代码修改的新 P0 问题。四项修订均为 P1，限定于 R5 的只读审计与证据表达工作，不要求重新进入 R21 设计循环。
+
+本次最重要的进展，是已经确认现有 RSI 确实具备可复用的 CAS、租约和事务基础；同时明确证明了这些基础尚不足以独立证明 U2 的跨实例排他安全。
+
+后续不应再反复修改已接受的设计条款。应集中解决三个可裁决问题：统一资源身份、验证数据库实际保护能力、取得宿主故障切换及权限证据。
+
+审计到此结束。本会话未对仓库执行任何写入、合并或部署操作。
+```
