@@ -183950,3 +183950,537 @@ NEXT_AUTHORIZED=SUBMIT_ISOLATED_EXPERIMENT_APPLICATION_WITH_CHANGE_101_102_ADDEN
 
 本裁决仅在当前会话提供，未修改你的 GitHub 仓库。
 ```
+
+### [MSG-20261010-53] CrossClaim AI V2 独立审计裁决：PASS_WITH_REVISE（reviewed ref 1caad401）
+
+```text
+MSG-20261010-V2-01｜CrossClaim AI V2 独立审计裁决
+DECISION：PASS_WITH_REVISE
+
+审计对象： CrossClaim AI V2 商业化增量
+仓库： anthonannabella-dev/crossclaim-ai
+分支： feat/customs-opportunity-unlock-v2
+BASE_HEAD： 21e49891
+REVIEW_HEAD： 1caad401
+审计方式： GitHub 连接器只读核验，不执行仓库写入。
+
+一、裁决范围
+
+已通过 GitHub 独立确认：
+
+21e49891 是比较基准，1caad401 位于其后方，共前进 3 个提交。
+
+V2-07 的执行链及 Runtime Pack、V2-08 的成功费收款模块、V2-09 的验收矩阵和审计请求文件已经纳入提交历史。
+
+V2-09 验收矩阵记录了 9 个测试套件、165 项测试以及 API/Web 两端 TypeScript 检查结果。
+
+本轮比较范围内未发现 Prisma migration 文件。
+
+证据级别必须明确区分： GitHub 已核实提交与文件存在；165 项测试通过属于已提交文档记录的本机执行结果，并非本次审计方独立重新运行的结果。
+
+因此，本裁决允许将已有实现作为下一轮修订基线，但不授予运行时注册、真实收费、Provider 外写或生产上线许可。
+
+二、八项专项核验
+
+以下发现基于 REVIEW_HEAD 的实际源码。PASS_SCOPED 只表示所检查的纯函数代码路径满足限定条件。
+
+审计项
+
+	
+
+裁决
+
+	
+
+主要依据
+
+
+
+
+1. 免费路径隔离
+
+	
+
+PASS_SCOPED
+
+	
+
+FREE_SCAN 在 Gate 中强制 HOLD，包装器拒绝后才考虑 Provider 调用
+
+
+
+
+2. 全出口覆盖
+
+	
+
+REVISE
+
+	
+
+断言仅检查已知 9 个方法，不证明未知或动态出口全部受控
+
+
+
+
+3. C4/C5 金额语义
+
+	
+
+REVISE
+
+	
+
+C4 INDETERMINATE 且 C5 ESTIMATED 时，仍可能返回金额
+
+
+
+
+4. Profit Gate
+
+	
+
+PASS_SCOPED
+
+	
+
+已核对概率估算标志、0<p<1、风险调整收益和成本/毛利判断
+
+
+
+
+5. 验签、幂等与权益
+
+	
+
+REVISE
+
+	
+
+权益发放函数未强制绑定已验签结果；幂等依赖外部提供的集合
+
+
+
+
+6. 执行链与结算
+
+	
+
+PASS_SCOPED
+
+	
+
+11 状态按顺序判定；未验证结算不产生应收结果，但事实来源与持久性仍未验证
+
+
+
+
+7. 成功费五态
+
+	
+
+REVISE
+
+	
+
+五态单次结果互斥，但 COLLECTED 所依赖的支付事实尚未建立可信来源约束
+
+
+
+
+8. ONE SI Runtime
+
+	
+
+PASS_SCOPED
+
+	
+
+Pack 复用现有接口，不创建新调度器；尚未注册和实际接线
+
+三、REQUIRED_CHANGES
+CHANGE 01 — P0｜C4 资格未确定时金额泄露
+
+文件： customs-opportunity-unlock-state.ts
+函数： projectCustomsOpportunity()
+位置： 约 L295–336
+
+实际代码先根据 C5 状态执行：
+
+TypeScript
+const estimateIsEstimated =
+  input.estimate?.status === 'ESTIMATED';
+const { byCurrency } = selectAmounts(
+  input.amountCandidates,
+  estimateIsEstimated
+);
+
+随后才将 eligibility.status === 'ELIGIBLE' 纳入 readyToUnlock。
+
+因此，当：
+
+纯文本
+C4 = INDETERMINATE
+C5 = ESTIMATED
+amountCandidates = 非空有效金额
+
+函数可能返回：
+
+纯文本
+state = FREE_ESTIMATED
+disclosableByCurrency = 非空
+unlockEntryVisible = false
+
+付费入口虽然关闭，但金额仍然暴露。这违反送审要求中“C4 非 ELIGIBLE 不输出金额”的约束。
+
+修订要求： C4 必须严格为 ELIGIBLE 且 C5 为 ESTIMATED，才允许产生任何对客户可展示的金额。增加 C4 三态 × C5 全状态的组合测试。
+
+结论：P0，必须修复。
+
+CHANGE 02 — P0｜权益发放缺少不可绕过的验签绑定
+
+文件： customs-unlock-payment.ts
+函数： applyVerifiedPaymentEvent()
+位置： 约 L368–430
+
+验签函数 verifyCustomsPaymentNotification() 本身实现了 HMAC、时间窗口及恒定时间比较。
+
+但权益发放函数接收的是普通 CustomsPaymentNotification，而不是只能由验签流程生成的可信结果。
+
+目前可见的检查包含：
+
+paymentsEnabled
+
+eventType
+
+quoteId
+
+组织、机会、商品、金额与币种
+
+函数内部没有强制证明 notification 已经过合法签名验证。
+
+这并不证明当前存在公开可利用的漏洞，但在未来接线时，如果调用方传入自行构造的 notification，就可能误发权益。
+
+修订要求： 建立不可由普通业务调用方任意构造的 Verified Payment Evidence 契约，限定可信来源，并重新验证订单、报价有效性及支付状态。用负向测试证明未验签对象不能进入发放流程。
+
+结论：P0，支付开闸前必须修复。
+
+CHANGE 03 — P0｜成功费 COLLECTED 缺乏可信支付事实绑定
+
+文件： customs-success-fee-collection.ts
+函数： evaluateCustomsSuccessFeeCollection()
+位置： 约 L200–305
+
+当前函数只有在自动收款开关、授权及安全检查通过后，才考虑返回 PAYMENT_COLLECTED。
+
+这是正确的门禁顺序。
+
+但 collectionFact 的数据结构仅包含金额和结果，缺少可核验的支付交易 ID、商户账户归属、签名或对账来源。
+
+因此无法从该函数单独证明：
+
+纯文本
+PAYMENT_COLLECTED
+= 已由真实支付渠道确认到账
+
+另外，客户撤销授权后，历史上已发生的合法收款不应被抹除；应区分历史到账事实与未来继续自动扣款的权限。
+
+修订要求：
+
+使用可信、不可重复入账的支付交易事实。
+
+建立 transactionId 和 receivableId 的唯一关联。
+
+区分历史已收金额、退款和当前收款授权。
+
+默认 AUTO_COLLECTION=HOLD 时，无论出现什么客户端或业务层伪造输入，都不得启动新扣款。
+
+增加并发、退款、冲正及部分到账测试。
+
+结论：P0，禁止以当前纯函数证明真实收款闭环。
+
+CHANGE 04 — P1｜Provider 全出口覆盖不是结构性封闭
+
+文件： customs-paid-api-gate.ts、customs-paid-provider-composition.ts
+函数： wrapPaidCustomsProvider()、assertProviderFullyGated()
+
+已确认包装 9 个预定义出站方法，并在包装缺失时执行函数引用检查。
+
+但 assertProviderFullyGated() 遍历的是 CUSTOMS_FILING_PROVIDER_OUTBOUND_METHODS，不是 Provider 实例实际暴露的所有可调用出口。
+
+此外，Object.create(provider) 通过原型继承原始对象，Object.freeze(wrapped) 也不能证明底层 Provider 没有其他可调用能力。
+
+修订要求： 建立明确的出站能力 allowlist，验证实例自身方法、原型方法、符号方法及动态出口；生产消费方只能拿到最小权限包装接口，原始 Provider 不得同时向业务层暴露。静态扫描应补充动态访问和直接创建 Provider 的负向样本。
+
+结论：P1。
+
+CHANGE 05 — P1｜Gate 存在空值放行风险
+
+文件： customs-paid-api-gate.ts
+函数： evaluatePaidCustomsApiGate()、evaluateQuote()
+
+发现两处需要收紧的条件：
+
+quoteValidUntil === null 时，不会追加报价过期或无效原因。
+
+opportunityId === null 时，现有归属比较分支被跳过。
+
+这意味着报价缺少截止时间、机会 ID 缺失等异常输入，并非全部强制 HOLD。
+
+修订要求： 对收费操作实施正向完整性校验。缺失必要机会标识、归属、有效报价期限或其他必需事实时，一律 HOLD。
+
+结论：P1。
+
+CHANGE 06 — P1｜幂等只有判定，没有事务级保证
+
+文件： customs-unlock-payment.ts、customs-execution-chain.ts、customs-success-fee-collection.ts
+
+目前通过 processedEventIds、billedSettlementIds 等集合判断重复事件。
+
+这能证明函数在给定已处理集合时会拒绝重复，但不能证明两个并发请求同时读取旧集合后不会分别通过。
+
+修订要求： 在持久化实现中使用唯一约束、原子事务及并发冲突处理。分别验证相同支付事件、相同报价、相同结算和相同交易的并发重放。
+
+结论：P1。PostgreSQL 集成验证之前不得关闭。
+
+CHANGE 07 — P1｜成功费金额与调整语义需修订
+
+文件： customs-success-fee-collection.ts
+函数： evaluateCustomsSuccessFeeCollection()
+
+实际代码在部分收款时生成 REVERSAL 类型调整，其负数金额对应已收到的部分款项。
+
+这是一个值得纠正的会计语义问题：部分到账不是冲正。
+
+此外，rateBps 可由输入覆盖，应确认它绑定已批准的版本化合同或费率策略，而非任意请求值。
+
+修订要求： 分离应收、部分收款、退款及冲正账目；费率从服务端可信合同版本解析，增加非法费率、金额精度及不同币种的负向测试。
+
+结论：P1。
+
+CHANGE 08 — P1｜Pack 任务事实和租户绑定仍需交叉验证
+
+文件： apps/api/src/runtime/customs-unlock-si-pack.ts
+函数： createCustomsUnlockSiPack()
+
+已确认：
+
+没有新建 Runtime 或 Scheduler。
+
+已过滤 task:recovery: 保留命名空间。
+
+externalWritePerformed 恒为 false。
+
+事实加载失败返回 BLOCK。
+
+但 Pack 目前仅验证 context.task.organizationId 非空，没有独立证明 loadFacts() 返回的组织身份必然与任务租户匹配。matchesTask 和 loadFacts 的可信性依赖未来注入实现。
+
+修订要求： 加入任务租户、事实租户、机会归属和案件身份的强制一致性检查，并覆盖恶意依赖注入、任务误匹配、事实污染及保留命名空间测试。
+
+结论：P1。
+
+CHANGE 09 — P1｜验收矩阵与实际完成状态必须对齐
+
+文件： docs/releases/SI-RSI-V2-09-ACCEPTANCE-MATRIX.md
+
+验收矩阵正确列出了未执行的真实集成验证，但部分条目仍以总体 PASS 表达纯函数级结果，容易被误解为系统级闭环通过。
+
+还有一个版本锚点差异：两份文档内部记录的 V2_FINAL_HEAD 是 f47ba314，而本次送审 REVIEW_HEAD 是 1caad401。
+
+这可能只是后续文档提交造成的锚点变化，但必须明确区分代码版本与最终送审版本。
+
+修订要求： 同时记录 CODE_HEAD、EVIDENCE_HEAD、REVIEW_HEAD，并将测试级 PASS 与系统集成级 PASS 严格分开。
+
+结论：P1。
+
+四、审计认可的部分
+
+本轮不要求推翻已正确实现的架构。
+
+特别认可以下限定范围内的实现：
+
+Profit Gate 确实使用概率调整后的收益，而非单纯以预计追回总额作为通过条件。
+
+收费操作采取默认阻断思路，FREE_SCAN 不能直接通过现有 Gate。
+
+现有执行链先检查付款、权益、授权和 Profit Gate，再进入 Provider 阶段。
+
+未验证真实回款不会在执行链纯函数中直接产生应收结果。
+
+新增 Customs Pack 没有实质创建第二个 Runtime 或 Scheduler。
+
+这些结论均限于已检查代码，不代表真实任务执行、数据库事务或生产控制面已经验证通过。
+
+五、NEXT_AUTHORIZED
+纯文本
+NEXT_AUTHORIZED =
+  V2_R1_SCOPED_SECURITY_AND_CONTRACT_REPAIR
+
+SCOPE =
+  CHANGE_01_TO_CHANGE_09
+
+CODE_REPAIR = AUTHORIZED
+NEGATIVE_TESTS = AUTHORIZED
+LOCAL_UNIT_TESTS = AUTHORIZED
+TYPECHECK = AUTHORIZED
+DOCUMENTATION_UPDATE = AUTHORIZED
+GIT_COMMIT_PUSH_CURRENT_BRANCH = AUTHORIZED
+
+PACK_REGISTRATION = NOT_AUTHORIZED
+REAL_PROVIDER_EXECUTION = NOT_AUTHORIZED
+AUTO_COLLECTION_ENABLE = NOT_AUTHORIZED
+PRODUCTION_DEPLOY = NOT_AUTHORIZED
+
+授权 Codex 针对 CHANGE 01–09 自动修复和回归测试，无需逐项重新请求一般开发许可。
+
+修复顺序建议为：
+
+先完成 CHANGE 01–03 的 P0 修复。
+
+再处理 CHANGE 04–08 的能力封闭、事务与租户安全问题。
+
+最后执行 CHANGE 09 的证据整理、验收矩阵更新及复审准备。
+
+已经确认的安全设计不应反复重新设计；修复应保持最小必要变更。
+
+六、继续 HOLD 的边界
+
+项目
+
+	
+
+裁决
+
+
+
+
+浏览器 E2E
+
+	
+
+NOT_VERIFIED
+
+
+
+
+PostgreSQL 集成测试
+
+	
+
+NOT_RUN
+
+
+
+
+真实 Provider
+
+	
+
+NOT_VERIFIED
+
+
+
+
+真实支付 Webhook E2E
+
+	
+
+NOT_VERIFIED
+
+
+
+
+多设备视觉验收
+
+	
+
+NOT_VERIFIED
+
+
+
+
+Pack 注册
+
+	
+
+NOT_WIRED
+
+
+
+
+已购权益感知 CTA
+
+	
+
+NOT_IMPLEMENTED
+
+
+
+
+收银台跳转
+
+	
+
+NOT_IMPLEMENTED
+
+
+
+
+真实外部写入
+
+	
+
+HOLD
+
+
+
+
+自动成功费扣款
+
+	
+
+HOLD
+
+
+
+
+生产上线
+
+	
+
+NOT_AUTHORIZED
+
+七、正式裁决
+纯文本
+AUDIT_ID=MSG-20261010-V2-01
+DECISION=PASS_WITH_REVISE
+
+REVIEW_HEAD=1caad401
+REQUIRED_CHANGES=9
+P0=3
+P1=6
+
+CODE_BASELINE=ACCEPTED_WITH_FINDINGS
+PURE_FUNCTION_ARCHITECTURE=PASS_SCOPED
+SECURITY_CLOSURE=NO
+PAYMENT_INTEGRATION_READY=NO
+RUNTIME_REGISTRATION_READY=NO
+
+NEXT_AUTHORIZED=V2_R1_SCOPED_SECURITY_AND_CONTRACT_REPAIR
+
+U1_REOPEN=NO
+U2_DESIGN_R21_REOPEN=NO
+SECOND_RUNTIME=NOT_FOUND_IN_REVIEWED_PACK
+
+REAL_PROVIDER_WRITE=HOLD
+AUTO_COLLECTION=HOLD
+PRODUCTION_READY=NO
+
+最终裁决：PASS_WITH_REVISE。
+
+V2-01 至 V2-09 的代码与文档基线可以保留，不需要整体推倒重做。但本轮发现的 3 项 P0 和 6 项 P1 必须进入修订闭环。
+
+下一次送审应提供修复后的固定 HEAD、逐项对应的代码差异、负向测试原始结果及更新后的验收矩阵。
+
+本次审计仅进行了 GitHub 只读核验，未修改仓库、Issue 或任何追踪系统。
+```
