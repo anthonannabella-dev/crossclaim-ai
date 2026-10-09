@@ -3172,3 +3172,75 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.49 MSG-20261009-45 裁决归档 = **REVISE**（R20：`CHANGE 81 = PASS`、`82 = PASS_SCOPED`、`80 = PASS WITH REVISE`、`79 = REVISE`；新增 CHANGE 83/84（P0）+ 85（P1））
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-45] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（129/129，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=3602 / NORM_LINES=129 / FNV=f0c87e42`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R19=824ac886`、`REVIEWED_HEAD=b396dc99`。
+
+**审计方独立核验**：`HEAD b396dc99` 已确认存在、`824ac886..b396dc99` = **2 commits / 3 files**、
+R20 设计文件变更 `+208 / −8`（符合送审）、**R20 blob SHA `99a0a8291c1451e6b248f0659225c39b847d3c32` 匹配**、
+比较范围内**未出现 `apps/api` 产品代码变更**；**未**独立复算文档 SHA-256、**未**执行 PostgreSQL / Linux 实测。
+审计方并独立确认：「**R20 的 §28.1–§28.4 确实包含所声称的主要修订，而不仅是提交说明中的声明**」。
+
+**逐项裁决**：`CHANGE 79（P0）= REVISE`、`CHANGE 80（P0）= PASS WITH REVISE`、`CHANGE 81（P0）= PASS`、`CHANGE 82（P1）= PASS_SCOPED`；
+`CHANGE_73_REOPEN=NO`、`CHANGE_74_REOPEN=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED`、`U1_REOPEN = NO`。
+
+#### 2.49.1 新增 REQUIRED_CHANGES（下一轮 MSG-20261009-46 只做这三项）
+
+- **CHANGE 83（P0）进程终止与 `COMMIT` 在途期间的锁生命周期**：R20 §28.1 的四项预防性条件
+  **只能防止部分应用代码主动释放锁的行为，尚不能证明提交窗口内锁不会意外释放**。被覆盖不全的反例：
+
+```text
+反例：进程退出，但数据库提交仍可能成功
+  提交请求已经送达数据库后，客户端失效与事务最终结果之间存在不确定区间
+  · flock 是操作系统管理的文件锁 ⇒ 进程异常终止可能导致锁释放
+  · PostgreSQL 对已经收到的 COMMIT 是否完成，
+    不能仅凭客户端进程的存活状态推断
+  ⇒ 即使代码中没有显式的 LOCK_UN 或 close(lockFD)，
+    也不能由此证明整个提交窗口持续拥有排他权
+```
+
+  修订要求：§28.1 必须把**进程崩溃、`SIGKILL`、锁持有者失效、客户端连接异常、数据库在途提交**纳入**失败模型**，
+  并证明**所有情况下都不存在违反排他协议的成功写入**，或依靠**数据库端强制机制**排除该风险。
+  **在证明完成之前**：`SAFETY_PREMISE=NOT_PROVEN`、`EXCLUSIVE_WINDOW_UNAVAILABLE=YES`，
+  **不得以静态规则检查通过作为实施许可**。
+- **CHANGE 84（P0）M1 恢复串行化的参与者与强制范围**：共用同一把锁解决了**受控参与者之间**的一部分并发协调问题，
+  但**不能得出所有实例都受同一权威约束**的结论。须确认：①所有实例是否使用**同一个可提供可靠互斥语义的文件系统、锁键与锁协议**；
+  ②是否存在**绕过协调者的独立任务或历史服务**；③**人工解除阻断与自动恢复是否共用强制门禁**。
+  分支 B 可继续作为**人工恢复**设计方案，但**日志与工单本身不能构成分布式强制阻断机制**。
+  修订要求：明确分支 B 的 **fail-closed 策略**——一旦出现 `ATTRIBUTION_UNRECOVERABLE` 或**跨实例阻断状态不确定**，
+  **所有无法证明共享阻断状态的实例不得执行 `INSERT`、恢复写入或下游自动化**；解除阻断须**受控的人工授权及重新验收**。
+  若当前架构无法实现 ⇒ 明确声明 **`MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED`**；
+  **单实例受控实验**可作为未来的独立验收范围，但**不得**由此推导**跨实例生产安全**。
+- **CHANGE 85（P1）补充 `U2-51b` 的数据库结果验收**：①当 `dbCommitOutcome=COMMITTED` 且 `safetyOutcome=REJECTED` 时，
+  **不允许**以「回滚成功」「零持久化写入」等结论**覆盖已经完成的提交**；
+  ②当 `dbCommitOutcome=UNKNOWN` 时，**禁止**直接重放相同的业务 `INSERT`，
+  且**不得**把「安全状态恢复正常」当作「提交归因已经完成」（属验收补强，**不重开** CHANGE 82 已接受的语义修订）。
+
+**审计方的收敛建议（原文要点）**：下一轮**不再反复扩展** `xmin`、epoch 或 `P2` 探针方案，
+而应**收敛到两个明确问题**：①**数据库事务提交期间能否证明排他权仍有效**；
+②**提交归因未知时所有参与实例能否强制停止自动化**。这两个问题需要以**可执行的不变量与负面验收**定义，
+而不是额外的**描述性检查**。
+
+```text
+MSG-20261009-45_FINAL_VERDICT = REVISE
+MSG-20261009-45_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 129/129；FNV1A f0c87e42）
+CHANGE_79=REVISE · CHANGE_80=PASS_WITH_REVISE · CHANGE_81=PASS · CHANGE_82=PASS_SCOPED
+AUDIT_SCOPE_VERIFIED=YES · AUDIT_SCOPE_COMMITS=2 · AUDIT_SCOPE_FILES=3
+U2_DESIGN_BLOB_VERIFIED=YES · U2_DESIGN_SHA256_VERIFIED=NO
+SAFETY_PREMISE=NOT_PROVEN
+COMMIT_ATTRIBUTION_PROOF=NOT_AVAILABLE_IN_CURRENT_CONFIGURATION
+CROSS_INSTANCE_RECOVERY_BLOCKING=NOT_VERIFIED
+U2_DESIGN_R20_ACCEPTED = NO · U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED · U1_REOPEN = NO
+REQUIRED_CHANGES = CHANGE_83_P0 ; CHANGE_84_P0 ; CHANGE_85_P1
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R21_READ_ONLY_CHANGES_83_TO_85
+NEXT_AUDIT = MSG-20261009-46
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```

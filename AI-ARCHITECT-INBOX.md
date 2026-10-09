@@ -180545,3 +180545,299 @@ PRODUCTION_READY=NO
 
 本次仅作只读审计，未修改 GitHub 仓库。
 ```
+
+### [MSG-20261009-45] U2 设计 R20 = **REVISE**（`CHANGE 81 = PASS`、`82 = PASS_SCOPED`、`80 = PASS WITH REVISE`、`79 = REVISE`；新增 **CHANGE 83（P0）/84（P0）/85（P1）**；`CHANGE_73_REOPEN=NO`、`CHANGE_74_REOPEN=NO`）—— **独立核验**：`HEAD b396dc99` 存在、`824ac886..b396dc99` = **2 commits / 3 files**、R20 设计变更 `+208 / −8`（符合送审）、**R20 blob SHA `99a0a8291c1451e6b248f0659225c39b847d3c32` 匹配**、比较范围内**未出现 `apps/api` 产品代码变更**；未独立复算文档 SHA-256、未执行 PostgreSQL/Linux 实测；审计方并确认「R20 §28.1–§28.4 确实包含所声称的主要修订，而不仅是提交说明中的声明」；**逐项**：`CHANGE 79 = REVISE`（P2 证明边界已纠正，**但锁生命周期仍存在未覆盖的失效路径**）、`CHANGE 80 = PASS WITH REVISE`（恢复串行化方向正确，**但跨实例人工阻断缺少可执行的强制门禁**）、`CHANGE 81 = PASS`（**正确降级 `xmin` 证据，不再声称无法证明的执行归因**）、`CHANGE 82 = PASS_SCOPED`（验收语义分离正确，仍需对崩溃与提交未知场景补充断言）；**新增 REQUIRED_CHANGES**：**CHANGE 83（P0）进程终止与 `COMMIT` 在途期间的锁生命周期**——R20 §28.1 的四项预防性条件只能防止部分应用代码主动释放，**不能证明提交窗口内锁不会意外释放**；反例「**进程退出，但数据库提交仍可能成功**」：提交请求已送达数据库后，客户端失效与事务最终结果之间存在不确定区间；**`flock` 是操作系统管理的文件锁，进程异常终止可能导致锁释放，而 PostgreSQL 对已收到的 `COMMIT` 是否完成不能仅凭客户端进程存活状态推断**；即使代码中没有显式的 `LOCK_UN`/`close(lockFD)`，也不能据此证明整个提交窗口持续拥有排他权 ⇒ 必须把**进程崩溃、`SIGKILL`、锁持有者失效、客户端连接异常、数据库在途提交**纳入失败模型，并证明所有情况下都不存在违反排他协议的成功写入，或依靠**数据库端强制机制**排除该风险；在证明完成前：**`SAFETY_PREMISE=NOT_PROVEN`、`EXCLUSIVE_WINDOW_UNAVAILABLE=YES`**，且**不得以静态规则检查通过作为实施许可**；**CHANGE 84（P0）M1 恢复串行化的参与者与强制范围**——共用同一把锁只解决受控参与者之间的部分并发协调，**不能得出所有实例都受同一权威约束**的结论；须确认：所有实例是否使用**同一个可提供可靠互斥语义的文件系统、锁键与锁协议**；是否存在**绕过协调者的独立任务或历史服务**；**人工解除阻断与自动恢复是否共用强制门禁**；本轮分支 B 可继续作为人工恢复设计，但**日志与工单本身不能构成分布式强制阻断机制** ⇒ 须明确分支 B 的 fail-closed 策略：一旦出现 `ATTRIBUTION_UNRECOVERABLE` 或跨实例阻断状态不确定，**所有无法证明共享阻断状态的实例不得执行 `INSERT`、恢复写入或下游自动化**；解除阻断需**受控的人工授权及重新验收**；若当前架构无法实现 ⇒ 明确声明 **`MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED`**（单实例受控实验可作为未来独立验收范围，但**不得**由此推导跨实例生产安全）；**CHANGE 85（P1）补充 `U2-51b` 的数据库结果验收**——`dbCommitOutcome=COMMITTED` 且 `safetyOutcome=REJECTED` 时，**不允许**以「回滚成功」「零持久化写入」等结论**覆盖已经完成的提交**；`dbCommitOutcome=UNKNOWN` 时**禁止**直接重放相同业务 `INSERT`，且**不得**把「安全状态恢复正常」当作「提交归因已完成」（属验收补强，不重开 CHANGE 82 已接受的语义）；**授权**：`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`SCHEMA_MIGRATION=HOLD`、`RUNTIME/QUEUE WIRING=FORBIDDEN`、`EXTERNAL_WRITE=HOLD`、`U1_REOPEN=NO`、`PRODUCTION_READY=NO`；审计方并建议：**不再反复扩展 `xmin`/epoch/`P2` 探针方案**，而应收敛到两个明确问题——**①数据库事务提交期间能否证明排他权仍有效；②提交归因未知时所有参与实例能否强制停止自动化**，并要求以**可执行的不变量与负面验收**定义，而非额外的描述性检查；`REQUIRED_CHANGES=CHANGE_83_P0,CHANGE_84_P0,CHANGE_85_P1`、`NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R21_READ_ONLY_CHANGES_83_TO_85` / `NEXT_AUDIT=MSG-20261009-46`；reviewed ref `b396dc99f609b37d9f1d8d151921dcc057fcbb00`
+
+```text
+MSG-20261009-45｜独立审计裁决
+REVISE · 暂不授权实施
+
+审计对象： CrossClaim AI · SI/RSI INTERNAL CODE REPAIR V1
+阶段： PHASE 3-A · U2 设计 R20
+固定 HEAD： b396dc99f609b37d9f1d8d151921dcc057fcbb00
+审计方式： GitHub 连接器只读核验 + 安全协议逻辑审查
+审计范围： CHANGE 79–82
+
+一、独立证据核验
+
+已通过 GitHub 连接器读取指定提交、比较提交范围，并取得 R20 设计文档的 Git blob 信息。
+
+核验项
+
+
+
+独立结果
+
+
+
+
+HEAD b396dc99
+
+
+
+已确认存在
+
+
+
+
+824ac886..b396dc99
+
+
+
+2 commits，3 files
+
+
+
+
+R20 设计文件变更
+
+
+
++208 / −8，符合送审
+
+
+
+
+R20 blob SHA
+
+
+
+99a0a8291c1451e6b248f0659225c39b847d3c32，匹配
+
+
+
+
+apps/api 产品代码变更
+
+
+
+比较范围内未出现
+
+
+
+
+文档 SHA-256
+
+
+
+未独立复算
+
+
+
+
+PostgreSQL / Linux 实测
+
+
+
+未执行
+
+本轮独立检查证实，R20 的 §28.1–§28.4 确实包含所声称的主要修订，而不仅是提交说明中的声明。
+
+核验来源：
+R20 固定提交
+。
+
+二、逐项裁决
+
+CHANGE
+
+
+
+裁决
+
+
+
+主要理由
+
+
+
+
+79 · P0
+
+
+
+REVISE
+
+
+
+P2 的证明边界已纠正，但锁生命周期仍存在未覆盖的失效路径
+
+
+
+
+80 · P0
+
+
+
+PASS WITH REVISE
+
+
+
+恢复串行化方向正确，但跨实例人工阻断缺少可执行的强制门禁
+
+
+
+
+81 · P0
+
+
+
+PASS
+
+
+
+正确降级 xmin 证据，不再声称无法证明的执行归因
+
+
+
+
+82 · P1
+
+
+
+PASS_SCOPED
+
+
+
+验收语义分离正确，仍需对崩溃与提交未知场景补充断言
+
+本轮结论：两个条款可在设计层面接受，两个条款仍需修订或附带条件。U2 写入子集不得实施。
+
+三、阻断项与修订要求
+CHANGE 83（P0）——进程终止与 COMMIT 在途期间的锁生命周期
+
+R20 §28.1 的四项预防性条件可以防止部分应用代码主动释放锁的行为，但尚不能证明提交窗口内锁不会意外释放。
+
+存在一个尚未被覆盖的反例：
+
+反例：进程退出，但数据库提交仍可能成功
+
+示意时序：提交请求已经送达数据库后，客户端失效与事务最终结果之间可能出现不确定区间。
+
+关键点在于，flock 是操作系统管理的文件锁。进程异常终止可能导致锁释放，而 PostgreSQL 对已经收到的 COMMIT 是否完成，不能仅凭客户端进程的存活状态推断。
+
+即使代码中没有显式的 LOCK_UN 或 close(lockFD)，也不能由此证明整个提交窗口持续拥有排他权。
+
+修订要求： §28.1 必须把进程崩溃、SIGKILL、锁持有者失效、客户端连接异常以及数据库在途提交纳入失败模型。需要证明所有情况下都不存在违反排他协议的成功写入，或依靠数据库端强制机制排除该风险。
+
+在证明完成之前：
+
+SAFETY_PREMISE=NOT_PROVEN
+
+EXCLUSIVE_WINDOW_UNAVAILABLE=YES
+
+不得以静态规则检查通过作为实施许可。
+
+CHANGE 84（P0）——M1 恢复串行化的参与者和强制范围
+
+R20 §28.2 规定恢复流程与写入流程共用同一把锁，这解决了受控参与者之间的一部分并发协调问题。
+
+但还不能得出所有实例都受到同一权威约束的结论。
+
+尤其需要确认：所有实例是否使用同一个可提供可靠互斥语义的文件系统、锁键及锁协议；是否存在绕过协调者的独立任务或历史服务；人工解除阻断与自动恢复是否共用强制门禁。
+
+本轮的分支 B 可以继续作为人工恢复设计方案，但日志和工单本身不能构成分布式强制阻断机制。
+
+修订要求： 明确分支 B 的 fail-closed 策略：一旦出现 ATTRIBUTION_UNRECOVERABLE 或跨实例阻断状态不确定，所有无法证明共享阻断状态的实例不得执行 INSERT、恢复写入或下游自动化。解除阻断需要受控的人工授权及重新验收。
+
+若当前架构无法实现这一点，应明确声明：
+
+MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED
+
+单实例受控实验可以作为未来的独立验收范围，但不得由此推导跨实例生产安全。
+
+CHANGE 85（P1）——补充 U2-51b 的数据库结果验收
+
+R20 §28.4 把 safetyOutcome 与 dbCommitOutcome 分列是正确的。
+
+还需要在验收规范中写清楚：当 dbCommitOutcome=COMMITTED 且 safetyOutcome=REJECTED 时，不允许以回滚成功、零持久化写入等结论覆盖已经完成的提交。
+
+同样，在 dbCommitOutcome=UNKNOWN 时，禁止直接重放相同业务 INSERT，并且不得把安全状态恢复正常当作提交归因已经完成。
+
+这属于验收补强，不重开 CHANGE 82 已被接受的语义修订。
+
+四、U2 实施授权裁决
+
+U2_PLATFORM_ONLY_INSERT_SUBSET
+
+NOT_AUTHORIZED
+
+设计阶段
+
+R20 / REVISE
+
+产品代码实施
+
+禁止
+
+SCHEMA_MIGRATION
+
+HOLD
+
+RUNTIME / QUEUE WIRING
+
+FORBIDDEN
+
+EXTERNAL_WRITE
+
+HOLD
+
+U1_REOPEN
+
+NO
+
+PRODUCTION_READY
+
+NO
+
+这不是否定 R20 的设计进步。CHANGE 81 已经明确承认当前无法完成事务归因证明，CHANGE 79 也正确撤回了不成立的提交前检测保证。
+
+但在候选记录写入这条路径上，互斥安全与未知提交后的恢复控制仍是 P0 条件。不能因为其余设计通过，就提前授权 INSERT。
+
+五、下一轮授权范围
+
+下一轮 MSG-20261009-46 仅允许完成 CHANGE 83–85 的只读设计修订及证据核验，不授权代码实施。
+
+建议不再反复扩展 xmin、epoch 或 P2 探针方案，而是收敛到两个明确问题：数据库事务提交期间能否证明排他权仍有效；提交归因未知时所有参与实例能否强制停止自动化。
+
+这两个问题需要以可执行的不变量和负面验收定义，而不是额外描述性检查。
+
+六、机器可读裁决
+
+供 Codex / OpenClaw 归档的裁决
+
+复制
+
+AUDIT_ID=MSG-20261009-45
+REVIEWED_HEAD=b396dc99f609b37d9f1d8d151921dcc057fcbb00
+AUDIT_VERDICT=REVISE
+AUDIT_SCOPE_VERIFIED=YES
+AUDIT_SCOPE_COMMITS=2
+AUDIT_SCOPE_FILES=3
+U2_DESIGN_BLOB_VERIFIED=YES
+U2_DESIGN_SHA256_VERIFIED=NO
+CHANGE_79=REVISE
+CHANGE_80=PASS_WITH_REVISE
+CHANGE_81=PASS
+CHANGE_82=PASS_SCOPED
+REQUIRED_CHANGES=CHANGE_83_P0,CHANGE_84_P0,CHANGE_85_P1
+CHANGE_73_REOPEN=NO
+CHANGE_74_REOPEN=NO
+U1_REOPEN=NO
+SAFETY_PREMISE=NOT_PROVEN
+COMMIT_ATTRIBUTION_PROOF=NOT_AVAILABLE_IN_CURRENT_CONFIGURATION
+CROSS_INSTANCE_RECOVERY_BLOCKING=NOT_VERIFIED
+U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R21_READ_ONLY_CHANGES_83_TO_85
+NEXT_AUDIT=MSG-20261009-46
+
+最终裁决：R20 = REVISE；CHANGE 81、82 接受；CHANGE 79、80 尚未完全闭合；U2_PLATFORM_ONLY_INSERT_SUBSET 继续 NOT_AUTHORIZED。
+
+本次没有修改、提交或推送任何仓库文件。
+```
