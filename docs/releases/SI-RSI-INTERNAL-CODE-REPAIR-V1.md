@@ -2509,3 +2509,78 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.40 MSG-20261009-36 裁决归档 = **REVISE**（CHANGE 38/39 条件通过；两个 P0 未关，新增 CHANGE 40–43）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-36] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（189/189，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=5604 / NORM_LINES=189 / FNV=90c85cab`
+> （注：本轮首次复算不匹配 2 字符，原因是裁决正文中 `\\n`/`\\u0000` 为**两个反斜杠**的字面序列，
+> 已按页面 innerText 原样修正后一致）。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R10=35a50c63`、`REVIEWED_HEAD=b02a92de`。
+
+**审计方独立核验**：`R10→R11 = 2 提交 / 3 文件`、`apps/api` 0 变更、§19.1–§19.5 已从 diff 读取；
+**R11 文档 Git blob SHA `8b53b3f19920e11e62147516c4a863cf076027f7` 本轮独立核验通过**；
+SHA-256 仍 `NOT_INDEPENDENTLY_VERIFIED`；真实 PostgreSQL/Linux 未执行。
+
+**逐项**：`CHANGE38 = PASS WITH REVISE · P1`、`CHANGE39 = PASS WITH REVISE · P1`、
+`CHANGE36 = REVISE · P0`、`CHANGE37 = REVISE · P0`、
+`U2_INPUT_OUTPUT_CONTRACT = PASS WITH REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED = REVISE`、
+`U2_IMPLEMENTATION_BOUNDARY = PASS`、`SCOPE_HONESTY = PASS`、
+`U2_DESIGN_APPROVED = NO`、`U2_IMPLEMENTATION_AUTHORIZED = NO`。
+
+**两个 P0 的否决理由（原文要点）**
+
+1. **CHANGE 36**：`singleInstanceGuaranteeRef + Digest` 只证明**某份配置/证据存在**，
+   不证明**运行中的进程持有排他权**——`RuntimeDirectory` ≠ 单实例锁；systemd 单元单实例**不代表**
+   同 UID 用户不能直接启动第二个进程；`flock` 只有被**所有**相关实例遵守才具协作互斥意义；
+   锁持有进程被强制终止后必须定义遗留文件处理规则。
+2. **CHANGE 37**：`READ COMMITTED` 下「读时未发现某个 key」**不排除**其他事务随后成功插入该 key；
+   行锁只保护**实际锁定的行**，锁不住**不存在**的候选记录；`createdAt` 是**时间**而非**事务身份**，
+   即便落在窗口内也不能排除其他写入者 ⇒ 我的三条件**不足**以证明 `THIS_INSERT_COMMITTED`。
+
+**REQUIRED_CHANGES（下一轮 MSG-20261009-37 只做这四项；`R12`）**
+
+- **CHANGE 40（P0）同 UID 锁安全的「活体排他」**：定义允许执行 U2 的**唯一受控入口**，
+  说明其他同 UID 进程的启动与文件修改能力如何被限制；**区分 `CONFIG_VERIFIED` 与
+  `LIVE_EXCLUSIVITY_VERIFIED`**；若采用 `flock`，须明确**锁文件/锁 FD/持有进程/完整事务窗口**
+  （避免锁意外提前释放）；定义**进程中断后的锁恢复规则**（**不得仅凭时间戳自动抢占或清除**）；
+  **U2-31 必须覆盖**「同 UID 绕过正常入口直接启动」与「释放锁期间路径对象被替换」。
+  若无法在现有环境保证同 UID 文件系统操作隔离 ⇒ 明列为**可信运行账户安全假设**并由**可信启动边界**保证，
+  否则拒绝写入；**不得**声称普通 `flock` 能阻止不合作的同 UID 进程修改目录项。
+- **CHANGE 41（P0）精确事务归因**：优先采用**不新增 schema** 的方案 ——
+  明确 `INSERT ... ON CONFLICT DO NOTHING RETURNING` 的**实际返回行数与主键**；
+  返回一行时**在 `COMMIT` 前记录真实返回 ID**；未知 `COMMIT` 时凭**该 ID + dedupeKey + 必要不变字段**
+  在**权威主库**对账；须明确**候选主键不可复用、记录不能被其他路径替换、唯一约束的实际行为**；
+  上述前提无法证明 ⇒ 只能 `UNKNOWN`，**不得**宣称已确认本次事务提交；
+  `createdAt` 仅作辅助诊断字段。**扩展 U2-32**：加入两个事务**交错写入同一 dedupeKey** 的情况。
+- **CHANGE 42（P1）状态报告语义收口**：**零行冲突复用**（执行了 `ON CONFLICT DO NOTHING`
+  返回零行后再复用）必须记 `insertAttempted=true`（不是 `false`）；`reconciled` 须区分
+  「**执行过**对账」与「**对账有结论**」（或规定以 `candidateInsertCommitState` 为唯一确定性依据）；
+  明确 **COMMIT UNKNOWN 与锁释放失败并存**时的 **outcome/reason 优先级**。
+- **CHANGE 43（P1）digest 规范测试向量**：给出最终拼接字节的**十六进制表示**与**预期 SHA-256**，
+  覆盖**空 packed-refs、linked worktree、特殊路径与异常输入**；并明确
+  `\n`/`\u0000` 必须表示**实际 LF/NUL 字节**（不是文本反斜杠序列）、可变长字段需**长度前缀**
+  或严格证明分隔符不可能出现、`realpath` 的**解析基准/符号链接策略/归一化**须可重复计算、
+  `signerAuthRef` 须**绑定签发者+运行实例+证明内容**以防跨环境重放。
+  （不需引入新的密钥管理系统。）
+
+**审计方明确**：`U2_PLATFORM_ONLY_INSERT_SUBSET` **目前也不宜放行**——该子集本身依赖
+CHANGE 36 的执行互斥与 CHANGE 37 的事务归因，不能绕过 P0 门禁。
+
+```text
+MSG-20261009-36_FINAL_VERDICT = REVISE
+MSG-20261009-36_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 189/189；FNV1A 90c85cab）
+U2_DESIGN_GIT_BLOB_VERIFICATION = INDEPENDENTLY_VERIFIED（8b53b3f1…76027f7）
+U2_DESIGN_APPROVED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · U3–U5 = NO
+U2_PLATFORM_ONLY_INSERT_SUBSET = NOT AUTHORIZED（本轮明确）
+REQUIRED_CHANGES = CHANGE_40_P0_LIVE_EXCLUSIVITY ; CHANGE_41_P0_PRECISE_COMMIT_ATTRIBUTION ;
+                   CHANGE_42_P1_STATE_REPORT_SEMANTICS ; CHANGE_43_P1_DIGEST_TEST_VECTOR
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R12_READ_ONLY_CHANGES_40_TO_43
+NEXT_AUDIT = MSG-20261009-37
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
