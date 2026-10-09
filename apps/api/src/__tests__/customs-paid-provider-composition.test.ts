@@ -284,6 +284,59 @@ describe('V2-02 漏包检测', () => {
       }),
     ).toThrow(CustomsProviderUndeclaredExitError);
   });
+
+  // V2-R2 / CHANGE 11：只允许显式白名单的安全元数据
+  it('不再复制内部对象属性（HTTP client 等）', () => {
+    const provider = {
+      ...makeSandboxLikeProvider(),
+      httpClient: { post: () => 'raw' },
+      transport: { send: () => 'raw' },
+    };
+    const wrapped = wrapPaidCustomsProvider({
+      provider,
+      counter: createPaidCustomsCallCounter(),
+      resolveContext: () => context(),
+      now: () => NOW,
+    }) as Record<string, unknown>;
+    expect(wrapped.httpClient).toBeUndefined();
+    expect(wrapped.transport).toBeUndefined();
+    expect(wrapped.providerId).toBe('provider-sandbox');
+  });
+
+  it('getter 属性既不复制、也不被读取（不触发副作用）', () => {
+    let getterCalls = 0;
+    const provider = makeSandboxLikeProvider() as Record<string, unknown>;
+    Object.defineProperty(provider, 'secretToken', {
+      enumerable: true,
+      configurable: true,
+      get() {
+        getterCalls += 1;
+        return 'leaked';
+      },
+    });
+    const wrapped = wrapPaidCustomsProvider({
+      provider,
+      counter: createPaidCustomsCallCounter(),
+      resolveContext: () => context(),
+      now: () => NOW,
+    }) as Record<string, unknown>;
+    expect(wrapped.secretToken).toBeUndefined();
+    expect(getterCalls).toBe(0);
+  });
+
+  it('capabilities 只保留显式 true 并复制为新对象（不交原始引用）', () => {
+    const capabilities = { FILING_CREATE: true, STATUS_READ: false, extra: 'x' };
+    const provider = { ...makeSandboxLikeProvider(), capabilities };
+    const wrapped = wrapPaidCustomsProvider({
+      provider,
+      counter: createPaidCustomsCallCounter(),
+      resolveContext: () => context(),
+      now: () => NOW,
+    }) as Record<string, unknown>;
+    expect(wrapped.capabilities).toEqual({ FILING_CREATE: true });
+    expect(wrapped.capabilities).not.toBe(capabilities);
+    expect(Object.isFrozen(wrapped.capabilities)).toBe(true);
+  });
 });
 
 describe('V2-02 绕过 Gate 的静态扫描', () => {

@@ -474,9 +474,12 @@ export function wrapPaidCustomsProvider<TProvider extends object>(
   // V2-R1 / CHANGE 04：**不**用 Object.create(provider) —— 那会把原始 provider 变成原型，
   // 业务层可通过原型链拿到未包装的原始方法。这里构造无原型逃逸的最小权限对象。
   const wrapped: Record<string, unknown> = {};
-  for (const name of collectProviderDataPropertyNames(provider)) {
-    wrapped[name] = (provider as Record<string, unknown>)[name];
+  for (const name of SAFE_PROVIDER_METADATA_KEYS) {
+    const value = readOwnDataProperty(provider, name);
+    if (isSafeMetadataValue(value) && value !== undefined) wrapped[name] = value;
   }
+  const capabilities = safeCapabilitiesCopy(readOwnDataProperty(provider, 'capabilities'));
+  if (capabilities !== undefined) wrapped.capabilities = capabilities;
   for (const operation of PAID_CUSTOMS_OPERATIONS) {
     const key = operationMethodName(operation);
     const original = (provider as unknown as Record<string, unknown>)[key];
@@ -531,19 +534,39 @@ export function collectProviderFunctionExits(provider: object): string[] {
   return [...names].sort();
 }
 
-/** 实例自身 + 原型链上的**非函数**属性名（用于最小权限拷贝，避免借原型逃逸）。 */
-export function collectProviderDataPropertyNames(provider: object): string[] {
-  const names = new Set<string>();
-  let current: object | null = provider;
-  while (current !== null && current !== Object.prototype) {
-    for (const name of Object.getOwnPropertyNames(current)) {
-      if (name === 'constructor') continue;
-      if (typeof (current as Record<string, unknown>)[name] === 'function') continue;
-      names.add(name);
-    }
-    current = Object.getPrototypeOf(current) as object | null;
+/**
+ * V2-R2 / CHANGE 11：包装**只**允许携带显式白名单里的安全元数据。
+ * 不再自动复制 provider 的非函数属性——那会把内部 HTTP client / transport 等
+ * 引用对象一并交出去，且在读取 getter 时触发副作用。
+ */
+export const SAFE_PROVIDER_METADATA_KEYS = ['providerId', 'displayName'] as const;
+
+/** 只读**自有数据属性**的描述符（绝不触发 getter，也不沿原型链取值）。 */
+function readOwnDataProperty(provider: object, key: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(provider, key);
+  if (descriptor === undefined || !('value' in descriptor)) return undefined;
+  return descriptor.value;
+}
+
+/** capabilities 只保留显式 true 的布尔声明，并冻结为**新的**对象（不交原始引用）。 */
+function safeCapabilitiesCopy(value: unknown): Readonly<Record<string, true>> | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const source = value as Record<string, unknown>;
+  const copy: Record<string, true> = {};
+  for (const key of Object.keys(source)) {
+    if (source[key] === true) copy[key] = true;
   }
-  return [...names];
+  return Object.freeze(copy);
+}
+
+/** 仅接受原始值元数据；对象 / 函数一律不复制。 */
+function isSafeMetadataValue(value: unknown): boolean {
+  return (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  );
 }
 
 /**
