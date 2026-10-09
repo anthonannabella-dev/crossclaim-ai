@@ -157,7 +157,7 @@ describe(`PHASE 2 分流扫描 × 真实 PostgreSQL（${testDatabaseMarker()}）
    * GATE-4 在 PHASE 2 层可覆盖的部分：**重复分流**与**并发扫描**的幂等性。
    * （运行时的 fencing / 断连 / 崩溃恢复属既有运行时路径，由既有 SI/RSI 门禁覆盖。）
    */
-  it('DB-S6 重复分流幂等：连跑两次结论不变、登记字段不重复、仍然零执行', async () => {
+  it('DB-S6 重复分流幂等（CHANGE 2）：第二次不再写、triagedAt 不漂移、仍然零执行', async () => {
     const id = await seed({ ...BASE, errorCode: 'PROVIDER_TIMEOUT', operationKind: 'READ_ONLY' });
     const sweep = createPrismaFaultTriageSweep({
       prisma,
@@ -171,8 +171,11 @@ describe(`PHASE 2 分流扫描 × 真实 PostgreSQL（${testDatabaseMarker()}）
 
     expect(first.decisions[0]!.disposition).toBe('AUTO_RECOVER_VIA_RUNTIME');
     expect(second.decisions[0]!.disposition).toBe('AUTO_RECOVER_VIA_RUNTIME');
-    expect(second.registered).toBe(1);
-    // 结论与登记值逐字稳定（不因重复分流而漂移）
+    // first-write-wins：第二次不写，登记字段逐字不变（时间戳不漂移、决策不被覆盖）
+    expect(first.registered).toBe(1);
+    expect(second.registered).toBe(0);
+    expect(second.alreadyRegistered).toBe(1);
+    expect(second.skipped).toBe(0);
     expect(afterSecond.sourceRefs).toEqual(afterFirst.sourceRefs);
     expect(Object.keys(afterSecond.sourceRefs as Record<string, unknown>)).toHaveLength(
       Object.keys(afterFirst.sourceRefs as Record<string, unknown>).length,
@@ -181,12 +184,16 @@ describe(`PHASE 2 分流扫描 × 真实 PostgreSQL（${testDatabaseMarker()}）
     expect(await prisma.autonomyLease.count()).toBe(0);
   });
 
-  it('DB-S7 并发扫描（4 路同时）：结论一致、登记不重复、零任务零租约', async () => {
+  it('DB-S7 并发扫描（4 路同时，CHANGE 2）：只有一次有效登记、结论一致、零任务零租约', async () => {
     const id = await seed({ ...BASE, errorName: 'AdapterMappingError' });
     const make = (): ReturnType<typeof createPrismaFaultTriageSweep> =>
       createPrismaFaultTriageSweep({ prisma, now: () => T0, resolveTrustedFacts: async () => ({ ...TRUSTED }) });
 
     const results = await Promise.all([make().sweepOnce(), make().sweepOnce(), make().sweepOnce(), make().sweepOnce()]);
+    // 四路都在算，但**只有一次**真正写入登记
+    expect(results.reduce((sum, r) => sum + r.registered, 0)).toBe(1);
+    expect(results.reduce((sum, r) => sum + r.alreadyRegistered, 0)).toBe(3);
+    expect(results.reduce((sum, r) => sum + r.skipped, 0)).toBe(0);
     for (const result of results) {
       expect(result.scanned).toBe(1);
       expect(result.decisions[0]!.disposition).toBe('CODE_REPAIR_CANDIDATE');
@@ -218,9 +225,64 @@ describe(`PHASE 2 分流扫描 × 真实 PostgreSQL（${testDatabaseMarker()}）
     const result = await sweep.sweepOnce();
     expect(result.scanned).toBe(1); // 扫描时仍是 DIAGNOSED
     expect(result.registered).toBe(0); // 登记被 kind/status 前置条件挡住
+    expect(result.alreadyRegistered).toBe(0);
+    expect(result.skipped).toBe(1);
     const row = await prisma.autonomyIncident.findUniqueOrThrow({ where: { id } });
     expect(row.status).toBe('CLOSED');
     expect((row.sourceRefs as Record<string, unknown>).triageDecision).toBeUndefined();
+  });
+
+  /**
+   * MSG-20261009-09 / CHANGE 2 —— 并发与时间戳语义的确定性证明。
+   */
+  it('DB-S11 快照语义：可信事实变化后重扫，已登记结论与 triagedAt 不被覆盖', async () => {
+    const id = await seed({ ...BASE, errorCode: 'PROVIDER_TIMEOUT', operationKind: 'READ_ONLY' });
+    // 首次：可信事实全绿 ⇒ A 路径候选
+    const first = await createPrismaFaultTriageSweep({
+      prisma,
+      now: () => T0,
+      resolveTrustedFacts: async () => ({ ...TRUSTED }),
+    }).sweepOnce();
+    expect(first.decisions[0]!.disposition).toBe('AUTO_RECOVER_VIA_RUNTIME');
+    const afterFirst = await prisma.autonomyIncident.findUniqueOrThrow({ where: { id } });
+
+    // 第二次：授权已失效（可信事实变化）⇒ 当前计算结论为 BLOCK，但**不得覆盖**已登记快照
+    const second = await createPrismaFaultTriageSweep({
+      prisma,
+      now: () => new Date('2026-10-09T08:00:00.000Z'),
+      resolveTrustedFacts: async () => ({ ...TRUSTED, authorizationActive: false }),
+    }).sweepOnce();
+    expect(second.decisions[0]!.disposition).toBe('BLOCK_HUMAN_REVIEW');
+    expect(second.decisions[0]!.reason).toBe('AUTHORIZATION_NOT_ACTIVE');
+    expect(second.registered).toBe(0);
+    expect(second.alreadyRegistered).toBe(1);
+
+    const afterSecond = await prisma.autonomyIncident.findUniqueOrThrow({ where: { id } });
+    expect(afterSecond.sourceRefs).toEqual(afterFirst.sourceRefs);
+    const refs = afterSecond.sourceRefs as Record<string, unknown>;
+    expect(refs.triageDecision).toBe('AUTO_RECOVER_VIA_RUNTIME'); // 旧决策未被新决策覆盖
+    expect(refs.triageReason).toBe('HANDOFF_TO_EXISTING_RUNTIME');
+    expect(refs.triagedAt).toBe(T0.toISOString()); // 时间戳不漂移
+  });
+
+  it('DB-S12 jsonb 合并不丢字段（CHANGE 2）：并发扫描后无关既有键仍完整', async () => {
+    const id = await seed({ ...BASE, errorName: 'AdapterMappingError' });
+    const extra = { unrelatedRefA: 'run:1', nested: { keep: true } };
+    await prisma.$executeRaw`
+      UPDATE "AutonomyIncident"
+         SET "sourceRefs" = "sourceRefs" || ${JSON.stringify(extra)}::jsonb
+       WHERE "id" = ${id}
+    `;
+    const make = (): ReturnType<typeof createPrismaFaultTriageSweep> =>
+      createPrismaFaultTriageSweep({ prisma, now: () => T0, resolveTrustedFacts: async () => ({ ...TRUSTED }) });
+    await Promise.all([make().sweepOnce(), make().sweepOnce(), make().sweepOnce(), make().sweepOnce()]);
+
+    const row = await prisma.autonomyIncident.findUniqueOrThrow({ where: { id } });
+    const refs = row.sourceRefs as Record<string, unknown>;
+    expect(refs.unrelatedRefA).toBe('run:1');
+    expect(refs.nested).toEqual({ keep: true });
+    expect(refs.faultClass).toBe('PARSER_FAILURE'); // PHASE 1 原有键也未丢
+    expect(refs.triageDecision).toBe('CODE_REPAIR_CANDIDATE');
   });
 
   /**

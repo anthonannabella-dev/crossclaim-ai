@@ -29,7 +29,12 @@ export const TRIAGE_REGISTRATION_FIELDS = ['triageDecision', 'triageReason', 'tr
 
 export interface FaultTriageSweepResult {
   scanned: number;
+  /** 本次**首次**写入登记的条数（first-write-wins）。 */
   registered: number;
+  /** 已登记过、本次按幂等语义跳过更新的条数（`triagedAt` 不漂移、决策不被覆盖）。 */
+  alreadyRegistered: number;
+  /** 因 kind/status 前置条件被挡下的条数（含并发中转为终态）。 */
+  skipped: number;
   decisions: readonly FaultTriageDecision[];
   /** 恒定 0：本模块不执行任何业务动作（由测试断言）。 */
   tasksCreated: 0;
@@ -84,6 +89,8 @@ export function createPrismaFaultTriageSweep(input: {
 
       const decisions: FaultTriageDecision[] = [];
       let registered = 0;
+      let alreadyRegistered = 0;
+      let skipped = 0;
       for (const row of rows) {
         const incident: PersistedFaultIncidentRow = {
           id: row.id,
@@ -102,10 +109,13 @@ export function createPrismaFaultTriageSweep(input: {
 
         if (!register) continue;
         /**
-         * 只登记固定三项；`||` 做 jsonb 合并（不覆盖 PHASE 1 的原有键）。
-         * WHERE 带 kind/status 前置条件 ⇒ 并发中已转终态的行不会被登记。
+         * **first-write-wins 幂等登记**（MSG-20261009-09 / CHANGE 2）：
+         *   · `||` 做 jsonb **合并**（只加固定三项，绝不整对象覆盖 ⇒ 并发下不会丢失其它引用）；
+         *   · `NOT ("sourceRefs" ? 'triageDecision')` ⇒ **只有首次写入才登记**：
+         *     重复扫描不改 `triagedAt`、不覆盖既有决策；并发扫描在行锁 + 条件重判下只有一次生效；
+         *   · `kind`/`status` 前置条件 ⇒ `DIAGNOSED` 之外的任何状态（含并发转 `CLOSED`）绝对禁止登记。
          */
-        const affected = await input.prisma.$executeRaw`
+        const registeredRows = await input.prisma.$executeRaw`
           UPDATE "AutonomyIncident"
              SET "sourceRefs" = "sourceRefs" || ${JSON.stringify({
                triageDecision: decision.disposition,
@@ -116,13 +126,35 @@ export function createPrismaFaultTriageSweep(input: {
            WHERE "id" = ${row.id}
              AND "kind" = ${INTERNAL_FAULT_INCIDENT_KIND}
              AND "status" = 'DIAGNOSED'
+             AND NOT ("sourceRefs" ? 'triageDecision')
         `;
-        if (affected === 1) registered += 1;
+        if (registeredRows === 1) {
+          registered += 1;
+          continue;
+        }
+        /**
+         * 0 行 ⇒ 要么已登记（幂等跳过），要么被 kind/status 前置条件挡下。
+         * 这里只做**只读**判定，保证计数语义可审计（不猜、不吞）。
+         */
+        const settled = await input.prisma.autonomyIncident.findUnique({
+          where: { id: row.id },
+          select: { kind: true, status: true, sourceRefs: true },
+        });
+        const alreadyHasDecision =
+          settled !== null &&
+          typeof settled.sourceRefs === 'object' &&
+          settled.sourceRefs !== null &&
+          !Array.isArray(settled.sourceRefs) &&
+          'triageDecision' in (settled.sourceRefs as Record<string, unknown>);
+        if (alreadyHasDecision) alreadyRegistered += 1;
+        else skipped += 1;
       }
 
       return {
         scanned: rows.length,
         registered,
+        alreadyRegistered,
+        skipped,
         decisions,
         tasksCreated: 0,
         leasesCreated: 0,
@@ -142,4 +174,11 @@ export const FAULT_TRIAGE_SWEEP_BOUNDARY = {
   performsExternalWrites: false,
   requiresInjectedTrustedFacts: true,
   defaultTrustedFacts: 'FAIL_CLOSED',
+  /** MSG-20261009-09 CHANGE 2：首次写入生效，此后不更新（时间戳不漂移、决策不被覆盖）。 */
+  firstWriteWinsRegistration: true,
+  neverOverwritesExistingDecision: true,
+  /** jsonb 合并只增不改 ⇒ 并发下不会丢失 `sourceRefs` 的其它引用。 */
+  mergesJsonbWithoutLosingOtherRefs: true,
+  /** 登记是**快照**，不是运行时授权凭证；运行时仍须自行复核。 */
+  registrationIsSnapshotNotAuthorization: true,
 } as const;

@@ -350,7 +350,7 @@ PHASE 3 的实现授权须在 PHASE 2 FINAL-R2 关闭并通过独立设计审计
 | CHANGE | 级别 | 状态 | 证据 |
 | --- | --- | --- | --- |
 | 1 GATE-5 脱敏负向验收 | P1 | **本轮完成** | 见下 |
-| 2 并发登记与时间戳幂等语义 | P1 | NOT_STARTED | — |
+| 2 并发登记与时间戳幂等语义 | P1 | **本轮完成** | 见下 |
 | 3 可信事实来源契约（文档 + 测试） | P1 | NOT_STARTED | — |
 
 **CHANGE 1 实现口径**（`fault-triage.ts`）：
@@ -374,6 +374,31 @@ PHASE 3 的实现授权须在 PHASE 2 FINAL-R2 关闭并通过独立设计审计
 | 回归 | 正常载荷行为不变（A 路径 / 修复候选各自如常） |
 
 门禁：PHASE 2 三套件 **43/43 PASS**；`apps/api tsc --noEmit` **0 error**。审计要求的验收名 `GATE5_NEGATIVE = PASS` 已达成。
+
+**CHANGE 2 实现口径**（`fault-triage-sweep.ts`）：
+
+- 登记语义改为 **first-write-wins**：更新语句追加 `AND NOT ("sourceRefs" ? 'triageDecision')`。
+  · 重复扫描 ⇒ **不写**、`triagedAt` 不漂移、既有决策不被覆盖；
+  · 并发扫描 ⇒ 行锁 + 条件重判下**只有一次**真正写入（其余进入幂等跳过计数）；
+  · 任何非 `DIAGNOSED` 状态（含并发转为 `CLOSED`）⇒ **绝对禁止登记**（前置条件挡下）。
+- `sourceRefs` 更新一律使用 jsonb **合并**（只增不改），**个别字段不被整对象覆盖** ⇒ 并发下不会丢失其它引用
+  （包括 PHASE 1 既有键、以及历史遗留的未知键）。
+- 返回值新增可审计计数：`registered`（首次写入）/ `alreadyRegistered`（幂等跳过）/ `skipped`（被 kind/status 挡下）；
+  0 行时只做**只读**定位，保证计数语义不猜、不吞。
+- 明确登记是**快照**（`registrationIsSnapshotNotAuthorization`）：可信事实若在「计算 → 写入」之间变化，
+  已登记内容**不被改写**；运行时**不得**把该快照当作授权凭证（仍须自行复核，见 CHANGE 3 契约）。
+
+**CHANGE 2 验收（真实 PostgreSQL）**：
+
+| 用例 | 结论 |
+| --- | --- |
+| DB-S6 重复扫描 | 第二次 `registered = 0` / `alreadyRegistered = 1`；`sourceRefs` 深比较**逐字不变**（`triagedAt` 不漂移） |
+| DB-S7 四路并发扫描 | 合计 `registered = 1` / `alreadyRegistered = 3`；三个 triage 键各出现一次 |
+| DB-S8 并发中转为 `CLOSED` | `registered = 0` / `alreadyRegistered = 0` / `skipped = 1`；该行无 triage 字段且不抛错 |
+| DB-S11 可信事实变化后重扫 | 当前计算结论变为 `BLOCK`（保留在 decisions 中），但**已登记快照不被覆盖**：`triageDecision` 仍为 A 路径、`triagedAt` 仍为首次值 |
+| DB-S12 jsonb 合并不丢字段 | 并发扫描后 `unrelatedRefA` / `nested` / PHASE 1 的 `faultClass` 全部完整，`triageDecision` 正确 |
+
+门禁：PHASE 2 三套件 **45/45 PASS**；`apps/api tsc --noEmit` **0 error**。审计要求的验收名 `GATE4_TRIAGE_REGISTRATION = PASS` 已达成。
 
 ## 3. 状态（截至本文件提交）
 
@@ -467,8 +492,8 @@ PHASE2_REVIEW_VERDICT = MSG-20261009-09 = PASS WITH REVISE（逐字归档 FULL_C
 PHASE2_SAFE_SCOPE_ACCEPTED = YES
 PHASE2_CLOSED = NO（待 CHANGE 1–3 后 FINAL-R2 复审 MSG-20261009-10）
 PHASE3_DESIGN_AUTHORIZED = YES_READ_ONLY（仅只读方案设计；实现授权 NO）
-PHASE2_FINAL_R2_PROGRESS = CHANGE 1 ✅（GATE5_NEGATIVE = PASS）→ NEXT = CHANGE 2（并发登记与时间戳幂等语义，含 JSON 不丢失其它引用）
-NEXT_UNIT = PHASE 2 FINAL-R2：CHANGE 2（并发登记与时间戳幂等语义）→ CHANGE 3（可信事实来源契约）→ 送 MSG-20261009-10
+PHASE2_FINAL_R2_PROGRESS = CHANGE 1 ✅（GATE5_NEGATIVE = PASS）+ CHANGE 2 ✅（GATE4_TRIAGE_REGISTRATION = PASS）→ NEXT = CHANGE 3（可信事实来源契约）
+NEXT_UNIT = PHASE 2 FINAL-R2：CHANGE 3（可信事实来源契约写入文档+测试）→ 送 MSG-20261009-10 复审
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
