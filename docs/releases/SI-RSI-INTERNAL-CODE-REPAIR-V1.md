@@ -819,7 +819,8 @@ PHASE3_A_MINIMAL_SCOPE_AUTHORIZED = YES（**仅 U1 只读子集**；U2–U5 = NO
 PHASE3_U1_IMPLEMENTATION_CLOSED = NO（**本轮完成 U1 实施与自验，待独立实施审计**；规格见设计文档 §15）
 PHASE3_U1_ARTIFACTS = trusted-facts-adapter.ts + phase3a-u1-* 两个测试文件 + 设计文档 §15 规格（仅新增，未改既有文件）
 PHASE3_A_U1_EVIDENCE = 端口级 12/12 PASS、真实 PG 4/4 PASS（隔离库）、api tsc 0；只读副作用断言（零任务/零租约/零 Incident 变化）
-NEXT_UNIT = ① 设计 CHANGE 13–16（含 A11/A12，只读）② 整理并投递 MSG-20261009-15（U1 实现证据 + CHANGE 13–16 设计，分别呈现）
+PHASE3_CHANGES_13_TO_16 = DESIGN_COMPLETED（设计文档 §16：文件提交四段协议与顺序不可证回退、CommitFact/TaskState/RecoveryControl 三维独立表达、attemptId/fencing 世代与去重冲突证据、验证产物五元绑定与安全句柄路径约束、A11/A12 定义；仍为只读设计）
+NEXT_UNIT = 整理并投递 MSG-20261009-15（① U1 实现与验证证据 ② CHANGE 13–16 设计修订 + A11/A12，两部分分别呈现）
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```

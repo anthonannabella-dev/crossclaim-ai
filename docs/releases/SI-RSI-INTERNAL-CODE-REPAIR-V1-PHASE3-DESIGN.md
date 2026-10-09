@@ -408,3 +408,92 @@ provenance 记录：`source` / `resolvedFrom` / `subjectRef` / `identityVersion`
 
 **未宣称**：U1 **实施审计尚未通过**（`PHASE3_U1_IMPLEMENTATION_CLOSED = NO`）；U2–U5 未授权；自动代码修复仍禁止。
 
+
+---
+
+## 16. CHANGE 13–16 契约（回应 MSG-20261009-14；**只读设计修订**）
+
+> 本轮仅修订设计契约与验收定义；**未实施**任何新能力。已实施的唯一单元是 U1（只读适配器，见 §15）。
+
+### 16.1 CHANGE 13（P0）分离「DB 提交」与「隔离文件提交」的线性化协议
+
+审计要求：**不得把数据库 CAS 的原子性保证外推到文件系统或外部系统**。按动作类别分别定义：
+
+| 类别 | 提交点 | 授权时效模型 | 失败恢复 | 顺序证明 |
+| --- | --- | --- | --- | --- |
+| `PURE_READ` | 无（不构成副作用提交） | 每次读取前校验租户 + 授权 + **数据访问范围** | 无副作用，重读即可 | 不适用（无提交） |
+| `ISOLATED_WRITE` | **原子发布**（见下） | 发布前校验授权版本；撤销与发布之间**不宣称**统一顺序 | 删除 staging 目录；内容寻址发布可幂等重试 | 见下「顺序不可证时」 |
+| `REVERSIBLE_INTERNAL_COMMIT` | 单个 PG 事务 COMMIT | 提交点前授权版本 CAS | 回滚脚本（须实际可行） | PG 行锁 / 条件写 |
+| `IRREVERSIBLE_OR_EXTERNAL` | — | — | — | **NOT_AUTHORIZED（恒 HOLD）** |
+
+**`ISOLATED_WRITE` 的四段协议**：
+1. **staging**：仅写入 `<workspace>/.staging/<attemptId>/`，**不向任何其它组件暴露**；
+2. **原子发布**：同文件系统内 `rename()` 到 `<workspace>/candidates/<candidateDigest>/`（内容寻址）；
+   目标已存在且摘要一致 ⇒ **幂等 no-op**；摘要不一致 ⇒ `NO_APPLY`；
+3. **不可变摘要**：发布前后分别计算并记录 `candidateDigest`；发布后目录置为**只读**；
+4. **清理**：撤销 / 失败 ⇒ 删除 staging；**不得**触碰仓库工作树、不得触碰封板分支。
+
+**顺序不可证时的强制回退**：若无法建立「撤销检查 → 文件发布」的可验证统一顺序，
+**不得**宣称"撤销后绝无写入"，必须二选一：① `BLOCK`；② 将产物限制为**不向其它组件暴露**的临时产物（staging-only）并在同一 attempt 内清理。
+
+**关闭标准**：每种允许写入的动作都有**独立的提交点、授权时效模型与失败恢复定义**；
+DB CAS 的证明**不得**外推到文件系统或外部系统。
+
+### 16.2 CHANGE 14（P0）消除终态与 `RECOVERING` 的语义冲突
+
+**三维独立表达**（互不覆盖）：
+
+| 维度 | 取值 | 语义 |
+| --- | --- | --- |
+| **提交事实** `CommitFact` | `COMMITTED`（附凭证摘要）/ `REJECTED_AT_COMMIT` / `COMMIT_OUTCOME_UNKNOWN` / 未提交 | **不可变事实**，只追加 |
+| **任务执行状态** `TaskState` | `READY` / `CLAIMED` / `EXECUTING` / `SETTLED` / `BLOCKED` | 业务流转 |
+| **恢复控制状态** `RecoveryControl` | `IDLE` / `RECOVERING` / `RECONCILING` | **恢复作业**状态，不改写提交事实 |
+
+**规则**：
+1. 已有可信终态凭证的状态（`CANCELED_BEFORE_COMMIT` / `REJECTED_AT_COMMIT` / `SETTLED`）**不得**进入会覆盖业务事实的 `RECOVERING`；
+   `RECOVERING` 只表示"恢复作业进行中"，**不改变**提交事实；
+2. 只有权威机制**明确确认未提交**时，才允许 `REJECTED_AT_COMMIT`；
+3. 已确认 `COMMITTED` 后，即使 `settle` 失败，**不得**回退为取消或拒绝提交；
+4. `COMMIT_OUTCOME_UNKNOWN` **不得**因超时自动转 `REJECTED_AT_COMMIT`（只能经权威对账转 `SETTLED` 或 `REJECTED_AT_COMMIT`）；
+5. `SETTLED` 必须携带**明确的最终结果类型**（`SUCCEEDED` / `BLOCKED` / `REJECTED`），**不得**默认等价于成功执行；
+6. 必须能证明「提交事实 / 任务执行状态 / 恢复控制状态」三者可**独立表达**且不发生事实覆盖
+   （对齐 A11：旧 fencing owner 与崩溃恢复均不得改写已确认终态）。
+
+### 16.3 CHANGE 15（P1）收紧 Candidate / Task / Attempt 身份与幂等边界
+
+1. **attemptId**：每次**真实认领**生成唯一 `attemptId`（可由 `leaseId` + `fencingGeneration` 派生）并持久化；
+2. **对应关系**：`leaseId` / `fencingToken` / `attemptId` 三者关系显式定义；**续约**（renew）只延长租约，
+   **不得**生成新的业务 Attempt；
+3. **fencing 世代**：同一任务被**重新认领**必须使 `fencingGeneration += 1`；旧世代的任何提交一律拒绝；
+4. **Candidate 去重键**：`digest(权威目标 + 任务类型 + 事实版本 + 租户隔离维度)`（输入取**服务端解析**结果，不取载荷声明）；
+5. **去重冲突**：返回既有记录，或产生**显式冲突证据**；**不得**静默丢弃"事实不同"的候选；
+6. **identityVersion 失效**：旧 Attempt **不得**继续提交；但**历史审计事实保留**（只追加、不删除）。
+
+### 16.4 CHANGE 16（P1）强化验证产物绑定与沙箱失效条件
+
+1. **Judge 可信输入绑定**：`baselineCommit + candidateDigest + verificationPolicyVersion + testEnvironmentDigest + testResultDigest`，
+   缺任一项 ⇒ `NO_PASS`；
+2. **Builder 不能控制** TestRunner 的执行程序、策略与结果存储；
+3. **执行环境禁止**：未授权网络访问、凭据读取、宿主挂载、特权容器操作；
+4. **不允许**从不可信工作区直接执行 hooks 或测试入口；
+5. **路径验证**：须处理符号链接、硬链接、目录替换、子模块及其它逃逸路径；
+   **`realpath` 本身不足以消除 TOCTOU** ⇒ 实际打开与写入必须使用**安全文件句柄**（等价 `O_NOFOLLOW`）与**目录约束**（等价 `openat`/dirfd 绑定）；
+6. 隔离失败 / 超时 / 结果缺失 / 摘要不一致 ⇒ 一律 `NO_PASS`；
+7. **Judge 输出语义**：`VERIFICATION_PASS ≠ SECURITY_APPROVAL ≠ MERGE_AUTHORIZATION ≠ DEPLOY_AUTHORIZATION`（须显式记录）。
+
+### 16.5 追加验收定义（A11 / A12）
+
+| ID | 场景构造 | 期望断言 |
+| --- | --- | --- |
+| **A11 Terminal State Integrity** | 已权威确认终态 + 崩溃恢复 + 旧 fencing owner 提交 | 终态**不被改写**（提交事实只追加）；旧 owner 提交被拒；无重复副作用 |
+| **A12 Workspace Publication Boundary** | 撤销与文件发布并发竞争 | 能证明允许顺序（发布先或撤销先**唯一胜者**）；无法证明时必须**拒绝公开**候选产物（staging-only 或清理），产物不得对外可见 |
+
+**A1–A12 均为实施阶段验收要求，本轮不宣称通过。**
+
+### 16.6 本轮未实施声明（重申）
+
+本轮**仅设计**。已实施且仍待独立审计的仅有 U1（只读适配器，§15）；U2–U5 **未授权、未实施**；
+`AUTONOMOUS_CODE_REPAIR / BUILDER_EXECUTION / JUDGE_EXECUTION / PATCH_APPLY = NO`；
+`EXTERNAL_WRITE = HOLD`、`AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN`、`PRODUCTION_READY = NO`；
+`runtimeSourceIsolationImplemented = false` 仍为阻断执行接线的硬门。
+
