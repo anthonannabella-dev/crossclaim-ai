@@ -1,0 +1,196 @@
+MSG-20261010-56｜CrossClaim AI V2 第四轮独立审计裁决
+DECISION：PASS_WITH_REVISE
+
+审计仓库： anthonannabella-dev/crossclaim-ai
+审计分支： feat/customs-opportunity-unlock-v2
+CODE_HEAD / EVIDENCE_HEAD / REVIEW_HEAD： cc573188
+审计方式： GitHub 只读源码核验，未运行本机测试，未写入仓库或 Issue。
+
+一、总体结论
+
+本轮三项修复已实际进入固定提交。GitHub 确认 7757d0cb → cc573188 前进 2 个提交，相关服务代码、测试文件和审计归档均存在变更。
+
+CHANGE 14、15 的主要问题已经解决；CHANGE 16 建立了真正的签名认证入口，但新实现仍有一处需要修复的认证窗口缺陷，以及台账身份绑定尚未完成。
+
+因此尚不能判定纯函数信任边界全部 CLOSED。
+
+二、CHANGE 14–16 逐项核验
+
+项目	裁决	源码核验结果
+CHANGE 14	PASS / CLOSED	三个绑定期望均检查非空白；时间窗口限定为 1–900 秒整数
+CHANGE 15	PASS / CLOSED	capabilities 改为自有数据描述符读取；跳过 getter/setter，不复制原始对象引用
+CHANGE 16	PASS_WITH_REVISE	HMAC 认证与不可读状态已实现，但 Ledger 认证仍存在窗口校验及绑定缺口
+
+CHANGE 14 — CLOSED
+
+authenticateCollectionFact() 已明确处理：
+
+商户绑定缺失；
+
+应收或币种预期为空白；
+
+时间窗口为 0、负数、非整数及超过 900 秒。
+
+相关检查发生在 HMAC 验签及生成可信事实之前。原 CHANGE 10 的这部分漏洞可以关闭。
+
+CHANGE 15 — CLOSED
+
+safeCapabilitiesCopy() 已使用 Object.getOwnPropertyDescriptor()，并通过 descriptor.value === true 限制属性复制。
+
+这消除了此前通过普通属性读取触发 getter 的问题。
+
+需要注意，动态 Proxy 的行为不属于本轮已证明的安全范围；现有代码仍应只在可信 Provider 适配器内部使用。
+
+原 CHANGE 11 的指定修订项可以关闭。
+
+CHANGE 16 — 仍需修订
+
+authenticateLedgerEvidence() 已引入 HMAC-SHA256、时间戳和私有品牌，这比来源字符串判断有实质改进。
+
+但当前源码存在两个缺口。
+
+第一：时间窗口参数未被严格限制。
+
+CHANGE 14 对 Collection 认证实现了 1–900 秒限制，但 Ledger 认证仍直接使用：
+
+TypeScript
+const tolerance = input.toleranceSeconds ?? 300;
+
+缺少同样的合法性检查。异常参数可能导致时间窗口失去预期保护。
+
+第二：Ledger Evidence 没有绑定具体账户或账目身份。
+
+目前签名载荷主要包含金额、退款金额、来源和时间，没有将证据绑定至预期的：
+
+organizationId
+
+merchantAccountId
+
+receivableId 或明确的账目范围
+
+currency
+
+ledgerSnapshotId
+
+因此，即使签名合法，也无法证明这份历史收款合计属于当前被计算的应收账目。
+
+另外，当前 ledgerEvidence === undefined/null 被解释为 historicalCollectedAmount='0.00'。在实际接线时必须证明这是“已完成读取且确认无记录”，否则未知记录可能被错误解释为零。
+
+三、前轮 CHANGE 关闭裁决
+
+CHANGE	本轮最终状态
+03｜可信支付事实	PASS_SCOPED，真实支付 E2E 未验证
+04｜Provider 全出口封闭	CLOSED（限定代码范围）
+10｜收款认证边界	CLOSED（限定代码范围）
+11｜Provider 元数据包装	CLOSED
+13｜费率策略与历史账目	PARTIAL，等待 CHANGE 16 补充收口
+14｜绑定与时间窗口	CLOSED
+15｜capabilities 安全复制	CLOSED
+16｜Ledger 认证	PASS_WITH_REVISE
+
+CHANGE 03/10 的关闭不等于真实支付渠道已经通过验收，只表示已审查的内部收款认证代码不再存在前轮指出的自我声明来源问题。
+
+四、剩余 REQUIRED_CHANGES
+
+本轮仅新增一个有界修订任务。
+
+CHANGE 17 — P1｜Ledger Evidence 认证及账目归属最终收口
+
+具体要求：
+
+Ledger 时间窗口必须执行与 Collection 相同的 1..900 秒整数限制。
+
+HMAC 验签之后必须校验 Ledger 对应的租户、商户、币种及账目范围。
+
+金额、退款金额必须为合法非负定点金额，不得接受任意字符串。
+
+台账不可读取返回 null；只有可信空账本证据才能返回 0.00。
+
+增加跨租户、跨商户、跨币种、重放证据、非法金额及空账本负向测试。
+
+原有 CHANGE 06 P1 继续保持 BLOCKED_AWAITING_POSTGRESQL_16。
+
+五、NEXT_AUTHORIZED
+纯文本
+NEXT_AUTHORIZED =
+  V2_R4_LEDGER_EVIDENCE_FINAL_CLOSURE
+
+SCOPE =
+  CHANGE_17_P1
+
+EXISTING_BLOCKED =
+  CHANGE_06_P1_POSTGRESQL_16
+
+AUTHORIZED =
+  READ_ONLY_INSPECTION
+  MINIMAL_CODE_REPAIR
+  NEGATIVE_UNIT_TESTS
+  TYPECHECK
+  ACCEPTANCE_MATRIX_UPDATE
+  COMMIT_AND_PUSH_CURRENT_BRANCH
+
+NOT_AUTHORIZED =
+  PACK_REGISTRATION
+  REAL_PROVIDER_WRITE
+  AUTO_COLLECTION_ENABLE
+  PRODUCTION_DATABASE_MIGRATION
+  PRODUCTION_DEPLOYMENT
+
+不重新打开已关闭的 CHANGE 01、02、04、05、09、10、11、12、14、15。
+
+六、HOLD 边界
+
+项目	状态
+9 套件 / 198 测试	本机报告 PASS，审计方未重新执行
+API TypeScript	本机报告 0 error
+PostgreSQL 并发验证	BLOCKED
+真实 Payment Webhook E2E	NOT_VERIFIED
+真实 Provider	NOT_VERIFIED
+浏览器 E2E	NOT_VERIFIED
+多设备视觉	NOT_VERIFIED
+Pack Registration	NOT_WIRED
+Entitlement-aware CTA	NOT_IMPLEMENTED
+Checkout Redirect	NOT_IMPLEMENTED
+AUTO_COLLECTION	HOLD
+REAL_PROVIDER_WRITE	HOLD
+PRODUCTION_READY	NO
+
+七、最终裁决记录
+纯文本
+AUDIT_ID=MSG-20261010-56
+DECISION=PASS_WITH_REVISE
+
+REVIEW_HEAD=cc573188
+CODE_HEAD=cc573188
+EVIDENCE_HEAD=cc573188
+
+CHANGE_14=CLOSED
+CHANGE_15=CLOSED
+CHANGE_16=PASS_WITH_REVISE
+
+CHANGE_03=PASS_SCOPED
+CHANGE_04=CLOSED_SCOPED
+CHANGE_10=CLOSED_SCOPED
+CHANGE_11=CLOSED
+CHANGE_13=PARTIAL
+
+REQUIRED_CHANGES=CHANGE_17_P1
+EXISTING_BLOCKED=CHANGE_06_P1
+
+UNIT_TESTS=198_REPORTED_PASS
+TYPECHECK=REPORTED_PASS
+
+NEXT_AUTHORIZED=V2_R4_LEDGER_EVIDENCE_FINAL_CLOSURE
+
+U1_REOPEN=NO
+U2_DESIGN_R21_REOPEN=NO
+AUTO_COLLECTION=HOLD
+REAL_PROVIDER_WRITE=HOLD
+PACK_REGISTRATION=HOLD
+PRODUCTION_READY=NO
+
+最终结论：当前内部纯函数层面尚剩 CHANGE 17 一项最小安全收口，并非只剩外部依赖。
+
+完成 CHANGE 17 后，如果没有新的实质性风险发现，才可以考虑将本轮代码级审计正式关闭。之后的主要阻断将转向 PostgreSQL 持久化与并发验证、真实支付/Provider 集成以及浏览器验收。
+
+本次没有修改你的仓库、Issue 或追踪系统。
