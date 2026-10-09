@@ -524,6 +524,28 @@ A 路径接入导致绕过运行时门禁（**P0**，尚未授权接线）/ AI �
 历史故障载荷残留敏感字段（P1，另行开展保留策略与泄漏面审计）/ P2E-DB5 与 broker hook 历史测试债（P1，**保留未关闭状态**）/
 Linux·CI·真实模型·Provider 未验证（发布门禁，不计入本轮关闭；**生产状态保持 NO**）。
 
+### 2.8 PHASE 3 只读设计（本轮完成；**仅设计，未实施**）
+
+授权依据：MSG-20261009-11（`PHASE3_DESIGN_AUTHORIZED = YES · READ ONLY`、`PHASE3_IMPLEMENTATION_AUTHORIZED = NO`、
+`AUTONOMOUS_CODE_REPAIR_AUTHORIZED = NO`）。设计正文：`docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3-DESIGN.md`。
+
+设计覆盖审计指定的五项（逐项对应 P3 前置条件）：
+
+| 设计项 | 对应前置条件 | 要点 |
+| --- | --- | --- |
+| 可信服务端适配器 | **P3-01** | 唯一读取入口 + **来源证明（provenance）** + 租户谓词；请求体/客户端/模型输出只作「待核验线索」，绝不直接映射为事实 |
+| 执行前重验时序 | **P3-02 / P3-03** | 固定八步：候选读取 → **快照时效/版本作废判定** → 身份重解析 → 授权重验 → 上下文重验 → 故障状态重验 → Action Guard → 租约与 fencing；任一环失败 fail-closed |
+| A 路径候选消费路径 | **P3-04** | 复用既有 `createPrismaTaskQueuePort().admit()` 与 `createAutonomyTaskSource().claim()`；**不新增** Scheduler/Controller/Runtime/队列；外写恒 HOLD |
+| 代码修复权限模型 | **P3-05** | 修改范围白名单、禁止范围（封板 RC/main/迁移/门禁代码/密钥）、候选补丁不落地、Builder≠Judge、隔离执行、回滚、外写阻断、退出即人工 |
+| 失败矩阵与门禁 | **P3-06** | 伪装来源 / 过期·撤销授权 / 跨租户 / 竞态撤销 / 过期快照 / 重放 / 错误修复 / Judge 拒绝 / 断连崩溃 逐场景预期行为与门禁；每场景至少 1 条负向用例 |
+
+**现状盘点（只读）**：ONE SI Runtime（`runtime/rsi-run.ts`）、durable 任务源与授权重解析（`runtime/rsi-durable-task-source.ts`）、
+`RsiSafeTask`（`services/autonomy/rsi-continuation-engine.ts`）、Action Guard / 审批 / Kill Switch（`services/action-guard/*`）、
+生命周期契约（`services/autonomy/rsi-lifecycle.ts`）、本任务成果（`services/self-repair/*`）、客户队列锚点（`services/agent-goal/prisma-task-queue-port.ts`）。
+
+**本轮未实施、未接线、未开放权限**（如实登记）：可信适配器、执行前重验、候选消费通道、修复代理、隔离沙箱、独立 Judge 接线、回滚机制
+**均未实现**；`runtimeSourceIsolationImplemented = false` 仍成立；`EXTERNAL_WRITE = HOLD`、`PRODUCTION_READY = NO`。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -623,7 +645,8 @@ PHASE2_REVIEW_VERDICT = MSG-20261009-10 = PASS WITH REVISE（逐字归档 FULL_C
 PHASE2_FINAL_CLOSURE_PROGRESS = CHANGE 4 ✅ / CHANGE 5 ✅ / CHANGE 6 ✅（三项 P1 全部完成）
 GATE1_AT_FINAL_HEAD = PASS（c5d05fd4：491/491 文件、4956/4956 用例、exit 0；证据 tools/verification/self-repair/phase2-final-closure-gate1-full-regression.json）
 PHASE3_IMPLEMENTATION_PREREQUISITE = TRUSTED_ADAPTER_SOURCE_PROVENANCE_EXECUTION_TIME_RECHECK（如实登记，未实现）
-NEXT_UNIT = PHASE 3 只读设计（可信适配器/执行前重验/候选消费路径/修复权限模型/失败矩阵）→ 送 MSG-20261009-12 · PHASE 3 DESIGN REVIEW
+PHASE3_DESIGN_PROGRESS = DESIGN_DOC_COMPLETED（docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3-DESIGN.md；未实施任何能力）
+NEXT_UNIT = 送 PHASE 3 设计复审（MSG-20261009-12 · PHASE 3 DESIGN REVIEW）
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
