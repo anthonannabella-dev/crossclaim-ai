@@ -1,10 +1,11 @@
-# PHASE 3-A · U2 设计 R5（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R6（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-27 = REVISE` → `MSG-20261009-28 = REVISE` → `MSG-20261009-29 = PASS WITH REVISE
-> （U2_DESIGN_APPROVED=YES_SCOPED_WITH_CONDITIONS）` → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R5_READ_ONLY_CHANGES_13_TO_15`。
-> 本文件是 **U2 设计 R5** 送审材料（MSG-20261009-30），**不含任何产品代码改动**。
-> **R5 的修订集中在 §13（最终接口 / 最终验收矩阵 / 基线可信性）；§1–§12 保留历史；凡冲突者以 §13 为准。**
+> `MSG-20261009-28 = REVISE` → `MSG-20261009-29 = PASS WITH REVISE` → `MSG-20261009-30 = PASS WITH REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R6_READ_ONLY_CHANGES_16_TO_18`。
+> 本文件是 **U2 设计 R6** 送审材料（MSG-20261009-31），**不含任何产品代码改动**。
+> **R6 的修订集中在 §14（基线一致性 / 运行时严格白名单 / Git↔DB 时序边界）；
+> §1–§13 保留历史；凡冲突者以 §14 为准。**
 
 | 锚点 | 值 |
 | --- | --- |
@@ -13,7 +14,8 @@
 | U2 设计 R2 | `5ae09e37` |
 | U2 设计 R3 | `ac94ef8e` |
 | U2 设计 R4 | `378bfb2a` |
-| U2 设计 R5 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R5 | `f115f881` |
+| U2 设计 R6 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -636,3 +638,107 @@ Task/Incident/候选关联 ⇒ 拒绝，且**不返回其他作用域的候选 I
 `SCHEMA_MIGRATION=HOLD`；U1 封板 `9ee36837` 不变；`ACCOUNT` 保持 `NOT_AUTHORIZED`；
 `EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
 本文件仍为**纯设计 R5**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+
+---
+
+## 14. R6 修订（对应 MSG-20261009-30 的 CHANGE 16–18）
+
+> 本节覆盖 §13.1（输入契约）与 §13.3（基线可信性）中与本节冲突的表述。
+
+### 14.1 CHANGE 16（P0）—— 审计锚点 vs 运行基线（消除 §13.3 的自相矛盾）
+
+**问题（审计方指出，R6 承认）**：§13.3 同时要求「固定基线 = `9ee36837`」与「基线 = 候选写入时刻的当前 HEAD」，
+但本分支 HEAD 为 `f115f881` ⇒ 按字面实现**所有候选都会被 `BASELINE_INVALID` 拒绝**，正常 INSERT 路径不可用。
+
+**R6 定义（两个概念彻底分离，不得混用）**
+
+| 概念 | 定义 | 是否参与门禁 |
+| --- | --- | --- |
+| **审计锚点** `auditAnchor` | U1 封板提交 `9ee36837` | **否**。仅作为溯源标签写入证据行（`u1SealRef`），**不**参与候选写入的通过/拒绝判定 |
+| **运行基线** `baselineRef` | `refs/heads/<branch>@<commit40>`，其中 `commit40` **必须等于**运行时刻 `git rev-parse HEAD`，且 `git status --porcelain` 必须为空 | **是**。候选写入的门禁对象 |
+
+**两种运行模式（仅此两种）**
+
+1. **`SELF_CONSISTENT_HEAD`（默认，无需额外授权）**：`baselineRef` 的分支与 commit 必须与
+   运行时刻的 HEAD **自洽**（`refs/heads/<currentBranch>@<currentHead>`），且工作树干净。
+   `auditAnchor` 与 `baselineRef` **允许不同**（这正是当前分支的实际情况）。
+2. **`AUTHORIZED_FIXED_BASELINE`（需单独审批）**：由操作方配置一个**冻结基线**常量；
+   此时要求 `HEAD == 冻结基线`，否则 `BASELINE_INVALID`。该模式**不因本设计而自动开启**。
+
+**其他规则**
+
+- **不得**以历史候选的 `baselineRef`、上一次成功解析结果或任意旧 commit 代替当前基线；
+- `PENDING` 之类的动态表述**不得**被解释为已开放新的基线选择权限（R6 明确：`AUTHORIZED_FIXED_BASELINE`
+  的启用需要**独立审批**，不在本次授权内）；
+- 无可靠基线（HEAD 不可解析、工作树不干净、分支不可解析）⇒ 一律 `BASELINE_UNRESOLVABLE` / `BASELINE_INVALID`，
+  **零写入**。
+
+### 14.2 CHANGE 17（P1）—— 运行时严格白名单（不只依赖 TypeScript 静态类型）
+
+**输入契约（运行时判定，§13.1 的接口形状不变）**
+
+1. 入参必须是对象，且**键集合严格等于** `{ incidentId, requestRef }`；
+2. 出现**任何**额外键（含 `signalKey`、`identity`、`platformAccountId`、`factsSnapshotRef`、
+   `factsDigest`、`issuedAt`、`scope`、`baselineRef`，以及任何未知键）⇒ **拒绝**，
+   **禁止静默忽略后继续 INSERT**；
+3. 类型与取值校验：`incidentId`、`requestRef` 必须为非空字符串；
+4. `incidentId` 的可信来源：U2 仅由**内部服务端组合**调用（隔离测试装配或服务端请求门），
+   **不对外暴露 API**；调用方不得自行编造 `incidentId`（无法在库中解析 ⇒ 拒绝）；
+5. **确定性失败行为**：非法字段类型 ⇒ `INVALID_FIELD_TYPE`；缺失 `requestRef` ⇒ `MISSING_REQUEST_REF`；
+   `incidentId` 不存在/不可解析 ⇒ `INCIDENT_NOT_ELIGIBLE`；以上均 `candidateId=null`、零写入。
+
+**R6 拒绝优先级（取代 §13.1.4 的列表）**
+
+```text
+1. EXTRA_FIELD_SCOPE              —— 出现 ACCOUNT 作用域字段（scope/identity/platformAccountId）
+2. EXTRA_FIELD_TRUSTED_FACTS      —— 出现 U1 事实字段（factsSnapshotRef/factsDigest/issuedAt）
+3. EXTRA_FIELD_KEY_OR_UNKNOWN     —— 出现 signalKey/baselineRef 或任何未知键
+4. INVALID_FIELD_TYPE / MISSING_REQUEST_REF —— 类型或必填校验失败
+5. INPUT_KEY_MISMATCH             —— 调用方与 Incident 行不一致（保留）
+6. INCIDENT_NOT_ELIGIBLE          —— Incident 不存在 / kind≠INTERNAL_FAULT / status≠DIAGNOSED
+7. TASK_LINK_INVALID              —— 无关联 Task 或外键链不一致
+8. FAULT_CONTEXT_UNAVAILABLE      —— 既有故障上下文字段读取失败
+9. BASELINE_UNRESOLVABLE          —— 基线不可解析
+10. BASELINE_INVALID              —— 基线与 HEAD 不自洽（或 AUTHORIZED 模式下与冻结基线不符）
+```
+
+**测试**：**U2-19** 多种违规字段同时出现 ⇒ 只返回**最高优先级**的单一 reason，且**零写入**。
+
+### 14.3 CHANGE 18（P1）—— Git 基线读取与数据库写入的时序边界（TOCTOU）
+
+**承认**：同一次只读解析**不足以**保证「Git 检查结束 → 数据库事务提交」之间 HEAD 不变。
+
+**R6 执行顺序（强制）**
+
+```text
+(1) Git 解析①：ref → commit；git rev-parse HEAD；git status --porcelain（须为空）
+(2) 开启 U2 数据库事务
+(3) Git 解析②（事务内）：再次读取 HEAD 与工作树状态
+(4) 读取 Incident / Task 并完成 §14.2 的校验
+(5) INSERT 候选行（唯一冲突 ⇒ 完整验证后复用）
+(6) Git 解析③：**提交前**最后一次读取 HEAD 与工作树状态
+(7) 若 (1)(3)(6) 任一不一致，或工作树在任一步不为空 ⇒ ROLLBACK，
+    reason='BASELINE_CHANGED_DURING_WRITE'，**零候选写入**
+(8) 一致 ⇒ COMMIT
+```
+
+**边界声明（不得含糊）**
+
+- U2 **无法**在 Git 与数据库之间建立跨系统事务；因此采用**三次检查 + 提交前复核**，
+  并在**任何**不一致时 fail-closed；若运行环境本身无法保证写入窗口内的仓库稳定
+  （例如存在并发写入者），则**必须拒绝写入**，不得把一次历史读取视为持续有效的授权；
+- **不得**通过新增第二套 Runtime / Scheduler / Controller 解决本问题（本设计不引入任何此类组件）；
+- 允许的**部署前置**（属运维约定，不是新组件）：U2 隔离测试/运行窗口内**无并发 Git 写入**。
+
+**测试**：**U2-18(c)** 增加「Git 验证完成后、数据库写入前 HEAD 变化」负向用例 ⇒
+`BASELINE_CHANGED_DURING_WRITE` 且**零写入**（配合 U2-18(a) HEAD 不一致、(b) 分支/commit 不可解析）。
+
+### 14.4 R6 未变部分
+
+§12（候选键 v2 / digest）、§13.1 的接口形状（`U2PlatformCandidateInput{incidentId,requestRef}` /
+`U2CandidateDecision`）、§13.2 的矩阵（U2-1…U2-18 状态不变，另加 U2-19）、
+`builderRef` 固定常量、仅 INSERT、无 UPDATE/DELETE、不新增 schema/migration、不接 Runtime/Queue、
+不调用模型/Provider、不新增第二套 Runtime/Scheduler/Controller、ACCOUNT 保持 `NOT_AUTHORIZED`、
+U1 封板 `9ee36837` 不变、`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、
+`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+本文件仍为**纯设计 R6**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
