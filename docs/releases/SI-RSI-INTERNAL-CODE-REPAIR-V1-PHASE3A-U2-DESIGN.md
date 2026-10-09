@@ -1,13 +1,13 @@
-# PHASE 3-A · U2 设计 R15（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R16（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-37 = REVISE` → `MSG-20261009-38 = REVISE` → `MSG-20261009-39 = REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R15_READ_ONLY_CHANGES_54_TO_60`。
-> 本文件是 **U2 设计 R15** 送审材料（MSG-20261009-40），**不含任何产品代码改动**。
-> **R15 的修订集中在 §23**（T0/T1/T2 分阶段验收 / T2 独立探针与生命周期保证 / 「检测 vs 保证」边界 /
-> COMMIT 归因四类 / 证据范围不越界 / 字节编码三项断言 / `signerAuthRef` 消费持久化边界），
-> 含本仓库范围内的只读证据核验；§1–§22 保留历史；凡冲突者以 §23 为准
-> （**R13/R14/R15 优先于 §20.4.1**）。
+> `MSG-20261009-38 = REVISE` → `MSG-20261009-39 = REVISE` → `MSG-20261009-40 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R16_READ_ONLY_CHANGES_61_TO_63`。
+> 本文件是 **U2 设计 R16** 送审材料（MSG-20261009-41），**不含任何产品代码改动**。
+> **R16 的修订集中在 §24**（`P2` 只是必要非充分证据 / 锁所有权的结构性保证与可查询性候选机制 /
+> `P2` 异常分类与「意外取锁」安全释放 / COMMIT 归因的**执行身份**与 `CANDIDATE_EXISTS` 区分 /
+> `nonce` 消费的 **`CONSUMPTION_UNKNOWN`** 分支），含本仓库范围内的只读证据核验；
+> §1–§23 保留历史；凡冲突者以 §24 为准（**R13/R14/R15/R16 优先于 §20.4.1**）。
 
 | 锚点 | 值 |
 | --- | --- |
@@ -26,7 +26,8 @@
 | U2 设计 R12 | `c9b167c7` |
 | U2 设计 R13 | `8c42cfc2` |
 | U2 设计 R14 | `b57e5cb8` |
-| U2 设计 R15 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R15 | `52308673` |
+| U2 设计 R16 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -1993,4 +1994,184 @@ R15_NOT_VERIFIED = U2_LINUX_MULTIPROCESS_TESTS ; DB_PRIVILEGE_VERIFICATION ; GLO
 ```
 
 本文件仍为**纯设计 R15**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+本轮只读核验**仅**读取 `apps/api/prisma/schema.prisma` 与既有迁移文件，**未**连接任何数据库、**未**执行任何写入。
+
+---
+
+## 24. R16 修订（对应 MSG-20261009-40 的 CHANGE 61–63）
+
+> 授权来源：`MSG-20261009-40 = REVISE` ⇒ `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R16_READ_ONLY_CHANGES_61_TO_63`。
+> 本轮只处理三项实质问题（**不重复**已在 R15 闭合的 CHANGE 54/56/58/59）。
+> `U2_DESIGN_R15_ACCEPTED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED` **不变**。
+
+| CHANGE | R15 位置 | R16 修订位置 | 变更性质 |
+| --- | --- | --- | --- |
+| **CHANGE 61（P0）** | §23.2.1 / §23.2.5（把 `P2` 当所有权证据） | **§24.1** | `P2` 降为**必要非充分**；所有权改由**结构性保证 + 持锁状态证据**承担；异常分类与意外取锁处理 |
+| **CHANGE 62（P1）** | §23.4（升级路径） | **§24.2** | 区分 `CANDIDATE_EXISTS` 与 `THIS_EXECUTION_COMMITTED`；**执行身份**归因 |
+| **CHANGE 63（P1）** | §23.7.2（持久确认二分） | **§24.3** | `nonce` 消费引入 **`CONSUMPTION_UNKNOWN`** 三分支 |
+| 验收矩阵 | §23.9 / §23.7.7 | **§24.4** | 新增 U2-44a ~ U2-44f、U2-45a ~ U2-45c、U2-46a ~ U2-46d |
+
+### 24.1 CHANGE 61（P0）—— `P2` 只是**必要非充分**证据；所有权归因重构
+
+**承认审计方的判断（并撤回 R15 的无条件表述）**：`P2` 收到 `EWOULDBLOCK` **只证明「该锁对象此刻存在冲突锁」**，
+**不证明该锁由本实例持有**。审计方给出的反例成立：
+
+```text
+1) 本实例 T1 取得锁
+2) 本实例误释放锁（LOCK_UN），但未关闭 FD
+3) 另一进程取得同一锁对象的排他锁
+4) 本实例执行 P2 → 得到 EWOULDBLOCK（看起来"正常"）
+5) FD 扫描未及时发现另一进程
+⇒ P2 通过，但本实例已失去锁所有权
+```
+
+因此 R15 §23.2.5「误释放后 `P2` **必然**成功取锁」**撤回**；该断言**仅在**「已确认不存在其他冲突持有者」时才成立。
+
+**R16 规则**
+
+1. **`P2` 的定位（明确写入规格）**：`P2_EWOULDBLOCK` 是锁所有权的**必要非充分证据**；
+   它只能作**丧失检测器（loss detector）**：`P2` **成功取锁** ⇒ 排他**确定已丧失**（可据此拒绝）；
+   `P2` **取锁失败** ⇒ **不能**推出「本实例仍持有」。
+2. **所有权的证据来源（改为三要素，`P2` 不在其中承担归属证明）**：
+   - **`O1`（内核事实）**：`T1` 在**本实例的 OFD** 上 `flock(LOCK_EX\|LOCK_NB)` 返回 `0`（`E1`），即**该时刻**内核保证**本实例该 OFD**持有排他锁；
+   - **`O2`（结构性保证·必需）**：自 `E1` 成功起至 `T3` 释放前，**不存在**任何能解除该 OFD 锁的路径，且**不存在**该 OFD 的复制来源 —— 见第 3 条；
+   - **`O3`（可查询的持锁状态·条件性）**：若目标平台提供**内核可查询**的持锁状态证据，则在 `T2` **查询并要求「仍持有」**；见第 4 条。
+   **`O3` 不可得时，`O1 + O2` 必须足以成立；否则 `EXCLUSIVE_WINDOW_UNAVAILABLE`（第 5 条）。**
+3. **`O2` 的可执行内容（结构性保证，必须逐条实现并可审计）**：
+   ① 锁 FD **唯一持有者**：进程内除锁管理模块外**无可达引用**；**禁止** `dup/dup2/dup3`；
+   ② **禁止** `SCM_RIGHTS` 传递；派生任何子进程前保证该 FD **不在继承集合**（`O_CLOEXEC` + 显式 `closefrom`/`close_range`，或**先派生后取锁**）；
+   ③ **`T3` 之前不存在任何执行 `LOCK_UN`（或 `close` 锁 FD）的代码路径**，包括错误处理与超时路径；
+   实现须以**单一释放点**表达（`T3` 唯一调用点），并在代码审查与测试中证明；
+   ④ 运行期**辅助不变量**：维护 `releaseCounter`（仅 `T3` 递增）与 `dupCounter`（任何复制尝试即计数）；
+   `T2` 门禁要求 `releaseCounter == 0 && dupCounter == 0`。
+   **如实标注**：④ 是**实现不变量**，用于**发现缺陷**，**不是**内核权威状态；不得据此宣称「内核保证仍持锁」。
+4. **`O3`（条件性可查询机制）—— 候选机制与未验证声明**：若目标内核提供**用户态可读**的持锁状态，
+   实现**可以**在 `T2` 直接查询「本实例该 OFD 是否仍持有排他锁」，从而把「持续持锁」从**推断**变为**查询**。候选机制：
+   - **候选 A（OFD 记录锁）**：以 `F_OFD_SETLK`/`F_OFD_GETLK` 族（OFD 记录锁）替代或叠加 `flock`，
+     并读取 `/proc/self/fdinfo/<fd>` 中的锁条目进行**本进程**校验；OFD 记录锁的**归属单位为 OFD**，语义与 §22.2 的结论一致；
+   - **候选 B（flock + 结构化保证 + `P2` 作丧失检测）**：`flock` 本身**没有**等价的「查询本 OFD 是否持锁」用户态接口，
+     故只能依赖 `O2` 的结构保证＋`P2` 作为**丧失检测器**（无法检测「已丧失且他方持有」的反例，见上文）。
+   **必须如实声明（重要）**：本轮**没有**在任何 Linux 主机上验证候选 A 的可用性（内核版本相关）、
+   `/proc/self/fdinfo` 字段语义、或 `flock` 的可观测性 ⇒ `O3_MECHANISM_VERIFIED = NOT_VERIFIED`。
+   实施前必须在**目标内核**上以**可复现实验**确认：查询接口存在、返回值可区分「持有/未持有」、且**不引入**新的语义陷阱
+   （例如「关闭该文件的其他 FD 会释放全部锁」这类 POSIX 记录锁陷阱 —— 候选 A 若采用 OFD 变体可避免，但**须实测确认**）。
+5. **fail-closed 判据**：若 ①`O2` 无法实现（存在复制来源或存在 `T3` 前解锁路径且无法消除），或
+   ②`O3` 不可得**且**实现无法证明 `O2` 成立 ⇒ **`EXCLUSIVE_WINDOW_UNAVAILABLE`，零写入**；
+   **禁止**以「重复执行 `P2`」「依赖 FD 存在」「依赖时间戳」替代所有权证明。
+6. **`P2` 的错误分类（必须区分，不得一律当作「正常冲突」）**：
+
+| `P2` 结果 | 语义 | 处理 |
+| --- | --- | --- |
+| `EWOULDBLOCK` | 存在冲突锁（**必要非充分**） | 继续，但**不**据此宣称本实例持锁（须由 `O1+O2(+O3)` 承担） |
+| **返回 0（意外取得锁）** | **排他确定已丧失** | 立即对**探针 FD** 执行 `LOCK_UN` + `close()`（**安全释放**并记录）；**拒绝本次业务写入**；`LOCK_OWNERSHIP_UNPROVEN` |
+| `EACCES` / `EPERM` | 无权限对锁文件加锁（无法推理排他） | **拒绝**（`EXCLUSIVE_WINDOW_UNAVAILABLE`） |
+| `EBADF` | 探针 FD 无效 ⇒ 实现缺陷 | **拒绝**（`LOCK_PROBE_INVALID_FD`），并记为缺陷 |
+| `EINTR` | 被信号中断 | 有界重试；仍失败 ⇒ **拒绝** |
+| 其他 `errno` | 未分类错误 | **拒绝**（fail-closed），并保留原始输出 |
+
+7. **探针资源纪律**：`P2`（以及 `T1A`）的探针 FD **必须在探针结束前关闭**；
+   探针**意外取得锁**时，须在**同一次探针流程内**完成 `LOCK_UN` + `close()`，
+   且**不得**把探针获得的锁用于推进事务；探针留下的任何状态都要记录。
+8. **跨进程 FD 扫描的定位（收敛）**：扫描**只能**在**明确支持并可验证的 Linux 隔离环境**内作为**辅助检测**；
+   **不得**作为锁所有权的**权威来源**（其竞态与「inode 相同 ≠ OFD 相同」的局限已在 §23.3 承认）。
+9. **错误码（采用审计方建议）**：`LOCK_OWNERSHIP_UNPROVEN`、`LOCK_PROBE_INVALID_FD`，以及既有 `EXCLUSIVE_WINDOW_UNAVAILABLE`。
+
+### 24.2 CHANGE 62（P1）—— COMMIT 归因必须区分**存在**与**本次执行提交**
+
+**承认审计方的判断**：「相同主键 + 相同候选内容 + 相同时间窗口」**不必然**等于**同一次执行**提交。
+
+**R16 规则**
+
+1. **两个结论必须分列（不得合并）**：
+   - **`CANDIDATE_EXISTS`**：主库存在一条「`dedupeKey` 相同且必要不变字段一致」的行 —— 这只说明**候选记录已存在**
+     （可能由**本实例**插入，也可能由**其他写入者**插入）；
+   - **`THIS_EXECUTION_COMMITTED`**：主库中的该行**由本次执行的事务提交**产生 —— 需要**执行身份**证据，见第 2 条。
+2. **执行身份（`executionIdentity`）—— 定义与要求**：`THIS_EXECUTION_COMMITTED` 必须绑定一个
+   **本次执行生成、不可被其他写入者预测或伪造、且可跨进程重新读取**的标识：
+   ①**来源**：由执行上下文在 `T1` 之前生成（例如随机 128 位标识 `executionRef`），与 `returnedCandidateId` 一并记录；
+   ②**不可伪造性**：`executionRef` **不得**出现在任何**其他写入者可写**的位置，且**不得**由 `dedupeKey`/`scopeRef` 等**可推导**字段派生
+   （否则其他写入者可用相同算法构造出相同值 ⇒ 归因失效）；
+   ③**绑定关系**：必须记录 `{executionRef, returnedCandidateId, dedupeKey, attemptNo}` 的**同一事务外持久记录**（§21.2.3 已要求持久载体）。
+3. **schema 边界（只读核验结论，必须如实标注）**：`AutonomyCandidate` 现有列为
+   `id / taskId / status / builderRef / baselineRef / codeCommitRef / promptVersion / dedupeKey / createdAt / updatedAt`
+   （`apps/api/prisma/schema.prisma:3308-3328`）——**没有**承载 `executionRef`/执行身份的列；
+   在 `SCHEMA_MIGRATION=HOLD` 之下**不得**新增列。
+   ⇒ **`THIS_EXECUTION_COMMITTED` 不能仅由候选行本身推出**；只能由「**事务外持久记录**（第 2 条）」
+   ＋「**权威主库按 `returnedCandidateId` 重读并校验必要不变字段**」共同支持。
+   若该持久记录**缺失/不可读/其内容与重读结果不一致** ⇒ **只能 `UNKNOWN`**（不得升级为 `COMMITTED`）。
+4. **`id` 的可伪造性边界**：`id` 是客户端生成的 `TEXT`（`schema.prisma:3309`；迁移列 `"id" TEXT NOT NULL`，无数据库默认值，`migration.sql:39`）。
+   因此「主库中存在 `id = returnedCandidateId` 的行」在**原则上**也可由**知道该值**的其他写入者造成 ⇒
+   这正是必须叠加**执行身份**与**四条件**（§22.4）的原因；**禁止**仅凭 `id` 命中宣称 `THIS_EXECUTION_COMMITTED`。
+5. **状态报告字段（新增/明确）**：
+   `candidateExists ∈ {YES, NO, UNKNOWN}`、`thisExecutionCommitted ∈ {YES, NO, UNKNOWN}`、
+   `executionIdentityRef`（可空）、`executionIdentitySource`（生成点与持久载体引用）。
+   **禁止**由 `candidateExists=YES` 推出 `thisExecutionCommitted=YES`。
+6. **与既有语义的关系**：§21.2 的 `candidateInsertCommitState` 语义不变；
+   `COMMITTED` 的判定条件**收紧为**：§22.4 四条件 + §22.5 全部门禁 + `id` 不复用 + `returnedCandidateId` **持久**保存
+   + **`executionIdentity` 成立**（第 2 条）+ 权威主库重读一致。
+
+### 24.3 CHANGE 63（P1）—— `nonce` 消费状态必须有 **`CONSUMPTION_UNKNOWN`** 分支
+
+**承认审计方的判断**：R15 §23.7.2 的二分（「已持久确认」/「未确认」）不足以表达**消费事务终态不可知**的情形，
+会导致**状态误报**（把未知说成未消费）。
+
+**R16 规则（三分支）**
+
+| 分支 | 触发条件 | 允许的报告 | 后续动作 |
+| --- | --- | --- | --- |
+| **`CONSUMED`** | 消费事务**已提交并确认**（含「事后确认已提交」） | 报 `CONSUMED` | 继续/终止按业务结果；**旧 `nonce` 永不释放** |
+| **`UNCONSUMED`** | 数据库**明确确认消费事务已回滚**（且仅此一种情形） | 报 `UNCONSUMED` | 终止本次执行；**只能重新签发**新 `nonce`（不得复用旧值） |
+| **`CONSUMPTION_UNKNOWN`** | 消费事务**提交结果不可知**（提交请求失败、连接中断、超时、崩溃等） | **必须**报 `CONSUMPTION_UNKNOWN` | **终止本次执行**；**旧 `nonce` 不可重试**；**只能重新签发授权** |
+
+1. **禁止的误报（逐条写死）**：①**不得**把 `CONSUMPTION_UNKNOWN` 报成 `UNCONSUMED`（状态误报）；
+   ②**不得**把 `CONSUMPTION_UNKNOWN` 报成 `CONSUMED`（把不确定当确定）；
+   ③**不得**因「候选业务记录尚未写入」而释放或复位旧 `nonce`。
+2. **安全默认**：`CONSUMPTION_UNKNOWN` 之下，**按「已消费」执行安全策略**（不复用、不重试），
+   但在**报告**上必须如实标注为**未知**——**安全策略**与**事实陈述**分开表达。
+3. **与候选写入状态分离**：`authorizationConsumptionState ∈ {CONSUMED, UNCONSUMED, CONSUMPTION_UNKNOWN}` 与
+   `candidateInsertCommitState ∈ {COMMITTED, NOT_COMMITTED, UNKNOWN}` **互相独立**；
+   报告须**分列**，**不得**由一者推断另一者（与 §23.7.4 的两个对象一致）。
+4. **消费记录不得被清理**：任何清理/GC/重试路径**不得**删除或复位消费记录；
+   `CONSUMPTION_UNKNOWN` 的处置是**人工/控制面签发新授权**，不是自动回滚。
+
+### 24.4 R16 验收矩阵增补
+
+| 编号 | 场景 | 期望断言 |
+| --- | --- | --- |
+| **U2-44a** | **本实例提前释放 + 第三方随后取锁**（审计方反例，**真实 Linux 多进程**） | `P2` 得 `EWOULDBLOCK` **但不得**据此判定本实例持锁；`O2` 不变量（`releaseCounter`）必须暴露违规；**零候选写入**（`LOCK_OWNERSHIP_UNPROVEN`/`EXCLUSIVE_WINDOW_UNAVAILABLE`） |
+| **U2-44b** | `P2` **意外取得锁** | 探针 FD 立即 `LOCK_UN` + `close()`（安全释放并记录）；**拒绝业务写入**；报告含探针释放证据 |
+| **U2-44c** | `P2` 返回 `EACCES`/`EPERM` | **拒绝**（`EXCLUSIVE_WINDOW_UNAVAILABLE`），不得当作「正常冲突」 |
+| **U2-44d** | `P2` 返回 `EBADF` | **拒绝**（`LOCK_PROBE_INVALID_FD`）并记为缺陷 |
+| **U2-44e** | `T3` 前出现任何 `LOCK_UN` 路径或 `dup` 尝试 | 门禁拦截（不变量计数 ≠ 0）⇒ 拒绝写入 |
+| **U2-44f** | `O3` 机制不可得且 `O2` 无法证明 | `EXCLUSIVE_WINDOW_UNAVAILABLE`（fail-closed），不得以重复 `P2` 替代 |
+| **U2-45a** | 其他写入者插入**同 `dedupeKey`** 的行 | 只能报 `candidateExists=YES`；`thisExecutionCommitted` 必须为 `NO/UNKNOWN` |
+| **U2-45b** | 事务外持久记录缺失/不可读 | `thisExecutionCommitted=UNKNOWN`（不得升级 `COMMITTED`） |
+| **U2-45c** | `executionRef` 可由可推导字段生成 | 视为**设计缺陷**（归因失效）；须改为不可预测、不可推导的随机标识 |
+| **U2-46a** | 消费事务提交结果不可知（超时/断连） | 报 `CONSUMPTION_UNKNOWN`；终止执行；旧 `nonce` 不可重试 |
+| **U2-46b** | 数据库明确确认消费事务回滚 | 报 `UNCONSUMED`（唯此情形）；仍需**重新签发**新 `nonce` |
+| **U2-46c** | 消费已提交但业务候选未写入 | 报 `CONSUMED`；**不得**释放/复位旧 `nonce` |
+| **U2-46d** | 报告组装 | 必须**分列** `authorizationConsumptionState` 与 `candidateInsertCommitState`，不得互相推断 |
+
+### 24.5 R16 未变部分
+
+§12 候选键 v2 与 digest 概念、§13.1 接口、§13.2 矩阵（另加 U2-44a ~ U2-46d）、§16.1 `CONTROLLED_FIXED_WORKTREE`、
+§17.1 隔离证明框架、§17.2 U2-20A/B/C、§17.3 零行冲突复用路径、§18.1 释放全链校验、§18.2 行锁与重试边界、
+§19.4 通道/签发者分离、§20.3（CHANGE 42）状态语义、§21.2（CHANGE 45）方向、§21.3.4 验证时机与有效期、
+§22.2 `flock` 释放/继承修正、§22.4 四条件、§22.6 字节级契约、§22.7 原子占用、
+§23.1 T0/T1/T2 分阶段条件、§23.3 检测 vs 保证、§23.4 归因四类（本章 §24.2 追加执行身份）、
+§23.5 证据范围纪律、§23.6 字节编码三断言、§23.7 消费持久化（本章 §24.3 追加三分支）、
+`builderRef` 固定常量、**U2 路径仅 INSERT**、U2 路径无 `UPDATE`/`DELETE`、不新增 schema/migration、
+不接 Runtime/Queue、不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
+`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+
+```text
+R16_NOT_VERIFIED = O3_MECHANISM_VERIFIED（候选 A / fdinfo 语义未在目标内核实测） ;
+                   U2_LINUX_MULTIPROCESS_TESTS ; DB_PRIVILEGE_VERIFICATION ; GLOBAL_IMMUTABILITY_PROOF ;
+                   DB_RUNTIME_PRIVILEGES ; DB_TRIGGERS_ACTUAL ; DB_ROLES ; DB_WRITER_SET_ACTUAL ;
+                   OBSERVATION_WINDOW_IMMUTABILITY ; U2_NONCE_CONSUMPTION_STORE ;
+                   POSTGRESQL_INTEGRATION_TEST ; VITEST ; TSC ; LINUX_SYSTEMD ; CI ; PRODUCTION ;
+                   U2_DESIGN_DOC_SHA256（送审方报告）
+```
+
+本文件仍为**纯设计 R16**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
 本轮只读核验**仅**读取 `apps/api/prisma/schema.prisma` 与既有迁移文件，**未**连接任何数据库、**未**执行任何写入。
