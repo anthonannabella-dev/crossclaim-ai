@@ -173118,3 +173118,290 @@ PRODUCTION_READY=NO
 
 最终裁决：U1 尚差四项最小核验证据，不需要推翻 CHANGE 32 的实现方案。 下一轮若全部满足，可申请 PHASE3_U1_IMPLEMENTATION_CLOSED=YES，但该关闭不会自动授予 U2–U5 实施权限。
 ```
+
+### [MSG-20261009-22] U1 FINAL-R7（CHANGE 34–37）= **PASS WITH REVISE**（最终裁决 PASS WITH REVISE）—— CHANGE 34 真实并发事务重叠 PASS_SCOPED、CHANGE 35 PostgreSQL SQLSTATE 25006 PASS_SCOPED、CHANGE 36 异步生命周期确定性 PASS_SCOPED 均已获认可且**不再要求技术修改**；CHANGE 37 HEAD 绑定 = REVISE（SHA-256 清单已提供但评审方无法独立复算与绑定；tsc-raw.txt 为空文件摘要，需对应执行记录才能与 TSC_EXIT=0 关联）；U1_READ_ONLY_BOUNDARY_PRESERVED=PASS_SCOPED、SCOPE_HONESTY=PASS、PHASE3_U1_IMPLEMENTATION_CLOSED=NO、PHASE3_A_U2_TO_U5_AUTHORIZED=NO；登记唯一后续事项 **CHANGE 38（P1）HEAD 绑定与原始输出的独立可核验性**（固定 9ee36837 的 git rev-parse HEAD 与 git status --porcelain 原始输出、七份文件 git show 9ee36837:<path> 字节哈希复算逐项 MATCH=true、git diff 23604dcb 9ee36837 -- trusted-facts-adapter.ts 证明产品代码未变化、正向测试/负向对照/TypeScript 检查的实际命令与退出码及原始输出摘要并绑定固定 HEAD）；NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R8_CHANGE38_EVIDENCE_ONLY / NEXT_AUDIT=MSG-20261009-23；reviewed ref 9ee36837
+
+```text
+MSG-20261009-22｜SI/RSI INTERNAL CODE REPAIR V1 独立审计裁决
+FINAL VERDICT：PASS WITH REVISE
+
+REVIEWED_HEAD： 9ee36837
+完整 Commit： 9ee3683725ad694123092e5bafce9a32b75d3fd2
+审计范围： U1 FINAL-R7 / CHANGE 34–37
+
+本轮结论：CHANGE 34、35、36 的核心技术问题已得到较充分的内联证据支持；CHANGE 37 的 HEAD 绑定尚不能独立核验。因此不应将 U1 标记为最终 CLOSED。
+
+本轮尝试通过已连接的 GitHub 接口发现仓库，但返回的可访问仓库列表为空。以下裁决基于本次提供的代码片段和原始证据行，不声称已经读取指定 Commit 的完整文件或独立重跑测试。
+
+一、七项门禁裁决
+
+门禁
+
+裁决
+
+审计结论
+
+CHANGE34_REAL_CONCURRENT_OVERLAP
+
+PASS_SCOPED
+
+A/B 真实进入信号、独立句柄、区间重叠证据充分
+
+CHANGE35_PG_25006_ASSERTION
+
+PASS_SCOPED
+
+4 类写入探针均报告 SQLSTATE 25006
+
+CHANGE36_ASYNC_LIFECYCLE_DETERMINISTIC
+
+PASS_SCOPED
+
+嵌套复用计数与显式结束信号满足本轮目标
+
+CHANGE37_HEAD_BINDING
+
+REVISE
+
+SHA-256 清单已提供，但尚未独立复算与绑定
+
+U1_READ_ONLY_BOUNDARY_PRESERVED
+
+PASS_SCOPED
+
+送审证据支持只读边界，尚非整个代码树的独立认证
+
+SCOPE_HONESTY
+
+PASS
+
+未将本机结果冒充 CI、生产或真实 Provider 验证
+
+PHASE3_U1_IMPLEMENTATION_CLOSED
+
+NO
+
+剩余 HEAD 和原始测试证据核验门禁
+
+PASS_SCOPED 表示：所提交的内联材料满足该项具体技术断言的评审要求，但不等同于对 GitHub 源文件、测试执行环境的独立认证。
+
+二、CHANGE 34：真实并发事务重叠
+
+裁决：PASS_SCOPED
+
+本轮修复了上一版并发门闩证据中的主要问题：
+
+waitOrFail() 超时直接失败，不再允许超时后继续。
+
+A/B 均在进入事务路径后触发独立信号。
+
+两个事务在释放门闩前必须同时到达等待点。
+
+handles 断言 A/B 使用不同句柄。
+
+区间重叠使用明确的时间戳判定。
+
+提交的记录为：
+
+事务
+
+enteredAt
+
+leftAt
+
+句柄
+
+A
+
+1791519210474
+
+1791519210501
+
+1
+
+B
+
+1791519210493
+
+1791519210508
+
+2
+
+相对 A 进入时间的事务区间（毫秒）
+
+橙色表示 A/B 同时处于记录的事务活动区间，重叠约 8 毫秒。
+
+readOnly=on、writeRejected=true、crossTenantLeak=false 与预期一致。
+
+审计限制： 时间戳证明的是应用侧记录的事务活动区间重叠，而不是独立 PostgreSQL 会话日志证明的物理执行重叠。对于 CHANGE 34 指定的门闩验证目标，配合不同事务句柄，现有证据足以给出范围内通过。
+
+无需重做 CHANGE 34。
+
+三、CHANGE 35：PostgreSQL SQLSTATE 25006
+
+裁决：PASS_SCOPED
+
+四项探针覆盖：
+
+操作
+
+SQLSTATE
+
+送审结果
+
+DELETE
+
+25006
+
+PASS
+
+CREATE TABLE
+
+25006
+
+PASS
+
+UPDATE
+
+25006
+
+PASS
+
+INSERT … SELECT … WHERE false
+
+25006
+
+PASS
+
+代码不仅断言发生异常，而且验证：
+
+transaction_read_only=on。
+
+异常属于 PrismaClientKnownRequestError。
+
+meta.code 或异常消息中包含 SQLSTATE。
+
+四项 SQLSTATE 均严格为 25006。
+
+这比仅检查 writeRejected=true 更有证明力。
+
+注意： 该断言能够说明所报告的数据库拒绝原因符合只读事务限制；它并不证明整个系统不存在任何未经此包装器的写入路径。
+
+无需重做 CHANGE 35。
+
+四、CHANGE 36：异步生命周期确定性
+
+裁决：PASS_SCOPED
+
+本轮有两项有效改进。
+
+U1-DB10：嵌套事务复用
+
+提交证据显示：
+
+callbackEntries=1
+
+transactionsOpenedAtDb=1
+
+handleSequences=[1,1]
+
+reusedSameHandle=true
+
+其中对 prisma.$transaction 的包装计数证明调用了原始 Prisma 事务入口一次。它比单纯记录测试桩计数更有价值，不过仍应准确称为真实 Prisma 事务入口调用次数，而非数据库服务器独立测量的 BEGIN 次数。
+
+U1-DB11：事务结束后访问拒绝
+
+以 transactionEnded Promise 的显式释放取代定时等待，消除了单纯依赖 setTimeout 触发时序的测试不确定性。
+
+负向对照中，失效句柄静默回落裸 client 导致 U1-DB11 失败，也支持该测试能够识别所关注的边界违规。
+
+因此 CHANGE 36 的两个子项可在送审证据范围内通过。
+
+五、CHANGE 37：HEAD 绑定
+
+裁决：REVISE
+
+这不是发现了代码缺陷，而是尚未取得独立可复算的提交完整性证据。
+
+本轮提供了完整 Commit、七份文件指纹以及 65 passed、TSC_EXIT=0、负向对照 2 failed / 63 passed 等结果。
+
+但不能仅依据这些自述内容作出以下认证：
+
+指定 HEAD 确实包含这些文件字节。
+
+关键产品文件相对于 23604dcb 未发生语义变化。
+
+原始 Vitest 输出与 SHA-256 一致。
+
+负向对照确实使用同一基线、仅注入预期缺陷。
+
+清单中的全部文件均实际存在于指定 Commit。
+
+特别是 tsc-raw.txt 的 SHA-256 为标准空文件摘要，只说明声明的文件为空；需要对应执行记录才能将其与 TSC_EXIT=0 关联。
+
+唯一剩余证据修订
+
+CHANGE 38（P1）：HEAD 绑定与原始输出的独立可核验性
+
+不要求修改产品代码，也不要求重新设计 U1。
+
+在 MSG-20261009-23 中提供以下最小材料：
+
+固定 9ee36837 的 git rev-parse HEAD 和 git status --porcelain 原始输出。
+
+七份文件的 git show 9ee36837:<path> 字节哈希复算结果及逐项 MATCH=true。
+
+git diff 23604dcb 9ee36837 -- apps/api/src/services/self-repair/trusted-facts-adapter.ts，证明产品代码未变化。
+
+正向测试、负向对照、TypeScript 检查的实际命令、退出码和原始输出摘要，并标明与固定 HEAD 的关联。
+
+如果 GitHub 可访问性仍未解决，可以继续采用完整内联证据交付，但必须明确：内联证据审查与独立仓库核验是不同级别的认证。
+
+六、U1 最终关闭及下一阶段权限
+
+本轮证据对 U1 的并发只读事务、写入阻断、嵌套复用和失效句柄拒绝形成了较完整的技术闭环。
+
+但是，按照此次审计的严格证据标准：
+
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+
+关闭阻断已从核心测试逻辑转移至证据来源及 HEAD 绑定层面。
+
+不授权 U2–U5 实施；不开放外部写入、自动合并或自动部署。
+
+下一轮仅允许 CHANGE 38 证据核验。如果独立确认全部指纹、差异和原始执行记录一致，且未发现新的实质问题，即可在下一轮考虑正式关闭 U1，无需重复实施 CHANGE 34–36。
+
+七、机器可读裁决
+
+INI
+
+AUDIT_ID=MSG-20261009-22
+REVIEWED_HEAD=9ee36837
+REVIEWED_FULL_COMMIT=9ee3683725ad694123092e5bafce9a32b75d3fd2
+FINAL_VERDICT=PASS_WITH_REVISE
+
+CHANGE34_REAL_CONCURRENT_OVERLAP=PASS_SCOPED
+CHANGE35_PG_25006_ASSERTION=PASS_SCOPED
+CHANGE36_ASYNC_LIFECYCLE_DETERMINISTIC=PASS_SCOPED
+CHANGE37_HEAD_BINDING=REVISE
+U1_READ_ONLY_BOUNDARY_PRESERVED=PASS_SCOPED
+SCOPE_HONESTY=PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED=NO
+
+PHASE3_A_U2_TO_U5_AUTHORIZED=NO
+
+REQUIRED_CHANGES=CHANGE_38_P1_HEAD_BINDING_INDEPENDENT_VERIFICATION
+NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R8_CHANGE38_EVIDENCE_ONLY
+NEXT_AUDIT=MSG-20261009-23
+
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+REPOSITORY_INDEPENDENTLY_VERIFIED=NO
+TEST_OUTPUT_INDEPENDENTLY_VERIFIED=NO
+PRODUCT_CODE_CHANGE_AUTHORIZED=NO
+
+最终裁决： CHANGE 34–36 不再要求技术修改；CHANGE 37 保持 REVISE，登记 CHANGE 38 作为唯一后续证据核验事项。U1 暂不正式关闭，U2–U5 继续禁止实施。本次审计未对仓库进行任何写入。
+```

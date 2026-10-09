@@ -1632,3 +1632,75 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.26 MSG-20261009-22 裁决归档 = **PASS WITH REVISE**（CHANGE 34–36 通过，CHANGE 37 → CHANGE 38）
+
+> 裁决来源：右侧独立审计会话（MSG-20261009-22 送审 → 本轮裁决）
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-22] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（151/151，缺失 0，多出 0）**；
+> 规范化指纹（去 CRLF、逐行 trim、去空行、FNV1A over UTF-8）= `NORM_CHARS=4241 / NORM_LINES=151 / FNV=ecca2518`。
+> `REVIEWED_HEAD = 9ee36837`（full `9ee3683725ad694123092e5bafce9a32b75d3fd2`）。
+
+**七项门禁裁决**
+
+| 门禁 | 裁决 |
+| --- | --- |
+| CHANGE34_REAL_CONCURRENT_OVERLAP | PASS_SCOPED |
+| CHANGE35_PG_25006_ASSERTION | PASS_SCOPED |
+| CHANGE36_ASYNC_LIFECYCLE_DETERMINISTIC | PASS_SCOPED |
+| CHANGE37_HEAD_BINDING | REVISE |
+| U1_READ_ONLY_BOUNDARY_PRESERVED | PASS_SCOPED |
+| SCOPE_HONESTY | PASS |
+| PHASE3_U1_IMPLEMENTATION_CLOSED | NO |
+
+- 评审方明确指出：**CHANGE 34、35、36 不再要求技术修改**（本轮证据已形成较完整技术闭环）；
+  关闭阻断已从「核心测试逻辑」转移到「证据来源与 HEAD 绑定」层面。
+- `PASS_SCOPED` 的定义（原文）：所提交的内联材料满足该项具体技术断言，但不等同于对
+  GitHub 源文件与测试执行环境的独立认证。评审方本轮尝试用 GitHub 连接器检索仓库，
+  返回的可访问仓库列表为空 —— 因此**不能**声称已独立读取固定 commit 或独立重跑测试。
+
+**评审方提出的两处技术限定（须如实保留）**
+
+1. CHANGE 34 的时间戳证明的是「应用侧记录的事务活动区间重叠」，不是独立 PostgreSQL 会话日志
+   证明的物理执行重叠；对 CHANGE 34 设定的门闩目标足够，但不得外推。
+2. CHANGE 36 的 `transactionsOpenedAtDb` 应准确表述为「真实 Prisma 事务入口调用次数」，
+   **不是**数据库服务器独立测量的 BEGIN 次数。
+
+**唯一后续事项：CHANGE 38（P1）HEAD 绑定与原始输出的独立可核验性**
+
+在 MSG-20261009-23 中提供以下最小材料（不要求改产品代码、不要求重做 U1）：
+
+1. 固定 `9ee36837` 的 `git rev-parse HEAD` 与 `git status --porcelain` 原始输出；
+2. 七份文件的 `git show 9ee36837:<path>` 字节哈希复算结果，逐项 `MATCH=true`；
+3. `git diff 23604dcb 9ee36837 -- apps/api/src/services/self-repair/trusted-facts-adapter.ts`，
+   证明产品代码未变化；
+4. 正向测试、负向对照、TypeScript 检查的实际命令、退出码与原始输出摘要，并标明与固定 HEAD 的关联。
+
+评审方并指出：`tsc-raw.txt` 的 SHA-256 是标准空文件摘要，只能说明该文件为空，
+需附**对应执行记录**才能与 `TSC_EXIT=0` 关联。若 GitHub 可访问性仍未解决，可继续完整内联交付，
+但必须明确「内联证据审查」与「独立仓库核验」是不同级别的认证。
+
+```text
+MSG-20261009-22_FINAL_VERDICT = PASS_WITH_REVISE
+MSG-20261009-22_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 151/151；FNV1A ecca2518）
+REVIEWED_HEAD = 9ee36837（full 9ee3683725ad694123092e5bafce9a32b75d3fd2）
+CHANGE34_REAL_CONCURRENT_OVERLAP = PASS_SCOPED（无需技术修改）
+CHANGE35_PG_25006_ASSERTION = PASS_SCOPED（无需技术修改）
+CHANGE36_ASYNC_LIFECYCLE_DETERMINISTIC = PASS_SCOPED（无需技术修改）
+CHANGE37_HEAD_BINDING = REVISE
+U1_READ_ONLY_BOUNDARY_PRESERVED = PASS_SCOPED
+SCOPE_HONESTY = PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+REQUIRED_CHANGES = CHANGE_38_P1_HEAD_BINDING_INDEPENDENT_VERIFICATION
+NEXT_AUTHORIZED = PHASE3_A_U1_FINAL_R8_CHANGE38_EVIDENCE_ONLY
+NEXT_AUDIT = MSG-20261009-23
+REPOSITORY_INDEPENDENTLY_VERIFIED = NO
+TEST_OUTPUT_INDEPENDENTLY_VERIFIED = NO
+PRODUCT_CODE_CHANGE_AUTHORIZED = NO
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```
