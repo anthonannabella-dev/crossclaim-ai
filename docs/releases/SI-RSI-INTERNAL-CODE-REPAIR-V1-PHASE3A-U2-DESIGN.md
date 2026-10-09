@@ -1,11 +1,11 @@
-# PHASE 3-A · U2 设计 R8（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R9（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-30 = PASS WITH REVISE` → `MSG-20261009-31 = REVISE` → `MSG-20261009-32 = REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R8_READ_ONLY_CHANGES_22_TO_25`。
-> 本文件是 **U2 设计 R8** 送审材料（MSG-20261009-33），**不含任何产品代码改动**。
-> **R8 的修订集中在 §16（OS 级写入隔离 / 锁生命周期 / 拒绝顺序 / 唯一运行模式）；
-> §1–§15 保留历史；凡冲突者以 §16 为准。**
+> `MSG-20261009-31 = REVISE` → `MSG-20261009-32 = REVISE` → `MSG-20261009-33 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R9_READ_ONLY_CHANGES_26_TO_31`。
+> 本文件是 **U2 设计 R9** 送审材料（MSG-20261009-34），**不含任何产品代码改动**。
+> **R9 的修订集中在 §17（隔离证明可信链 / U2-20 拆分 / 并发复用闭环 / 事务边界 / 锁释放原子性 / 副作用契约）；
+> §1–§16 保留历史；凡冲突者以 §17 为准。**
 
 | 锚点 | 值 |
 | --- | --- |
@@ -17,7 +17,8 @@
 | U2 设计 R5 | `f115f881` |
 | U2 设计 R6 | `a12a9f36` |
 | U2 设计 R7 | `f6c6d677` |
-| U2 设计 R8 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R8 | `7a5d8058` |
+| U2 设计 R9 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -947,3 +948,136 @@ ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、`SCHEMA_MIGRATIO
 不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
 `SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
 本文件仍为**纯设计 R8**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+
+---
+
+## 17. R9 修订（对应 MSG-20261009-33 的 CHANGE 26–31）
+
+### 17.1 CHANGE 26（P0）—— 隔离证明的**可信链**
+
+**承认**：R8 的 `ISOLATION_ATTESTED` 只是一组自述字段，**不能**证明隔离真实存在。
+
+**R9 定义**
+
+1. **来源**：隔离证明**只能**由可信运行环境（部署编排/受限运行账户的既有运维步骤）生成，
+   U2 **只从受信配置或受信通道**获取；**普通业务输入不得**提供该证明（若入参出现任何证明字段 ⇒
+   `EXTRA_FIELD_KEY_OR_UNKNOWN`）。
+2. **服务端强制上限**：`issuedAt` 有效期受**服务端常量**约束 `ATTESTATION_MAX_AGE_MS_CAP`；
+   调用方配置的 `maxAgeMs` 只能**收紧**、不能放宽（超出上限即按上限处理）。
+3. **字段扩展（绑定真实保护范围）**：
+   ```ts
+   interface IsolationAttestation {
+     attestationVersion: 'u2-iso:v1';
+     canonicalWorktreePath: string;   // realpath 解析后的绝对路径
+     gitDirRealPath: string;          // .git 实际指向目录（worktree 场景为 gitdir）
+     protectedRefsDigest: string;     // sha256(canon(git for-each-ref 排序输出 + packed-refs 原始字节))
+     ownerAccount: string;
+     aclEvidenceRef: string;          // 只读 ACL/所有权检查输出的引用
+     aclEvidenceDigest: string;       // 上述输出字节的 sha256
+     writeDeniedProbeRef: string;     // 「非属主写入被拒绝」探针证据引用
+     writeDeniedProbeDigest: string;
+     issuedAt: string;                // UTC 毫秒
+     maxAgeMs: number;                // ≤ ATTESTATION_MAX_AGE_MS_CAP
+   }
+   ```
+4. **运行期复核（非一次性）**：在 T0 与检查③ 各重新计算
+   `realpath(canonicalWorktreePath)`、`gitDirRealPath`、`protectedRefsDigest`，
+   与证明中的值**逐项比对**；不一致 ⇒ `ATTESTATION_STALE`（新 reason），零写入。
+   因此**不得**把一次历史 ACL 检查当作运行期持续不可变的证明。
+5. **信任边界（如实列出）**：本设计**不**声称能防御
+   ①同一 UID 下的其他进程；②特权账户（root/管理员）；③证明签发**之后**被外部修改的 ACL。
+   这三类必须由运行环境通过**专用账户 + 权限边界**排除；U2 只做证据一致性判定。
+6. **两个验收层级必须区分**：
+   - `ATTESTATION_VALID` —— U2 在运行期可以判定的结论（证据在位、一致、在有效期内）；
+   - `WRITE_ISOLATION_ENFORCED` —— **只能**由实施阶段的 `U2-20A` 探针在**该环境**上实测得出，
+     U2 运行期**从不**自行宣告该结论（设计如实声明，不越权宣称）。
+
+### 17.2 CHANGE 27（P0）—— U2-20 拆分（修正自相矛盾的断言）
+
+| 用例 | 必须断言 |
+| --- | --- |
+| **U2-20A** 外部非授权写入被拒绝 | Git HEAD/工作树**不变**；**合法候选可以提交**（提交成功）；**没有**越权写入发生（受保护路径对非属主不可写）⇒ 该环境据此可记录 `WRITE_ISOLATION_ENFORCED`（实施阶段） |
+| **U2-20B** 真实检测到基线变化 | 回滚；**候选零新增**；**不泄露** candidate ID（仅结构化 reason `BASELINE_CHANGED_DURING_WRITE`） |
+| **U2-20C** 隔离证明缺失/无效/过期 | **拒绝进入写入流程**；候选零新增（reason `EXCLUSIVE_WINDOW_UNAVAILABLE` 或 `ATTESTATION_STALE`） |
+
+### 17.3 CHANGE 28（P0）—— 唯一键冲突与并发复用闭环
+
+1. **约束核实（实施前置）**：确认既有 `AutonomyCandidate.@@unique([dedupeKey])` **确实覆盖** R9 的候选去重键
+   （v2 键，§12.2）；**不新增**约束、**不改 schema**。
+2. **写入语义**：`INSERT ... ON CONFLICT ("dedupeKey") DO NOTHING`（或以保存点包裹并捕获**唯一约束冲突**
+   这一**特定**错误码）。
+3. **冲突后的恢复/重试路径（明确设计）**：
+   ① 回滚到保存点（或结束本事务）→ ② 在**新事务**中按 `dedupeKey` **重读**既有候选行 →
+   ③ 重新构造权威身份并**逐项比对**（`dedupeKey`、`taskId`、`Task.incidentId`、`baselineRef`、`builderRef`、`candidateDigest`）
+   → ④ **完全一致**才 `CANDIDATE_REUSED`（返回该 `candidateId`）；**任一不一致** ⇒ `INPUT_KEY_MISMATCH` 且 `candidateId=null`。
+4. **不得**把**所有**数据库异常都当作去重冲突：非唯一约束类错误 ⇒ 稳定错误码 `CANDIDATE_WRITE_FAILED`（§17.6）。
+5. **新增真实 PostgreSQL 双连接竞争测试**（**U2-28 / U2-29**）：
+   - U2-28：两连接强制交错（两者查询均未命中 → A 提交 → B 撞唯一键）⇒ 断言**恰好 1 行**、
+     B 走 §17.3 的恢复路径并返回 `CANDIDATE_REUSED`（身份完全一致时）；
+   - U2-29：同上交错但 B 的权威身份与既有行**不一致**（构造恶意冲突）⇒ `INPUT_KEY_MISMATCH`、`candidateId=null`、**零新增**。
+
+### 17.4 CHANGE 29（P1）—— 权威读取与事务边界
+
+1. **关键权威读取入事务**：`Incident` / `Task`（真实外键链）/ 故障上下文 的读取与
+   权威身份构造**移入候选写入事务**（或在新事务内做**同等强度**的重新验证）；
+   证据行记录 `authoritativeReadInsideTx=true`。
+2. **并发失效防护**：证明「`Incident` 状态变化 / `Task` 关联变化 与候选 `INSERT` 并发」时
+   **不提交已失效候选**（测试 U2-30）。
+3. **`COMMIT` 结果未知（不得谎称回滚）**：若 `COMMIT` 抛错且**结果未知**（连接中断等）：
+   - **不重试**（避免重复副作用）；
+   - 执行**只读对账**：按 `dedupeKey` 查询候选行；
+     - 存在且权威身份一致 ⇒ 返回 `COMMIT_CONFIRMED_BY_RECONCILE`（`commitState='COMMITTED'`）；
+     - 不存在 ⇒ 返回 `COMMIT_NOT_CONFIRMED`（`commitState='NOT_COMMITTED'`）；
+     - 查询本身失败 ⇒ `commitState='UNKNOWN'`；
+   - 三种情况都**不得**被表述为「已回滚且零写入」。
+
+### 17.5 CHANGE 30（P1）—— 锁释放的原子性与失败语义
+
+1. **稳定验证 + 原子释放**：释放**不得**采用「先读 `ownerToken`、再按路径删除」的两步法，改为：
+   - 持锁期间保留**打开的文件描述符**；
+   - 释放时先 `fstat` 取得 `(dev, inode)` 并从**同一 fd** 读回 `ownerToken`；
+   - 通过**原子 `rename`** 将锁改名为 `<lock>.released.<ownerToken>`（目标已存在则视为异常）；
+     随后校验改名后文件内容仍为本属主 ⇒ 再 `unlink`；任何不一致 ⇒ **不删除**并告警（fail-closed）；
+   这样可以避免删除「后来者」的锁。
+2. **创建后写入/同步失败**：尽力释放（按第 1 条）并返回 `EXCLUSIVE_WINDOW_UNAVAILABLE`，零写入。
+3. **释放失败（含正常路径）**：告警，且**下次调用**在锁存在时按 §16.2 直接拒绝；不自动接管。
+4. **提交成功但释放失败**：**不得**报告为「零写入」；结果按 §17.6 的副作用契约如实返回
+   （`commitState='COMMITTED'`、`lockReleaseFailed=true`）。
+5. **人工解除陈旧锁**：须有文档化流程（操作者身份、存活检查证据、时间戳）并落入既有审计工件；
+   U2 自身永不自动清理归属不明的锁。
+
+### 17.6 CHANGE 31（P1）—— 拒绝码与最终副作用状态一致
+
+**新的统一副作用契约**（所有返回都必须携带，且与 reason 一致）：
+
+```ts
+interface U2SideEffectReport {
+  candidateRowsWritten: 0 | 1;
+  commitState: 'COMMITTED' | 'NOT_COMMITTED' | 'UNKNOWN';
+  lockReleaseFailed: boolean;
+  authoritativeReadInsideTx: boolean;
+}
+```
+
+**确定性判定补充**
+
+1. `null` 与缺失的优先级：**缺失或 `undefined`** ⇒ `MISSING_INCIDENT_ID` / `MISSING_REQUEST_REF`；
+   **存在但为 `null`** ⇒ `EMPTY_STRING_FIELD`；**存在且非 `null` 但类型非 `string`** ⇒ `INVALID_FIELD_TYPE`；
+   **存在且为空字符串** ⇒ `EMPTY_STRING_FIELD`。（顺序：缺失 → 类型 → 空值）
+2. 非普通对象 / `Proxy`：仅接受**数据属性**；检测到 symbol 键、访问器属性，或属性访问抛出 ⇒ `TOP_LEVEL_INPUT_INVALID`，
+   零写入（并重申：进程内无法穷尽防御恶意 Proxy，主要控制是内部调用来源约束）。
+3. **`BASELINE_CHECK_FAILED`（新）** 与 `BASELINE_CHANGED_DURING_WRITE` 必须区分：
+   Git 命令执行失败/元数据不可读 ⇒ 前者；三次检查结果**确实不同** ⇒ 后者。
+4. `INSERT` 期间的**普通数据库错误** ⇒ `CANDIDATE_WRITE_FAILED`（稳定契约），不得映射为去重复用。
+5. **原则**：**不得**因为最终返回 `REJECTED` 就声称数据库一定没有发生提交；
+   反之，任何 `CANDIDATE_INSERTED` / `CANDIDATE_REUSED` 都必须与 `candidateRowsWritten`/`commitState` 自洽。
+
+### 17.7 R9 未变部分
+
+§12 候选键 v2 与 digest、§13.1 接口结构（`U2PlatformCandidateInput{incidentId,requestRef}` /
+`U2CandidateDecision`，本节点增补副作用报告）、§13.2 矩阵（U2-1…U2-21 状态不变，另加
+U2-28/29/30）、§16.1 的 `CONTROLLED_FIXED_WORKTREE` 唯一模式与协作锁降级、
+`builderRef` 固定常量、仅 INSERT、无 UPDATE/DELETE、不新增 schema/migration、不接 Runtime/Queue、
+不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
+`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+本文件仍为**纯设计 R9**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
