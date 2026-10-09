@@ -2646,3 +2646,61 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.42 MSG-20261009-38 裁决归档 = **REVISE**（CHANGE 45/46 升为 PASS WITH REVISE；CHANGE 44 维持 OPEN，新增 CHANGE 47–53，其中 47/48/53 为 P0）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-38] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（142/142，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=4576 / NORM_LINES=142 / FNV=3b338338`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R12=c9b167c7`、`REVIEWED_HEAD=8c42cfc2`。
+
+**审计方独立核验**：`R12→R13 = 2 提交 / 3 文件`、变更文件均为 Markdown（**无 `apps/api` 产品代码、无 Prisma Schema/Migration**）、
+R13 设计文档 Git blob SHA `a32103858ef1f5ecca11ae19f825a252a79cbdeb` **与送审一致**、§21.1–§21.5 修订与 **U2-33～U2-40** 矩阵确存在。
+**未独立复核**：文档 SHA-256、U1 锚点不变性、真实运行测试。
+
+**六项**：`CHANGE44 = REVISE`、`CHANGE45 = PASS WITH REVISE`、`CHANGE46 = PASS WITH REVISE`、
+`R13 文档与提交差异 = PASS（限定 GitHub 核查范围）`、`U2 设计最终关闭 = NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET 实施 = NOT AUTHORIZED`。
+
+**三个新增 P0 的否决理由（原文要点）**
+
+1. **CHANGE 47（P0）探针失败不能证明持锁者是当前实例**：独立探针取锁失败最多证明该锁对象当前**存在冲突锁**；
+   `ownerToken`/`instanceId`/`(dev,inode)` 只是**身份关联**，**不是内核锁所有权证明**。R14 须规定
+   `T1` 由当前实例在指定 FD 上成功取得 `LOCK_EX | LOCK_NB` 并**保留系统调用结果**，`T1A` 用独立打开的
+   文件描述证明互斥，**两者组合**构成证据链（而非让 T1A 单独证明身份）；`T2` 前必须验证该**打开文件描述仍持续持有排他锁**
+   —— 仅 `fstat(fd)` 与路径一致性检查**不足以**证明；无法持续证明时须依靠**可信 FD 生命周期控制**或更强内核级机制，
+   而非反复读取元数据。
+2. **CHANGE 48（P0）修正 flock 的释放与继承语义**：R13 §21.1.4 关于 `close()` 的表述不准确。Linux 上 `flock`
+   关联的是 **open file description**：显式 `LOCK_UN` 可解除锁（即便仍存在引用同一描述的复制 FD），
+   而**只关闭其中一个 FD 不保证解锁**。因此：不得声明 `close(fd)` 一定是最终释放依据；必须验证**不存在未受控的复制 FD**；
+   `O_CLOEXEC` 只防 `exec` 继承、**不阻止 `fork` 继承**；`SIGKILL` 结束持锁进程**不代表**其他仍持有共享描述的进程也结束
+   （锁可能继续存在）；释放异常**必须保留状态与证据**，不以时间戳推断已释放。
+3. **CHANGE 53（P0）`signerAuthRef` 防重放必须具有原子消费语义**：一次性 nonce 仅被签名覆盖**不能**阻止两个实例并发使用。
+   R14 须定义可信的消费状态与**原子校验 + 占用**：`T0` 原子占用一次性挑战、`T2` **复验同一次执行的授权状态**（而非再次消费）、
+   其他实例使用相同 nonce 必须失败、进程崩溃后不得使 nonce 重新可用、授权过期或实例不匹配必须拒绝；
+   若现有可信控制面不支持这些能力 ⇒ 保持 `EXCLUSIVE_WINDOW_UNAVAILABLE`，不得默认允许。
+
+**REQUIRED_CHANGES（下一轮 MSG-20261009-39 只做这七项；`R14` 纯设计修订 + 只读证据核验）**
+
+- **CHANGE 47（P0）** 锁所有权证据链（T1 系统调用结果 + T1A 独立 FD 互斥 + T2 前持续持锁验证；不足则用可信 FD 生命周期控制/更强内核机制）。
+- **CHANGE 48（P0）** flock 释放与继承语义修正（`LOCK_UN` vs `close`、未受控复制 FD、`fork` 继承、`SIGKILL` 共享描述、异常保留证据）。
+- **CHANGE 49（P1）** U2-33～U2-36 补真实 **Linux 多进程**测试（误归因 / 复制 FD 后 `LOCK_UN` 可检测 / `fork` 继承且父进程退出不得误判已释放 / 证明后至提交期间锁释放或路径替换须拒绝或安全中止）。
+- **CHANGE 50（P1）** COMMIT 归因证据有效性（低碰撞 ≠ 绝对不复用；限定数据库实例/恢复历史/ID 写入权限/观察窗口；显式 ROLLBACK 须可靠确认回滚完成；跨进程对账只能用可持久化可重读的事务外记录）。
+- **CHANGE 51（P1）** 清单完整性是**准入条件**而非代码假设（全写入者列举 / 权限与触发器核验 / 全观察窗口无未记录 UPDATE-DELETE / ID 不复用前提在实际环境成立）。
+- **CHANGE 52（P1）** 统一字节级输入契约（**R13 优先于 R12**；明确用原始路径输出字节或受控转换后的路径字节；完整调用参数与环境；按原始字节排序；不以未校验的 Git 输出顺序替代规范排序；拒绝不能无损表示的路径/引用名；双实现核对非 ASCII/空格/换行/异常输入）。
+- **CHANGE 53（P0）** `signerAuthRef` 原子消费语义（见上）。
+
+```text
+MSG-20261009-38_FINAL_VERDICT = REVISE
+MSG-20261009-38_ARCHIVED = AI-ARCHITECT-INBOX.md（规范化指纹 4576/142；FNV1A 3b338338）
+CHANGE_44 = REVISE（仍 OPEN）· CHANGE_45 = PASS_WITH_REVISE · CHANGE_46 = PASS_WITH_REVISE
+U2_DESIGN_CLOSED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · U2_PLATFORM_ONLY_INSERT_SUBSET = NOT AUTHORIZED
+REQUIRED_CHANGES = CHANGE_47_P0 ; CHANGE_48_P0 ; CHANGE_49_P1 ; CHANGE_50_P1 ; CHANGE_51_P1 ;
+                   CHANGE_52_P1 ; CHANGE_53_P0
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R14_READ_ONLY_CHANGES_47_TO_53
+NEXT_AUDIT = MSG-20261009-39
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```

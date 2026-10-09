@@ -177510,3 +177510,295 @@ PRODUCTION=NOT_VERIFIED
 
 审计结论：R12 的事务归因与活体排他设计已有实质进展，但关键安全证明尚未闭合。本轮不授权产品代码实施，也未对仓库执行任何写入。
 ```
+
+### [MSG-20261009-38] U2 设计 R13 = **REVISE**（CHANGE 45/46 升为 `PASS WITH REVISE`；CHANGE 44 维持 **OPEN**，新增 CHANGE 47–53，其中 **47/48/53 为 P0**）—— 六项：`CHANGE44=REVISE`、`CHANGE45=PASS_WITH_REVISE`、`CHANGE46=PASS_WITH_REVISE`、`R13 文档与提交差异=PASS（限定 GitHub 核查范围）`、`U2 设计最终关闭=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET 实施=NOT AUTHORIZED`；独立核验：`R12→R13 = 2 提交/3 文件`、变更文件均为 Markdown（无 `apps/api` 产品代码、无 Prisma Schema/Migration）、R13 设计文档 Git blob SHA `a32103858ef1f5ecca11ae19f825a252a79cbdeb` **与送审一致**、§21.1–§21.5 修订与 **U2-33～U2-40** 矩阵确存在；**未独立复核**：文档 SHA-256、U1 锚点不变性、真实运行测试；**CHANGE 44（P0）仍 REVISE**，理由：①（**CHANGE 47·P0**）独立探针失败**只能证明该锁对象存在冲突锁**，**不能**证明持锁者**就是当前实例**，`ownerToken`/`instanceId`/`(dev,inode)` 只是身份关联而**不是内核锁所有权证明** ⇒ R14 须规定 T1 由当前实例在指定 FD 上成功取得 `LOCK_EX|LOCK_NB` 并保留系统调用结果、T1A 用独立打开的文件描述证明互斥、二者**组合**构成证据链，且 T2 前须验证该打开文件描述**仍持续持有**排他锁（仅 `fstat(fd)` 与路径一致性不足）；②（**CHANGE 48·P0**）R13 §21.1.4 的 `close()` 表述不准确——Linux `flock` 关联 **open file description**，`LOCK_UN` 可解除锁（即便仍有引用同一描述的复制 FD），而**只关闭其中一个 FD 不保证解锁** ⇒ 不得声明 `close(fd)` 一定是最终释放依据，须验证不存在未受控复制 FD、`O_CLOEXEC` 只防 `exec` 不防 `fork`、`SIGKILL` 不结束其他共享描述进程（锁可能继续存在）、释放异常须保留状态与证据；③（**CHANGE 49·P1**）U2-33～U2-36 须补真实 Linux 多进程测试（U2 未持锁而他者持锁不得误归因 / FD 被复制后 `LOCK_UN` 可检测到丧失排他 / `fork` 子进程继承 FD 且父进程退出不得误判已释放 / 证明完成至提交期间锁释放或路径替换须拒绝或安全中止）；**CHANGE 45（P0）= PASS WITH REVISE**（认可不再以「U2 自己不 UPDATE/DELETE」推导全局不可变性、清单涵盖服务/后台作业/运维脚本/管理员/数据库级对象、`returnedCandidateId` 在 COMMIT 前保存到事务外、INSERT 成功与 COMMIT 成功分离、无法证明不变性返回 `UNKNOWN`、不允许 `UNKNOWN` 驱动自动化），但**新增 CHANGE 50·P1**（`uuid/cuid` 低碰撞概率 ≠ 形式化绝对不复用，须限定数据库实例/恢复历史/ID 写入权限/观察窗口；显式 ROLLBACK 须**可靠确认回滚完成**才可判 NOT_COMMITTED，连接异常且终态未知时仍保留 `UNKNOWN`；跨进程恢复对账只能用**稳定、可持久化、可重读**的事务外记录）与 **CHANGE 51·P1**（清单完整性是**准入条件**而非代码假设：全写入者已列举、权限与触发器已核验、全观察窗口无未记录 UPDATE/DELETE、ID 不复用前提在实际环境成立，本轮均**未证明** ⇒ 不得据此直接授权写入）；**CHANGE 46（P1）= PASS WITH REVISE**，但新增 **CHANGE 52·P1**（R13 §21.3.1 保留 rev-parse 路径有效字符 vs R12 §20.4.1 的「路径解析/统一去除尾部分隔符」可能产生不同 digest ⇒ 须明确 **R13 优先于 R12** 并统一为原始或受控转换后的路径字节；另须明确 for-each-ref 完整调用参数与实际环境、按原始字节排序不依赖区域设置、不得以未校验的 Git 输出顺序替代规范排序、拒绝不能无损表示的路径/引用名、用两种独立实现核对非 ASCII/空格/换行/异常输入）与 **CHANGE 53·P0**（`signerAuthRef` 防重放须具**原子消费语义**：一次性 nonce 仅被签名覆盖不足以阻止并发复用 ⇒ 须定义可信消费状态与原子校验+占用，T0 原子占用、T2 复验同一次执行授权状态而非再次消费、他实例用同一 nonce 必须失败、崩溃后不得使 nonce 重新可用、过期或实例不匹配须拒绝；可信控制面不支持则保持 `EXCLUSIVE_WINDOW_UNAVAILABLE`）；**授权判定**：`U2_PLATFORM_ONLY_INSERT_SUBSET = NOT AUTHORIZED`（存在未关闭 P0 且未完成真实 Linux/PostgreSQL/事务归因验证；仅可继续只读设计核查，不得创建 U2 实施提交、改 Schema、接 Runtime/Queue 或真实外部写入）；`REQUIRED_CHANGES=CHANGE_47_P0,CHANGE_48_P0,CHANGE_49_P1,CHANGE_50_P1,CHANGE_51_P1,CHANGE_52_P1,CHANGE_53_P0`、`NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R14_READ_ONLY_CHANGES_47_TO_53` / `NEXT_AUDIT=MSG-20261009-39`；reviewed ref `8c42cfc269c311acb5c941a0413430282dbc3654`
+
+```text
+MSG-20261009-38｜CrossClaim AI · U2 设计 R13 独立审计裁决
+REVISE — 暂不授权实施
+
+审计对象： PHASE 3-A · U2 Design R13
+固定提交： 8c42cfc269c311acb5c941a0413430282dbc3654
+审计方式： GitHub 只读核查 + 设计契约审查
+审计日期： 2026-10-09
+
+一、总体裁决
+
+本轮已通过 GitHub 连接器读取指定 HEAD 下的设计文档，并对 R12 → R13 的提交差异进行独立查询。
+
+核实结果：
+
+GitHub 返回提交差异为 2 commits、3 files。
+
+变更文件均为 Markdown 文档，未包含 apps/api 产品代码或 Prisma Schema/Migration。
+
+R13 设计文档 Git blob SHA 为 a32103858ef1f5ecca11ae19f825a252a79cbdeb，与送审值一致。
+
+§21.1–§21.5 的修订内容及 U2-33～U2-40 验收矩阵确实存在。
+
+文档文件字节 SHA-256、U1 锚点不变性，以及真实运行测试仍未独立复核。
+
+结论：R13 已解决部分关键设计缺口，但锁持有者身份归因、锁生命周期、未知 COMMIT 的证明边界和防重放原子性仍存在安全缺口，不能进入 U2 写入实施。
+
+审计事项
+
+
+
+裁决
+
+
+
+
+CHANGE 44（P0）锁所有权
+
+
+
+REVISE
+
+
+
+
+CHANGE 45（P0）COMMIT 归因
+
+
+
+PASS WITH REVISE
+
+
+
+
+CHANGE 46（P1）字节规范与授权生命周期
+
+
+
+PASS WITH REVISE
+
+
+
+
+R13 文档与提交差异
+
+
+
+PASS（限定 GitHub 核查范围）
+
+
+
+
+U2 设计最终关闭
+
+
+
+NO
+
+
+
+
+U2_PLATFORM_ONLY_INSERT_SUBSET 实施
+
+
+
+NOT AUTHORIZED
+
+下一轮应限定为 R14 纯设计修订与只读证据核验，不再扩张 U2 功能范围。
+
+二、CHANGE 44（P0）—— REVISE
+
+R13 的时序修正方向正确。先取得锁，再由独立探针尝试加锁，明显优于 R12 的先验证、后取锁。
+
+但需要纠正三个问题。
+
+CHANGE 47（P0）：探针失败不能证明持锁者是当前实例
+
+独立探针获取锁失败，最多证明该锁对象当前存在冲突的锁，不能单凭失败证明锁由当前 U2 实例持有。
+
+ownerToken、instanceId 和 (dev,inode) 可以证明身份关联，但这些元数据本身不是内核锁所有权证明。
+
+R14 必须明确：
+
+T1 由当前实例在指定 FD 上成功取得 LOCK_EX | LOCK_NB，并保留系统调用结果。
+
+T1A 用独立打开的文件描述证明互斥。
+
+两者组合构成锁所有权的证据链，而不是让 T1A 单独证明持锁者身份。
+
+T2 前必须验证锁 FD 所在的打开文件描述仍持续持有排他锁。仅 fstat(fd) 和路径一致性检查不足以证明这一事实。
+
+对持锁状态无法持续证明的情况，必须依靠可信的 FD 生命周期控制或更强的内核级机制，而非反复读取元数据。
+
+CHANGE 48（P0）：修正 flock 的释放与继承语义
+
+R13 §21.1.4 关于 close() 的表述不准确。
+
+Linux 上，flock 锁关联的是 open file description。显式执行 LOCK_UN 可以解除该锁，即使仍存在引用同一描述的复制 FD；反过来，只关闭其中一个 FD，并不能保证解除锁。
+
+因此：
+
+不能声明 close(fd) 一定是最终释放依据。
+
+必须明确验证不存在未受控的复制 FD。
+
+O_CLOEXEC 防止 FD 跨 exec 继承，但不会阻止 fork 时继承。
+
+SIGKILL 结束持锁进程，不代表其他仍持有共享描述的进程也结束；锁可能继续存在。
+
+释放异常必须保留状态与证据，不应以时间戳推断锁已释放。
+
+CHANGE 49（P1）：补充探针与锁对象竞争测试
+
+U2-33～U2-36 应增加真实 Linux 多进程测试，重点证明：
+
+U2 未持锁但其他进程持锁时，不会产生持锁者误归因。
+
+FD 被复制后执行 LOCK_UN，可检测到排他锁已丧失。
+
+fork 子进程继承 FD、父进程退出时，不会将锁错误判定为已释放。
+
+证明完成后至事务提交期间出现锁释放或路径替换时，能够拒绝或安全中止。
+
+裁决：CHANGE 44 保持 OPEN。
+
+三、CHANGE 45（P0）—— PASS WITH REVISE
+
+本轮最重要的进步，是不再使用“U2 自己不 UPDATE/DELETE”推导全局不可变性。
+
+以下设计可以接受：
+
+全局写入者清单涵盖服务、后台作业、运维脚本、管理员以及数据库级对象。
+
+returnedCandidateId 在 COMMIT 前保存到事务外。
+
+将 INSERT 成功与事务 COMMIT 成功分离。
+
+不能证明全局不变性时，返回 UNKNOWN。
+
+不允许 UNKNOWN 驱动自动化后续动作。
+
+但需收紧两处。
+
+CHANGE 50（P1）：COMMIT 归因的证据有效性
+
+uuid/cuid 的低碰撞概率不等于形式上的绝对不复用。设计不得仅凭 ID 类型断言全局不可复用，还需要限定数据库实例、恢复历史、ID 写入权限和观察窗口。
+
+对于已知显式 ROLLBACK 的事务，可以在可靠确认回滚完成后判定本次 INSERT 未提交；对于连接异常、事务结束状态未知且查询未命中的情况，仍然必须保留 UNKNOWN。
+
+还需要明确：只有稳定、可持久化、可重新读取的事务外记录，才能被用于跨进程恢复对账。普通进程内变量或未确认落盘的日志不等同于持久化证据。
+
+CHANGE 51（P1）：清单完整性是准入条件，不是代码假设
+
+R13 目前定义的是未来必须核对的清单，并没有实际证明：
+
+全部数据库写入者已列举。
+
+数据库权限与触发器已核验。
+
+全观察窗口不存在未经记录的 UPDATE/DELETE。
+
+ID 不复用前提在实际运行环境成立。
+
+因此，CHANGE 45 的设计方向通过，但其运行时归因条件尚未核验，不能据此直接授权写入。
+
+四、CHANGE 46（P1）—— PASS WITH REVISE
+
+字节排序、非零退出码拒绝、禁止部分 digest、签名过期检查等规则基本合理。
+
+仍需修订：
+
+CHANGE 52（P1）：统一字节级输入契约
+
+R13 §21.3.1 宣称保留 rev-parse 输出的路径有效字符，但 R12 §20.4.1 仍包含“路径解析”和“统一去除尾部分隔符”的规定。
+
+这两种要求可能产生不同 digest。应明确 R13 优先于 R12，并统一规定是使用原始路径输出字节，还是经过受控转换后的路径字节。
+
+另需补充：
+
+明确 for-each-ref 的完整调用参数与实际环境。
+
+用原始字节解析结果进行排序，不依赖文本区域设置。
+
+不以 Git 输出顺序未经校验地替代规范排序。
+
+拒绝不能无损表示的路径或引用名称。
+
+使用两种独立实现核对非 ASCII、空格、换行及异常输入。
+
+CHANGE 53（P0）：signerAuthRef 防重放必须具有原子消费语义
+
+一次性 nonce 仅被签名覆盖，并不能自动阻止两个实例并发使用它。
+
+R14 必须定义可信的消费状态以及原子校验与占用过程：
+
+在 T0 原子占用一次性挑战。
+
+T2 复验同一次执行的授权状态，而不是再次消费。
+
+其他执行实例使用相同 nonce 必须失败。
+
+进程崩溃后不得使 nonce 重新可用。
+
+授权过期或实例不匹配必须拒绝。
+
+若现有可信控制面不支持这些能力，则应保持 EXCLUSIVE_WINDOW_UNAVAILABLE，而不是默认允许。
+
+裁决：CHANGE 46 的字节规范部分有条件通过，授权防重放部分未闭合。
+
+五、下一轮实施授权判定
+
+U2_PLATFORM_ONLY_INSERT_SUBSET
+
+NOT AUTHORIZED
+
+原因：存在尚未关闭的 P0 安全条件，且未完成真实 Linux、PostgreSQL 及事务归因验证。
+
+当前可以继续开展只读设计核查，但不得创建 U2 实施提交、修改 Schema、接入 Runtime/Queue，或者开展真实外部写入。
+
+下一轮限定修订 CHANGE 47–53。其中 CHANGE 47、48、53 为 P0；CHANGE 49–52 为 P1。
+
+只有 P0 设计缺口关闭后，才能重新评估是否授权最小实施。即使获得实施授权，也不等于生产发布授权。
+
+六、机器可读裁决
+复制裁决
+
+AUDIT_ID=MSG-20261009-38
+REVIEWED_HEAD=8c42cfc269c311acb5c941a0413430282dbc3654
+AUDIT_VERDICT=REVISE
+
+GITHUB_COMMIT_DIFF_VERIFIED=YES
+R12_TO_R13_COMMITS=2
+R12_TO_R13_FILES=3
+R12_TO_R13_PRODUCT_CODE_CHANGES=0
+U2_DESIGN_GIT_BLOB_VERIFIED=YES
+U2_DESIGN_DOC_SHA256_VERIFICATION=NOT_INDEPENDENTLY_VERIFIED
+
+CHANGE_44=REVISE
+CHANGE_45=PASS_WITH_REVISE
+CHANGE_46=PASS_WITH_REVISE
+
+REQUIRED_CHANGES=CHANGE_47_P0,CHANGE_48_P0,CHANGE_49_P1,CHANGE_50_P1,CHANGE_51_P1,CHANGE_52_P1,CHANGE_53_P0
+
+U2_DESIGN_CLOSED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R14_READ_ONLY_CHANGES_47_TO_53
+NEXT_AUDIT=MSG-20261009-39
+
+POSTGRESQL_INTEGRATION_TEST=NOT_VERIFIED
+VITEST=NOT_VERIFIED
+TSC=NOT_VERIFIED
+LINUX_SYSTEMD=NOT_VERIFIED
+CI=NOT_VERIFIED
+PRODUCTION=NOT_VERIFIED
+
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终裁决：MSG-20261009-38 = REVISE。
+
+下一轮仅授权 R14 设计修订和只读证据核验。此前已封板的 U1 不重新打开。本轮未修改仓库，也未将本次设计评审冒充真实数据库或生产环境验证。
+```
