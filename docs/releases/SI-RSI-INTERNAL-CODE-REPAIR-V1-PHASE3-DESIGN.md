@@ -210,3 +210,121 @@
 本轮为**纯设计修订**：未实现 `FaultTrustedFactsAdapter`、未建立候选消费通道、未实施 Builder/Judge、未接线、未开放任何执行权限；
 `EXTERNAL_WRITE = HOLD`、`PRODUCTION_READY = NO`；历史测试债与历史载荷残留仍未关闭；Linux / Provider / 生产端到端仍未验证。
 
+
+---
+
+## 11. FINAL-R3 收口（回应 MSG-20261009-13 的 CHANGE 9–12）
+
+> 本轮**仍是只读设计收口**：仅修订契约、验收矩阵与实施单元划分。不实现、不接线、不修改任何运行时代码。
+
+### 11.1 CHANGE 9（P0）动作分类与副作用提交协议
+
+**动作分类表**：
+
+| 类别 | 示例 | 本阶段是否允许 | 唯一提交点 | 必需机制 |
+| --- | --- | --- | --- | --- |
+| `PURE_READ` | 读取事实、比对、生成候选 | **允许** | 无（无副作用） | 只读；仍须租户谓词 + 授权 |
+| `ISOLATED_WRITE` | 在**隔离工作区**写入候选补丁/测试产物（非仓库） | **允许** | 隔离工作区写入完成 | 工作区绑定 + 内容哈希；不得触碰仓库 / 封板 |
+| `REVERSIBLE_INTERNAL_COMMIT` | 可回滚的内部变更（本阶段不实施，仅设计备用） | **NOT_AUTHORIZED** | 单个 PostgreSQL 事务 COMMIT | 行级锁或条件更新建立可证明顺序 + 回滚脚本 + 授权版本校验点 |
+| `IRREVERSIBLE_OR_EXTERNAL` | 外部写、支付、报关、物流、生产库写入、封板 / 合并 / 部署 | **NOT_AUTHORIZED（恒 HOLD）** | — | 需跨系统协调协议；缺协议 ⇒ BLOCK |
+
+**提交协议（每个允许写入的动作）**：
+1. **唯一提交点**声明（DB COMMIT / 隔离工作区落地）；
+2. **授权版本校验点**：紧邻提交点前的 CAS —— `WHERE "authorizationVersion" = $v AND "revocationState" = 'ACTIVE'`；
+3. **幂等标识**：`idempotencyKey = digest(incidentId, actionType, targetRef, factVersion)`；
+4. **持久化副作用登记**：提交前写 `intent`，提交后写 `outcome`（含提交凭证摘要）；
+   未跨提交点 ⇒ `outcome = NOT_COMMITTED`；跨提交点但确认丢失 ⇒ `outcome = UNKNOWN`（进入对账）。
+5. **线性化**：撤销与提交竞争**同一行锁 / 同一条件写** ⇒ 必然**唯一胜者**；提交成功后发生的撤销**不得追溯**宣称提交未发生。
+6. **跨事务 / 外部系统**：不得仅凭本地 CAS 宣称原子性；**缺少协调协议的动作继续 BLOCK**。
+7. `SETTLE_REJECTED_BUT_EFFECT_POSSIBLE` ⇒ 必须进入**持久化对账**或人工处置，**禁止**自动重复执行。
+
+**关闭标准**：形成动作分类表 + 每类提交协议；无法证明安全性的动作明确标记 `NOT_AUTHORIZED`。
+
+### 11.2 CHANGE 10（P0）权威身份与幂等契约
+
+**权威关系（Incident → Candidate → Task → Attempt）**：
+
+| 层 | 权威来源 | 关键字段 |
+| --- | --- | --- |
+| `Incident` | 既有 `AutonomyIncident`（kind = `INTERNAL_FAULT`） | `incidentId`、`detectedAt`、`status`、`sourceRefs`（PHASE 1 白名单快照） |
+| `Candidate` | 修复平面新增的候选记录（**设计**；未实现） | `candidateId`、`incidentId`、`sourceKind`（`PHASE1_CLASSIFIER` / `PHASE2_TRIAGE`）、`trustedSubjectRef`（**服务端解析**）、`identityVersion`、`status`、`dedupeKey` |
+| `Task` | 既有 `AutonomyTask`（复用，不新增队列） | `taskId`、`incidentId`、`dedupeKey`、`status`、`attempts` |
+| `Attempt` | 既有 `AutonomyLease`（复用） | `taskId`、`ownerRef`、`expiresAt`、`status`（fencing token 语义） |
+
+**规则**：
+1. `incidentId` 必须关联**权威持久化 Incident**，不得依赖候选载荷声明；
+2. **去重键覆盖任务种类 + 修复目标 + 事实版本**（避免误合并不同故障）；同一 Incident 可产生多个候选，各自独立去重键；
+3. `identityVersion` 变化 ⇒ **原 Task 失效**（置 `BLOCKED`/`STALE`）并重新分流；**禁止**自动迁移租户或扩大权限；
+4. 入队前解析、认领后解析、**提交前最终授权检查** 三者**都要**（前者不能替代后者）；
+5. Attempt 必须由 lease 唯一标识；重复消息按 `idempotencyKey` 去重；崩溃恢复按 §11.4 的 `RECOVERING` 收敛。
+
+**拒绝规则**：重复（dedupeKey 命中）⇒ 拒绝且不新建；并发（CAS 失败）⇒ 拒绝且留证；身份漂移（`identityVersion` 不一致）⇒ BLOCK 且重新分流。
+
+### 11.3 CHANGE 11（P1）沙箱隔离与可信验证边界
+
+1. **三方隔离**：Builder（生成候选）/ TestRunner（执行测试）/ Judge（裁决）使用**相互隔离**的执行上下文与权限。
+2. **工作区绑定**：固定基线 commit + 允许路径清单 + 内容摘要（`candidateDigest`）。
+3. **验证记录不可由 Builder 伪造**：测试输入、实际执行命令、环境约束、退出码、原始日志摘要由 TestRunner 侧生成并持久化；
+   Builder **无写权限**。
+4. **禁止** Builder 修改 Judge 策略、测试入口、权限策略或验证结果存储。
+5. **路径检查覆盖解析后的真实目标**（`realpath`），并防止「检查后替换」：先解析真实路径，再在同一句柄/事务内使用（消除 TOCTOU 窗口）。
+6. **fail-closed 清单**：隔离失败、资源耗尽、超时、恶意补丁、测试结果不确定 ⇒ 一律拒绝（不得进入 Judge PASS）。
+7. `Judge PASS` **仅**表示候选满足**当前验证策略**，不等于补丁安全、生产可发布或可自动合并。
+
+### 11.4 CHANGE 12（P1）状态转移的提交语义
+
+| 状态 | 不变量 | 终态 |
+| --- | --- | --- |
+| `CANCELED_BEFORE_COMMIT` | 有取消证据**且**未跨越提交点 | 是 |
+| `REJECTED_AT_COMMIT` | 提交被权威机制拒绝 | 是 |
+| `COMMITTED` | 存在**可信提交凭证**（凭证摘要已落库） | 否（可转 `SETTLED`） |
+| `COMMIT_OUTCOME_UNKNOWN` | 提交结果不确定；**禁止盲重试** | 否（仅能经对账转出） |
+| `SETTLED` | 结果已持久化收敛 | 是 |
+| `SETTLE_REJECTED_BUT_EFFECT_POSSIBLE` | 收口失败但**不能排除**副作用已发生 | 否（对账 / 人工） |
+| `RECOVERING` | 依据权威事实恢复，**不直接重放**副作用 | 否 |
+
+**合法迁移（摘要）**：`CLAIMED →`（提交前撤销）`CANCELED_BEFORE_COMMIT`；`CLAIMED →`（提交被拒）`REJECTED_AT_COMMIT`；
+`CLAIMED →`（提交成功）`COMMITTED`；`CLAIMED`/`COMMITTED →`（确认丢失）`COMMIT_OUTCOME_UNKNOWN`；
+`COMMITTED → SETTLED`；`COMMITTED`/`COMMIT_OUTCOME_UNKNOWN → SETTLE_REJECTED_BUT_EFFECT_POSSIBLE`；
+任意状态 →（崩溃）`RECOVERING` → 依据权威事实回到上述状态之一（**不得**直接重放副作用）。
+**终态不可逆**：`CANCELED_BEFORE_COMMIT` / `REJECTED_AT_COMMIT` / `SETTLED` 一旦成立不得改写 ——
+尤其**不得**把已 `COMMITTED` 的事实改写成"已取消"。
+**并发恢复**：`RECOVERING` 期间必须以 fencing token 排斥旧 owner；恢复**不得重置**预算计数。
+
+## 12. 可执行验收矩阵（实施阶段必须逐条通过；全部要求真实 PostgreSQL / 真实运行时路径）
+
+| ID | 场景 | 期望 | 证据形态 |
+| --- | --- | --- | --- |
+| A1 | 授权撤销与 DB COMMIT 同时竞争 | 唯一线性化胜者；提交事实与授权顺序一致 | 并发测试 + 顺序证明（锁/CAS 记录） |
+| A2 | 提交成功后进程崩溃、确认丢失 | `COMMIT_OUTCOME_UNKNOWN` → 权威对账；**不重复提交** | 崩溃注入 + 对账日志 + 计数不变 |
+| A3 | Judge PASS 后工作区发生变化 | 摘要不一致 ⇒ `NO_APPLY` | `candidateDigest` 比对记录 |
+| A4 | 身份版本变化后旧任务恢复 | 旧身份**禁止**继续执行并重新分流 | identityVersion 比对 + 重新分流记录 |
+| A5 | 快照过期 / 授权版本变化 | 重新获取可信事实（**不得**简单延长 TTL） | 重新分流记录 |
+| A6 | 崩溃恢复后重试/成本预算 | 计数**不被重置** | 预算持久化前后比对 |
+| A7 | 路径逃逸（符号链接 / 穿越 / hooks / 子模块）与检查后替换 | 拒绝并留证 | realpath 检查 + TOCTOU 用例 |
+| A8 | 沙箱失败 / 超时 / 资源耗尽 / 恶意补丁 / 结果不确定 | fail-closed，无 PASS | 隔离层拒绝记录 |
+| A9 | 跨事务 / 外部副作用缺协调协议 | `BLOCK`（标记 `NOT_AUTHORIZED`） | 分类表 + 拒绝记录 |
+| A10 | 重复 / 并发入队 | 单一 Task（dedupeKey + CAS） | 计数与 CAS 失败记录 |
+
+**共同要求**：每条须给出**可复现命令 + 退出码 + 证据摘要**；**不允许**仅用 mock 证明安全边界；
+安全边界不得只证明独立纯函数，必须覆盖**实际装配路径**。
+
+## 13. 最小安全实施单元划分（供后续单独申请 PHASE 3-A 授权时使用；**本轮全部未实施**）
+
+| 单元 | 覆盖 | 范围（允许） | 非目标 / 禁止 |
+| --- | --- | --- | --- |
+| U1 | P3-01 / P3-02 | 权威适配器与 provenance（只读可信存储；来源证明与生命周期） | 不写业务、不接线执行、不改 Runtime |
+| U2 | P3-04 前置 | 候选记录与 Incident↔Candidate↔Task 关联、去重键、identityVersion 失效规则 | 不改既有队列语义、不新增队列、不触发执行 |
+| U3 | P3-03 | 提交协议与线性化（intent/outcome 登记、对账入口） | 不触碰不可逆 / 外部副作用（恒 HOLD） |
+| U4 | P3-05 | 沙箱三方隔离 + 不可伪造验证记录 + realpath 路径检查 | 不自动合并 / 不落地补丁 / 不改封板 |
+| U5 | P3-06 | 状态语义拆分 + 崩溃收敛 + 预算持久化 + fencing | 不重放副作用、不重置预算 |
+
+每个单元在申请实施时须单独给出：范围、非目标、对应验收矩阵条目（A1–A10）、回滚方案、禁止项；
+**任何实施授权都必须单独送审，不得由设计裁决自动推导**。
+
+## 14. FINAL-R3 未实施声明
+
+本轮为**纯设计收口**：未实现 `FaultTrustedFactsAdapter`、未建立候选消费通道与候选记录、未实施提交协议与对账、未实施沙箱 / Builder / Judge、
+未改动 Runtime / 队列 / Action Guard / Prisma / migration / 封板分支、未开启任何外部副作用。
+`EXTERNAL_WRITE = HOLD`、`REAL_PROVIDER_EXECUTION = NOT_AUTHORIZED`、`AUTO_MERGE = FORBIDDEN`、`AUTO_DEPLOY = FORBIDDEN`、`PRODUCTION_READY = NO`。
+
