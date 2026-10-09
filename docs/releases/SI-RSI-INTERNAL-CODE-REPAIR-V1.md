@@ -3244,3 +3244,57 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.50 MSG-20261009-46 裁决归档 = **PASS — 设计修订通过（U2 设计修订阶段完成）**（`CHANGE 83/84/85 = CLOSED`；`§29.4 = ACCEPTED`；实施仍未授权）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-46] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（146/146，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=3839 / NORM_LINES=146 / FNV=38f5a603`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R20=b396dc99`、`REVIEWED_HEAD=6e8366cf`。
+
+**首次出现「设计阶段 PASS」**：审计方给出 `AUDIT_DECISION=PASS`、`U2_DESIGN_R21_ACCEPTED=YES`、
+`U2_DESIGN_REVISION_COMPLETE=YES`、`NEW_REQUIRED_DESIGN_CHANGES=NONE`，并明确「**R21 设计通过，83–85 全部关闭，停止这一轮设计循环**」。
+**但**同时严格区分：**设计修订通过 = YES**，而 **安全前提已证明 = NO**、**U2 候选写入实施授权 = NO**、**多实例自动化写入授权 = NO**、**生产上线授权 = NO**。
+
+**独立核验**：固定提交 `6e8366cf68da404d8f6a53c8fce5cd09fa3ced75` 一致、`R20 → R21` = **2 commits / 3 files**、
+R21 设计文档 `+195 / −9`、**Git blob `99338215fa094a268cf09749fef89ee56bbac6a7` 一致**、
+**`apps/api` 产品代码 0 个变更文件**；未独立复算 SHA-256、本轮未执行数据库与运行测试。
+审计方明确：**本轮 PASS 仅覆盖 R21 修订内容的设计充分性**，**不代表**目标环境排他证明、跨实例阻断能力或数据库事务测试已经通过。
+
+#### 2.50.0 审计方指出的文档元数据笔误（已按授权修正）
+
+§29 开头的范围口径曾写作 `AUDIT_SCOPE = 914dcda7..<本轮设计提交> = 2 commits / 3 files`（**笔误**）。
+实际：该范围对应**单次 R21 设计提交**（**1 commit / 1 file**）；**全范围 `b396dc99..6e8366cf` 才是 2 commits / 3 files**。
+审计方要求「**后续归档可修正、不必因此重新开启设计审计**」⇒ 本归档提交已修正为
+`AUDIT_SCOPE = b396dc99..6e8366cf = 2 commits / 3 files（含上一轮裁决归档提交 914dcda7 与本轮设计提交）`。
+
+#### 2.50.1 下一阶段外部前置条件清单（`READ_ONLY_EXTERNAL_PREREQUISITE_AND_DB_CAPABILITY_EVIDENCE_PREPARATION_ONLY`）
+
+| 优先级 | 需要提供/取得 | 具体内容 | 当前状态 |
+| --- | --- | --- | --- |
+| **P1** | **数据库端安全能力** | 明确**非生产 PostgreSQL 环境**与**数据库角色权限**；能否建立**栅栏（fence）/串行化/共享阻断**机制；其安全性须通过**事务竞争与故障注入**证明 | `DB_SIDE_FENCING_CAPABILITY = NOT_AVAILABLE` |
+| **P2** | **目标环境证据** | 实例数量、实际写入者、部署清单、**挂载与文件系统语义**、是否存在**绕过门禁**的写入路径 | `TARGET_ENVIRONMENT_EVIDENCE = NOT_VERIFIED` |
+| **P3** | **独立受控实验（须单独授权）** | 在**非生产隔离环境**验证提交竞争、`SIGKILL`、连接中断、恢复阻断；**实验通过 ≠ 生产授权** | 未授权 |
+
+审计方并要求：①**不再**扩展 `xmin`/epoch/`P2`/描述性探针设计；
+②未来实施必须证明**栅栏检查与实际提交之间不存在陈旧持有者可成功写入的窗口**；
+③`CHANGE 83` 关项时给出的技术边界须在实施验收中体现——**数据库栅栏令牌校验必须与受保护写入及栅栏失效操作具备数据库层面的正确串行化关系**（仅在事务开始时检查一次、随后允许旧事务提交**不足以**实现所述不变量）；
+④`CHANGE 85` 的解释边界须保留——**`dbCommitOutcome=COMMITTED` 只有在提交成功事实确实可确认时才能使用**，若只能确认候选记录存在而不能证明由本次执行提交，**必须保持 `UNKNOWN`**。
+
+```text
+MSG-20261009-46_FINAL_VERDICT = PASS（设计修订通过；设计循环结束）
+MSG-20261009-46_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 146/146；FNV1A 38f5a603）
+CHANGE_83=CLOSED · CHANGE_84=CLOSED · CHANGE_85=CLOSED · R21_CONVERGENCE=ACCEPTED
+U2_DESIGN_R21_ACCEPTED=YES · U2_DESIGN_REVISION_COMPLETE=YES · NEW_REQUIRED_DESIGN_CHANGES=NONE
+U1_REOPEN=NO · PRODUCT_CODE_CHANGES=0 · DESIGN_BLOB_SHA_VERIFIED=YES · DOCUMENT_SHA256_VERIFIED=NO
+EXCLUSION_PROOF_STATUS=NOT_PROVEN · SAFETY_PREMISE=NOT_PROVEN · EXCLUSIVE_WINDOW_UNAVAILABLE=YES
+CROSS_INSTANCE_RECOVERY_BLOCKING=NOT_VERIFIED · MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED
+U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED
+NEXT_AUTHORIZED = READ_ONLY_EXTERNAL_PREREQUISITE_AND_DB_CAPABILITY_EVIDENCE_PREPARATION_ONLY
+NEXT_REVIEW = U2_MINIMAL_IMPLEMENTATION_PREREQUISITE_REVIEW
+SCHEMA_MIGRATION=HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD · AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN · PRODUCTION_READY=NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```

@@ -180841,3 +180841,322 @@ NEXT_AUDIT=MSG-20261009-46
 
 本次没有修改、提交或推送任何仓库文件。
 ```
+
+### [MSG-20261009-46] U2 设计 R21 = **PASS — 设计修订通过**（`CHANGE 83/84/85 = CLOSED`、`§29.4 收敛 = ACCEPTED`；`U2_DESIGN_R21_ACCEPTED=YES`、`U2_DESIGN_REVISION_COMPLETE=YES`、`NEW_REQUIRED_DESIGN_CHANGES=NONE`；**设计循环结束**）—— **独立核验**：固定提交 `6e8366cf68da404d8f6a53c8fce5cd09fa3ced75` 一致、`R20→R21` = **2 commits / 3 files**、R21 设计文档 `+195 / −9`、**Git blob `99338215fa094a268cf09749fef89ee56bbac6a7` 一致**、**`apps/api` 0 个变更文件**；未独立复算 SHA-256、未执行数据库与运行测试；审计方明确「本轮 PASS **仅覆盖 R21 修订内容的设计充分性**，**不代表**目标环境排他证明、跨实例阻断能力或数据库事务测试已经通过」；**三项关闭理由**：`CHANGE 83 = CLOSED`（§29.1 已解决「不能将应用进程持有 flock 等同于数据库提交期间的可靠排他保证」；F1–F6 六种失败场景均已纳入、PROVEN/NOT_PROVEN 判定边界明确、不能证明时自动进入禁止写入、U2-52a/b/c 已定义未来负面验收、且明确禁止用静态规则/计数器/提交后探针替代排他证明；**并给出一项未来实施必须遵守的技术边界**：数据库栅栏令牌校验必须与受保护写入及栅栏失效操作具备**数据库层面的正确串行化关系**——仅在事务开始时检查一次令牌、随后允许旧事务提交**不足以**实现声明的不变量）、`CHANGE 84 = CLOSED`（正确区分「共享 flock 锁 ≠ 所有实例受同一持久化阻断权威约束」；四项前置条件、`R84-INVARIANT`、`R84-UNBLOCK`、分支 B 的人工恢复边界均符合要求；尤其不再假设日志/工单/重新取得文件锁能自动恢复全局安全状态；**`MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED` 是正确且必要的当前结论**）、`CHANGE 85 = CLOSED`（A1–A3 已处理验收语义；**须保留解释边界**：`dbCommitOutcome=COMMITTED` **只有**在提交成功事实**确实可确认**时才能使用，若只能确认候选记录存在而不能证明由本次执行提交，**必须保持执行归因为 `UNKNOWN`**，**不得**把候选存在性升级为本次提交证明）；**§29.4 = ACCEPTED**：Q1「提交期间能否证明排他安全？」= **NOT_PROVEN** ⇒ 禁止候选写入；Q2「归因未知时能否强制停止全部参与实例？」= **NOT_IMPLEMENTED** ⇒ 禁止多实例自动化写入；**审计方同时指出一处**不影响安全裁决的**文档元数据笔误**：§29 开头把 `914dcda7..<本轮设计提交>` 记为 2 commits / 3 files，实际该范围对应单次 R21 设计提交（1 commit / 1 file），**全范围 `b396dc99..6e8366cf` 才是 2 commits / 3 files**，建议**下次归档时纠正、不单独开启新一轮审计**（本轮已按此授权修正）；**下一阶段要求（外部前置条件）**：①**第一优先级 = 数据库端安全能力**（明确非生产 PostgreSQL 环境、数据库角色权限，以及能否建立栅栏/串行化/共享阻断机制；其安全性须通过**事务竞争与故障注入**证明）②**第二优先级 = 目标环境证据**（实例数量、实际写入者、部署清单、挂载与文件系统语义、是否存在绕过门禁的写入路径）③**第三优先级 = 独立受控实验**（须单独授权，使用非生产隔离环境验证提交竞争/SIGKILL/连接中断/恢复阻断；**实验通过不代表生产授权**）；审计方并要求：**不再**扩展 `xmin`/epoch/`P2`/描述性安全探针设计；后续实施必须证明「栅栏检查与实际提交之间**不存在**陈旧持有者可成功写入的窗口」；**授权结论**：`NEXT_AUTHORIZED=READ_ONLY_EXTERNAL_PREREQUISITE_AND_DB_CAPABILITY_EVIDENCE_PREPARATION_ONLY`、`NEXT_REVIEW=U2_MINIMAL_IMPLEMENTATION_PREREQUISITE_REVIEW`、`EXCLUSION_PROOF_STATUS=NOT_PROVEN`、`SAFETY_PREMISE=NOT_PROVEN`、`EXCLUSIVE_WINDOW_UNAVAILABLE=YES`、`CROSS_INSTANCE_RECOVERY_BLOCKING=NOT_VERIFIED`、`MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`U1_REOPEN=NO`、`SCHEMA_MIGRATION=HOLD`、`RUNTIME_WIRING/MODEL_CALL/PROVIDER_CALL=FORBIDDEN`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`；审计方总结：「R21 已充分回应 CHANGE 83–85，允许关闭本轮设计修订；但当前缺少数据库端排他证明与跨实例强制阻断能力，因此**不授权任何 U2 候选写入实施**；下一步应**准备并验证外部前置条件**，而不是持续增加设计描述」；reviewed ref `6e8366cf68da404d8f6a53c8fce5cd09fa3ced75`
+
+```text
+MSG-20261009-46｜CrossClaim AI · U2 设计 R21 独立审计裁决
+PASS — 设计修订通过
+
+审计对象： PHASE 3-A · U2 设计 R21
+固定 HEAD： 6e8366cf68da404d8f6a53c8fce5cd09fa3ced75
+审计方式： GitHub 连接器只读独立核验
+审计范围： CHANGE 83–85 + §29.4 收敛
+
+一、最终裁决
+
+本轮 R21 满足 CHANGE 83–85 的设计修订要求，三项均可关闭。§29.4 满足上一轮要求的收敛方向，不需要继续围绕 xmin、epoch、P2 或提交后探针反复扩展设计。
+
+但必须严格区分：
+
+设计修订通过：YES
+
+安全前提已经证明：NO
+
+U2 候选写入实施授权：NO
+
+多实例自动化写入授权：NO
+
+生产上线授权：NO
+
+CHANGE 83 · P0
+
+CLOSED
+
+失败模型、排他证明判据及当前 NOT_PROVEN 结论满足本轮设计要求。
+
+CHANGE 84 · P0
+
+CLOSED
+
+跨实例恢复阻断边界已明确，未实现时显式禁止多实例自动化写入。
+
+CHANGE 85 · P1
+
+CLOSED
+
+数据库提交事实、安全验收、排他窗口和下游自动化状态已分离。
+
+§29.4 · 设计收敛
+
+ACCEPTED
+
+允许结束本轮描述性设计迭代，转入外部能力与目标环境证据准备。
+
+二、GitHub 独立核验结果
+
+已从 GitHub 直接读取本轮固定提交、提交差异及 R21 设计文档，而非仅依赖送审方陈述。
+
+核验项目
+
+
+
+独立结果
+
+
+
+
+固定提交
+
+
+
+6e8366cf68da404d8f6a53c8fce5cd09fa3ced75 一致
+
+
+
+
+R20 → R21
+
+
+
+2 commits
+
+
+
+
+变更文件
+
+
+
+3 files
+
+
+
+
+R21 设计文档
+
+
+
++195 / −9
+
+
+
+
+Git blob SHA
+
+
+
+99338215fa094a268cf09749fef89ee56bbac6a7 一致
+
+
+
+
+apps/api 产品代码
+
+
+
+0 个变更文件
+
+
+
+
+SHA-256
+
+
+
+未独立复算
+
+
+
+
+数据库及运行测试
+
+
+
+本轮未执行
+
+审计依据：
+R21 固定提交
+ ·
+R21 设计文档
+
+独立确认：本轮确实是设计文档变更，而非 U2 写入逻辑实施。
+
+因此，本轮 PASS 仅覆盖 R21 修订内容的设计充分性，不代表目标环境排他证明、跨实例阻断能力或者数据库事务测试已经通过。
+
+三、逐项审计意见
+CHANGE 83 — PASS / CLOSED
+
+§29.1 已经解决上一轮的核心问题：不能将应用进程持有 flock 等同于数据库提交期间的可靠排他保证。
+
+独立检查确认：
+
+F1–F6 六种失败场景均已纳入。
+
+PROVEN 与 NOT_PROVEN 的判定边界明确。
+
+当前不能证明安全性时，自动进入禁止写入状态。
+
+U2-52a/b/c 已定义未来负面验收。
+
+明确禁止使用静态规则、计数器及提交后探针替代排他证明。
+
+有一项实施时必须遵守的技术边界：数据库栅栏令牌校验必须与受保护的写入及栅栏失效操作具备数据库层面的正确串行化关系。 仅在事务开始时检查一次令牌、随后允许旧事务提交，不足以实现声明的不变量。
+
+这属于未来 P1 实施验收条件，本轮无需重新打开 CHANGE 83。
+
+CHANGE 84 — PASS / CLOSED
+
+§29.2 已经正确区分：
+
+共享 flock 锁 ≠ 所有实例受到同一个持久化阻断权威约束。
+
+四项前置条件、R84-INVARIANT、R84-UNBLOCK 和分支 B 的人工恢复边界均符合要求。
+
+尤其重要的是，本轮不再假设日志、工单或重新取得文件锁能够自动恢复全局安全状态。
+
+MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED 是正确且必要的当前结论。
+
+CHANGE 85 — PASS / CLOSED
+
+A1–A3 已处理上一轮验收语义问题。
+
+需要特别保留一个解释边界：
+
+dbCommitOutcome=COMMITTED 只有在提交成功事实确实可确认时才能使用。如果只能确认候选记录已存在，却不能证明由本次执行提交，应保持执行归因为 UNKNOWN，不能将候选存在性升级为本次提交证明。
+
+本轮文字已基本体现这一原则，不需要继续扩展设计。
+
+§29.4 — ACCEPTED
+
+两个关键问题均给出了明确结论：
+
+问题
+
+
+
+当前结论
+
+
+
+运行后果
+
+
+
+
+Q1 提交期间能否证明排他安全？
+
+
+
+NOT_PROVEN
+
+
+
+禁止候选写入
+
+
+
+
+Q2 归因未知时能否强制停止全部参与实例？
+
+
+
+NOT_IMPLEMENTED
+
+
+
+禁止多实例自动化写入
+
+本轮设计可以停止修订。
+
+另外发现一处不影响安全裁决的文档元数据笔误：§29 开头将 914dcda7..<本轮设计提交> 记作 2 commits / 3 files，但该范围实际对应单次 R21 设计提交，即 1 commit / 1 file。全范围 b396dc99..6e8366cf 才是 2 commits / 3 files。建议下次归档时纠正，不单独开启新一轮审计。
+
+四、下一阶段应取得什么条件？
+
+建议优先争取数据库端强制机制 P1，而不是继续完善 P2 环境级证明。
+
+优先顺序如下：
+
+第一优先级：数据库端安全能力
+
+明确非生产 PostgreSQL 环境、数据库角色权限，以及能否建立栅栏、串行化和共享阻断机制。其安全性必须通过事务竞争与故障注入证明。
+
+第二优先级：目标环境证据
+
+确认实例数量、实际写入者、部署清单、挂载和文件系统语义，以及是否存在绕过门禁的写入路径。
+
+第三优先级：独立受控实验
+
+在取得单独授权后，使用非生产隔离环境验证提交竞争、SIGKILL、连接中断及恢复阻断。实验通过不代表生产授权。
+
+这些步骤是未来申请实施许可的准备，不属于本轮已授予的执行权限。
+
+五、可直接转交 Code 的正式裁决
+写作
+MSG-20261009-46｜独立审计最终裁决
+
+AUDIT_DECISION=PASS
+
+AUDIT_ID=MSG-20261009-46
+REVIEWED_HEAD=6e8366cf68da404d8f6a53c8fce5cd09fa3ced75
+AUDIT_MODE=GITHUB_READ_ONLY
+AUDIT_SCOPE=b396dc99..6e8366cf
+AUDIT_SCOPE_COMMITS=2
+AUDIT_SCOPE_FILES=3
+DESIGN_BLOB_SHA_VERIFIED=YES
+DOCUMENT_SHA256_VERIFIED=NO
+PRODUCT_CODE_CHANGES=0
+
+CHANGE_83=CLOSED
+CHANGE_84=CLOSED
+CHANGE_85=CLOSED
+R21_CONVERGENCE=ACCEPTED
+U2_DESIGN_R21_ACCEPTED=YES
+U2_DESIGN_REVISION_COMPLETE=YES
+NEW_REQUIRED_DESIGN_CHANGES=NONE
+U1_REOPEN=NO
+
+EXCLUSION_PROOF_STATUS=NOT_PROVEN
+SAFETY_PREMISE=NOT_PROVEN
+EXCLUSIVE_WINDOW_UNAVAILABLE=YES
+CROSS_INSTANCE_RECOVERY_BLOCKING=NOT_VERIFIED
+MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED
+U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED
+
+NEXT_AUTHORIZED=READ_ONLY_EXTERNAL_PREREQUISITE_AND_DB_CAPABILITY_EVIDENCE_PREPARATION_ONLY
+
+NEXT_REVIEW=U2_MINIMAL_IMPLEMENTATION_PREREQUISITE_REVIEW
+
+下一阶段要求
+
+优先提交数据库端强制机制的非生产实施条件和权限证据。
+
+提交目标部署环境、数据库写入主体与跨实例阻断载体证据。
+
+如申请单实例受控实验，必须单独提交隔离范围、允许操作和回滚方案。
+
+不再继续扩展 xmin、epoch、P2 或描述性安全探针设计。
+
+后续实施必须证明栅栏检查与实际提交之间不存在陈旧持有者可成功写入的窗口。
+
+后续归档可修正 §29 中的提交范围笔误，不必因此重新开启设计审计。
+
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+裁决总结
+
+R21 已充分回应 CHANGE 83–85，允许关闭本轮设计修订。
+
+但当前缺少数据库端排他证明和跨实例强制阻断能力，因此不授权任何 U2 候选写入实施。
+
+下一步应准备并验证外部前置条件，而不是持续增加设计描述。
+
+最终结论：R21 设计通过，83–85 全部关闭，停止这一轮设计循环；安全实施尚未授权。 这次审计的价值在于明确了真正的阻塞条件，而不是用更多文档掩盖缺失的运行时保证。
+```

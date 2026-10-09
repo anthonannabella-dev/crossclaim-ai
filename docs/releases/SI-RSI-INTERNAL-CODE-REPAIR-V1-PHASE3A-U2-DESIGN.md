@@ -2951,7 +2951,7 @@ R20_NOT_VERIFIED = SAFETY_PREMISE_PREVENTIVE_IMPLEMENTATION（①~④ 未实现/
 > `U2_DESIGN_R20_ACCEPTED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`U1_REOPEN=NO` **不变**。
 
 ```text
-AUDIT_SCOPE   = 914dcda7..<本轮设计提交> = 2 commits / 3 files（含上一轮裁决归档提交）
+AUDIT_SCOPE   = b396dc99..6e8366cf = 2 commits / 3 files（含上一轮裁决归档提交 914dcda7 与本轮设计提交）
 SINGLE_COMMIT = 914dcda7..<本轮设计提交> = 1 commit / 1 file
 PRODUCT_CODE  = 0
 ```
