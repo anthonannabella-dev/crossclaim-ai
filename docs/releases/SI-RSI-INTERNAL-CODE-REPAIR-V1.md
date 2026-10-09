@@ -77,12 +77,46 @@
 | 定向回归 | classification + incident-db + rsi-schema-contract + si-rsi-phase1-authorization + si-rsi-phase1-durable-queue | **5 文件 / 58 tests 全绿** |
 | 类型检查 | `tsc --noEmit -p apps/api/tsconfig.json` | **0 error** |
 
+### 1.4 独立审计结果（MSG-20261009-07 = PASS WITH REVISE）
+
+**裁决原文**：`AI-ARCHITECT-INBOX.md` → `### [MSG-20261009-07]`（逐字归档，FNV1A `69f7b353`，`FULL_COPY_OK`：143 行 / 缺失 0 / 多出 0）。
+会话：`https://chatgpt.com/c/6ac8319c-7ef0-83ec-b863-4ca9fc23d96e`（右侧新会话）；投递三项校验全过（输入框清空 / 消息作为新用户轮出现 / 进入生成态）。
+
+| 审计项 | 裁决 |
+| --- | --- |
+| PHASE0_CAPABILITY_AUDIT | **PASS** |
+| PHASE1_DETERMINISTIC_CLASSIFICATION | **PASS** |
+| PHASE1_MODEL_AUTHORITY_BOUNDARY | **PASS** |
+| PHASE1_SANITIZATION | **REVISE** |
+| PHASE1_INCIDENT_CONTAINER_ISOLATION | **REVISE** |
+| PHASE1_VERIFICATION_EVIDENCE | **REVISE** |
+| SCOPE_HONESTY | **PASS** |
+
+结论：`PHASE0_CLOSED = YES`、`PHASE1_FUNCTIONAL_BASELINE = ACCEPTED`、`PHASE1_CLOSED = NO`、
+`PHASE2_IMPLEMENTATION_AUTHORIZED = NO`、`AUTONOMOUS_CODE_WRITE_ENABLED = NO`。
+
+**下一单元 = PHASE1-FINAL-R2**（审计指定，本轮只做这四项，不提前实施 PHASE 2–7、不新增修复代理）：
+
+| CHANGE | 级别 | 要求（审计原文要点） |
+| --- | --- | --- |
+| 1 | P0 | Incident 首次并发创建 / 唯一冲突 / 计数累加 / 终态保护的数据库原子性；含 **≥20 路并发**创建与混合创建-更新；证明不同 kind 冲突恒定拒绝、CLOSED/REJECTED 不被竞争请求复活 |
+| 2 | P0 | 脱敏对抗测试（URL query / HTTP header / 嵌套 JSON / Bearer·JWT·API key 变体 / 多行堆栈与 cause 链 / DB 错误文本 / 编码转义）；结构化字段采用**白名单**持久化 + 文本长度上限；无法可靠识别的自由文本宁可丢弃 |
+| 3 | P0 | 真实 PostgreSQL 生命周期与租户边界（OPEN/DIAGNOSED/CLOSED/REJECTED 重复接纳行为；跨组织不得合并；同组织不同 Provider 的身份规则；`INTERNAL_FAULT` 不可被 `CUSTOMER_GOAL_QUEUE` 执行器认领；**哈希化组织引用 ≠ 租户授权**） |
+| 4 | P1 | 分类结果的安全重试语义：**故障可重试 ≠ 业务动作可重放**；外部写结果不明先对账不重放；403 不自动等同 TOKEN_EXPIRED；安全/权限信号优先升级；UNKNOWN_ERROR 默认禁自动恢复 |
+
+**审计登记的新增风险**：并发首次创建计数不一致（P0，CHANGE 1）／非结构化错误文本泄漏凭据（P0，CHANGE 2）／
+Incident 跨租户访问或误合并（P0，CHANGE 3）／可重试故障被误认为可重放业务动作（P0，CHANGE 4）／
+全量回归未运行（P1）／真实模型·Provider·Linux 未验证（HOLD）。
+
+> 归档限制说明：`tools/verification/archive-verdict.mjs` 校验的是**归档文本 = 抽取源文件**（机械一致），
+> 抽取本身的正确性由 DOM 容器选择与 FNV1A 指纹共同固定（本次为 `69f7b353`）。
+
 ## 2. 阶段计划与当前状态
 
 | PHASE | 内容 | 状态 |
 | --- | --- | --- |
 | 0 | 现有能力审计（本文件 §1） | **本轮完成** |
-| 1 | 内部故障诊断中心（API_TIMEOUT / RATE_LIMIT / TOKEN_EXPIRED / SCHEMA_CHANGED / PARSER_FAILURE / … / UNKNOWN_ERROR 的确定性分类 → Incident） | **本轮完成（PASS，见 §1.3）** |
+| 1 | 内部故障诊断中心（API_TIMEOUT / RATE_LIMIT / TOKEN_EXPIRED / SCHEMA_CHANGED / PARSER_FAILURE / … / UNKNOWN_ERROR 的确定性分类 → Incident） | **PASS WITH REVISE**（功能基线已接受；收口 4 项 CHANGE 见 §1.4） |
 | 2 | 自动恢复 vs 代码修复分流（A 可恢复业务故障 → 既有 ONE SI Runtime；B 可复现 Bug → `CODE_REPAIR_CANDIDATE`；C 需外部权限 → BLOCK / HUMAN_REVIEW_REQUIRED） | NOT_STARTED |
 | 3 | 内置 AI Code Repair Agent（复用 Model Gateway；隔离工作区；最小 Patch；受限命令白名单；成本/超时/文件范围限制；Prompt Injection 防护） | NOT_STARTED |
 | 4 | 独立 Judge 与自动验证（Builder ≠ Judge；真实测试命令 + 退出码 + 输出证据；REVISE 有界重试） | NOT_STARTED |
@@ -114,7 +148,11 @@ AUTO_PRODUCTION_CODE_MODIFICATION = FORBIDDEN
 AUTO_PRODUCTION_DEPLOYMENT = FORBIDDEN
 FULL_REGRESSION = 本单元定向回归 5 文件 / 58 tests 全绿（真实 PG 隔离库）；全量回归待 PHASE 7
 NEW_RELEASE_CANDIDATE = NOT_STARTED
-INDEPENDENT_AUDIT = PENDING（PHASE 0 / PHASE 1 送审中）
+INDEPENDENT_AUDIT = MSG-20261009-07 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A 69f7b353）
+PHASE0_CLOSED = YES
+PHASE1_CLOSED = NO（待 PHASE1-FINAL-R2：CHANGE 1–4 后复审）
+PHASE2_IMPLEMENTATION_AUTHORIZED = NO
+NEXT_UNIT = PHASE1-FINAL-R2（CHANGE 1 P0 → CHANGE 2 P0 → CHANGE 3 P0 → CHANGE 4 P1 → 复审）
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```

@@ -168259,3 +168259,379 @@ MSG-20261009-06 · HEAD 73538175
 
 本次裁决不修改任何 Git 分支、仓库文件或 tracker。
 ```
+
+### [MSG-20261009-07] PHASE 0 + PHASE 1 独立审计裁决 = PASS WITH REVISE（4 PASS / 3 REVISE / 0 FAIL；PHASE0_CLOSED=YES、PHASE1_CLOSED=NO）reviewed ref 6a1bf54e
+
+```text
+MSG-20261009-07 · CrossClaim SI/RSI 独立审计裁决
+
+INTERNAL AUTONOMOUS CODE REPAIR V1 · PHASE 0 + PHASE 1
+
+REVIEWED_HEAD: 6a1bf54e
+BASE_HEAD: 7c8bdc77
+BRANCH: feat/si-rsi-internal-code-repair-v1
+审计方式： 依据 CODEX 提交的实现说明、测试结果及边界声明进行独立证据审查。本轮未直接读取源码、运行测试或访问外部系统。
+
+FINAL VERDICT
+
+PASS WITH REVISE
+
+PHASE 0 能力盘点与 PHASE 1 诊断中心的设计方向可以接受；进入 PHASE 2 前必须补齐下述 P0 修订与验证证据。
+
+本裁决认可已报告的实现及定向测试结果，但不将 CODEX 自报的 PASS 等同于独立复现。尤其是并发去重、敏感信息脱敏与 Incident 生命周期，需要进一步验证实现细节。
+
+一、七项独立裁决
+
+审计项
+
+	
+
+裁决
+
+	
+
+理由
+
+
+
+
+1. PHASE0_CAPABILITY_AUDIT
+
+	
+
+PASS
+
+	
+
+14 类逐项盘点，明确区分既有基础设施与尚不存在的修复代理
+
+
+
+
+2. PHASE1_DETERMINISTIC_CLASSIFICATION
+
+	
+
+PASS
+
+	
+
+确定性规则、优先级、不确定回退及自动重试白名单设计合理；29 项测试报告通过
+
+
+
+
+3. PHASE1_MODEL_AUTHORITY_BOUNDARY
+
+	
+
+PASS
+
+	
+
+模型提示无决策权限，凭据操作保留 OWNER 审批边界
+
+
+
+
+4. PHASE1_SANITIZATION
+
+	
+
+REVISE
+
+	
+
+已有脱敏设计和测试，但缺少编码绕过、结构化字段和异常文本等对抗性覆盖
+
+
+
+
+5. PHASE1_INCIDENT_CONTAINER_ISOLATION
+
+	
+
+REVISE
+
+	
+
+客户任务隔离测试通过；但 Incident 创建并发原子性和完整生命周期隔离证据不足
+
+
+
+
+6. PHASE1_VERIFICATION_EVIDENCE
+
+	
+
+REVISE
+
+	
+
+58 项定向测试通过，但缺少关键故障注入及全量回归
+
+
+
+
+7. SCOPE_HONESTY
+
+	
+
+PASS
+
+	
+
+未验证项目、生产边界和 PHASE 2–7 未实施情况均明确声明
+
+结果：4 PASS / 3 REVISE / 0 FAIL。
+
+二、必须执行的修订
+CHANGE 1 — P0：Incident 并发创建与去重原子性
+
+已有的 occurrenceCount 原子 UPDATE 是正确方向，但必须证明不存在以下竞争条件：
+
+两个并发请求同时观察到 Incident 不存在，分别尝试 INSERT，导致唯一约束冲突、计数丢失或不一致的错误返回。
+
+要求：
+
+检查 dedupeKey 对应的数据库唯一性约束。
+
+使用数据库级原子 upsert，或具有明确唯一冲突重试与重新读取机制的事务。
+
+证明不同 kind 发生 dedupeKey 冲突时恒定拒绝。
+
+证明 CLOSED/REJECTED 不会被竞争请求复活。
+
+进行至少 20 路并发创建及混合创建/更新测试。
+
+验收： 同一故障只保留一个 Incident；计数与成功接纳次数一致；无重复记录、无状态复活、无越权写入。
+
+CHANGE 2 — P0：脱敏边界补强
+
+新增以下对抗测试：
+
+URL query、HTTP header、JSON 嵌套对象内的密钥。
+
+Bearer、JWT、API key 的大小写与格式变体。
+
+多行堆栈、异常 cause 链及数据库错误文本。
+
+Windows/Linux 路径、邮箱、长数字及包含敏感内容的 Provider 错误。
+
+已编码或转义的敏感字段，包括 URL 编码和常见转义形式。
+
+除正则脱敏外，优先对结构化输入采用字段白名单，并限制可持久化文本长度。
+
+确保敏感原文不会进入 sourceRefs、模型提示、Incident metadata 或可读取日志。
+
+验收： 持久化后的 Incident 及其相关诊断输出均不包含测试注入的密钥原文。对于无法可靠识别的自由文本，应选择丢弃，而不是推测其安全。
+
+CHANGE 3 — P0：Incident 生命周期和租户边界
+
+补充真实 PostgreSQL 验证：
+
+同一个 dedupeKey 处于 OPEN、DIAGNOSED、CLOSED、REJECTED 时的重复接纳行为。
+
+不同组织的同类错误不能跨租户合并或互相读取。
+
+同组织不同 Provider 的故障是否应合并，必须以明确的身份规则决定。
+
+INTERNAL_FAULT 不得被 CUSTOMER_GOAL_QUEUE 执行器认领。
+
+修复平面的 Incident 不得仅因存在同名 dedupeKey、sourceRef 或模型建议而获得业务操作权限。
+
+特别强调：哈希化的组织引用不等同于租户授权。 持久化操作必须继续由可信服务端租户上下文约束。
+
+CHANGE 4 — P1：分类优先级与自动重试保护
+
+当前允许 API_TIMEOUT、API_RATE_LIMIT、DATABASE_TRANSACTION_ERROR 进入 AUTO_RECOVER，但必须区分：
+
+故障可重试，不等于发生故障的业务动作可安全重放。
+
+例如外部提交已经成功，但响应超时，不能仅因分类为 API_TIMEOUT 就重新执行外部写操作。
+
+要求为分类结果显式提供后续分流所需的安全语义：
+
+只读或具有可信幂等保证的操作，方可进入自动重试候选。
+
+外部写结果不明时，先对账，不直接重放。
+
+403 不自动等同 TOKEN_EXPIRED。
+
+安全或权限相关信号始终优先升级，不被普通超时规则覆盖。
+
+对 UNKNOWN_ERROR 默认禁止自动恢复。
+
+本阶段不要求实现 PHASE 2 的重试执行器，只要求分类结果不会错误授予执行权限。
+
+三、剩余风险
+
+风险
+
+	
+
+严重度
+
+	
+
+控制要求
+
+
+
+
+并发首次创建导致计数不一致
+
+	
+
+P0
+
+	
+
+CHANGE 1
+
+
+
+
+非结构化错误内容泄漏凭据
+
+	
+
+P0
+
+	
+
+CHANGE 2
+
+
+
+
+Incident 跨租户访问或误合并
+
+	
+
+P0
+
+	
+
+CHANGE 3
+
+
+
+
+可重试故障被误认为可重放业务动作
+
+	
+
+P0
+
+	
+
+CHANGE 4
+
+
+
+
+全量回归未运行
+
+	
+
+P1
+
+	
+
+后续集成门禁补齐
+
+
+
+
+真实模型、Provider、Linux 未验证
+
+	
+
+HOLD
+
+	
+
+保持生产外部能力关闭
+
+
+
+
+自动修复代理尚不存在
+
+	
+
+预期状态
+
+	
+
+PHASE 2–7 后续实施
+
+四、阶段放行决定
+纯文本
+MSG-20261009-07
+
+REVIEWED_HEAD = 6a1bf54e
+
+PHASE0_CAPABILITY_AUDIT          = PASS
+PHASE1_DETERMINISTIC_CLASSIFICATION = PASS
+PHASE1_MODEL_AUTHORITY_BOUNDARY  = PASS
+PHASE1_SANITIZATION              = REVISE
+PHASE1_INCIDENT_CONTAINER_ISOLATION = REVISE
+PHASE1_VERIFICATION_EVIDENCE     = REVISE
+SCOPE_HONESTY                    = PASS
+
+FINAL_VERDICT                    = PASS_WITH_REVISE
+
+PHASE0_CLOSED                    = YES
+PHASE1_FUNCTIONAL_BASELINE       = ACCEPTED
+PHASE1_CLOSED                    = NO
+PHASE2_IMPLEMENTATION_AUTHORIZED = NO
+
+INTERNAL_CODE_REPAIR_AGENT       = NOT_IMPLEMENTED
+AUTONOMOUS_CODE_WRITE_ENABLED    = NO
+REAL_MODEL_INTEGRATION           = HOLD
+PRODUCTION_READY                 = NO
+五、给 CODEX 的下一步执行指令
+写作
+
+MSG-20261009-07 · PHASE 1 修订执行指令
+
+裁决：PASS WITH REVISE。
+
+请保持 feat/si-rsi-internal-code-repair-v1 独立分支，不修改已封板 RC/main。
+
+本轮只执行以下四项：
+
+CHANGE 1：修复并验证 Incident 首次并发创建、唯一冲突、计数累加与终态保护的数据库原子性。
+
+CHANGE 2：补齐脱敏对抗测试，并对结构化字段采用白名单持久化策略。
+
+CHANGE 3：补齐跨租户、跨 Provider、Incident 全生命周期及客户任务执行面隔离测试。
+
+CHANGE 4：补齐分类结果中的安全重试约束，严格区分故障可重试与外部动作可重放。
+
+强制要求：
+
+不新增第二套 Runtime、Scheduler、Controller。
+
+不新增代码修复代理，不提前实施 PHASE 2–7。
+
+不调用真实 Provider，不写生产环境，不使用真实凭据。
+
+优先采用已有数据库约束、事务和生命周期状态机。
+
+所有新增验证必须使用真实被测实现，不以 Mock 替代关键数据库路径。
+
+执行定向测试、类型检查以及可运行的全量回归；如未完成必须如实声明。
+
+如修订必须引入 Schema 变更，先暂停并提交独立设计裁决，不得自行迁移。
+
+完成后提交 PHASE1-FINAL-R2，提供新 HEAD、逐项 CHANGE 证据、真实 PostgreSQL 测试结果、测试失败记录及剩余风险，再申请 PHASE 1 CLOSED。
+
+在取得新的独立审计 PASS 前，不进入 PHASE 2。
+
+最终判断： 目前 CrossClaim 的内部故障诊断中心已有可信的基础设计和初步验证，但这不代表系统已经具备自主修改代码、自主验证代码或自主发布修复的能力。
+
+本次允许继续收口 PHASE 1，不批准越过隔离门禁进入自动代码修复。
+```
