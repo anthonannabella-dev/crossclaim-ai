@@ -1,0 +1,58 @@
+[A] FIXED HEAD RAW GIT OUTPUT
+$ git rev-parse 9ee36837  -> 9ee3683725ad694123092e5bafce9a32b75d3fd2
+$ git rev-parse HEAD      -> 18cadd9a054be58acd58be3e74e8dc3430329f46   （HEAD 比 REVIEWED_HEAD 多的只是证据/归档 docs commit）
+$ git show -s 9ee36837 -> 9ee3683725ad694123092e5bafce9a32b75d3fd2 | CrossClaim AI | 2026-10-09 13:14:53 +0900 | test(self-repair): PHASE 3-A U1 FINAL-R7（CHANGE 34–36）—— CHANGE 34：U1-DB9 门闩改为确定性（enteredTransaction 标志、门闩超时即抛错失败、释放前断言 A/B 均已进入、记录 enteredAt/leftAt 并断言活动区间重叠、在同一重叠窗口内断言句柄序号互异）；CHANGE 35：新增 U1-DB12，四个写入探针（DELETE/CREATE TABLE/UPDATE/INSERT）分别在独立只读事务内捕获 PostgreSQL SQLSTATE，均为 25006 且 transaction_read_only=on；CHANGE 36：U1-DB10 以 $transaction 调用计数断言真实事务开启数为 1（嵌套不新开；pg_stat_database 计数仅作补充因刷新延迟），U1-DB11 用显式事务结束信号替代 setTimeout；定向测试 53 + 真实 PG 12 = 65/65 PASS、api tsc 0
+$ git show -s HEAD -> 18cadd9a054be58acd58be3e74e8dc3430329f46 | 2026-10-09 13:25:55 +0900 | docs(self-repair): MSG-20261009-22 裁决逐字归档（PASS WITH REVISE；FULL_COPY_OK 151/151；FNV1A ecca2518；reviewed 9ee36837）+ checkpoint §2.26
+$ git status --porcelain -> ""   （空字符串 = 工作树干净）
+$ git diff 9ee36837 HEAD --name-only -> "AI-ARCHITECT-INBOX.md\ndocs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1.md\ntools/verification/self-repair/phase3a-u1-final-r7-change37-head-binding.json\ntools/verification/self-repair/phase3a-u1-final-r7-negative-control-adapter.ts\ntools/verification/self-repair/phase3a-u1-final-r7-negative-control-vitest-raw.txt\ntools/verification/self-repair/phase3a-u1-final-r7-tsc-raw.txt\ntools/verification/self-repair/phase3a-u1-final-r7-vitest-raw.txt"
+$ git rev-parse 9ee36837:apps/api/src/services/self-repair/trusted-facts-adapter.ts -> 0c302553a056611cd97a1220ed831be3a9b33c7c   （git blob SHA-1）
+
+[B] git show 9ee36837:<path> BLOB SHA-256 vs 工作树字节 SHA-256
+  MATCH=true   apps/api/src/services/self-repair/trusted-facts-adapter.ts  blob=ad47c6b205192b345b7f1cc180e8e466dd91a382d6571727c29dbe9609b1f14b (29986B)  worktree=ad47c6b205192b345b7f1cc180e8e466dd91a382d6571727c29dbe9609b1f14b (29986B)
+  MATCH=true   apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts  blob=a4b6da62172e2658197cf1dbc4dcb92b9023281654d84dc95ca9dd1a558536c2 (22434B)  worktree=a4b6da62172e2658197cf1dbc4dcb92b9023281654d84dc95ca9dd1a558536c2 (22434B)
+  MATCH=true   apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts  blob=e465b3e825bbce68c1da72b38bec56e6ef88970355eea45d774587251db40203 (36903B)  worktree=e465b3e825bbce68c1da72b38bec56e6ef88970355eea45d774587251db40203 (36903B)
+  MATCH=FALSE  tools/verification/self-repair/phase3a-u1-final-r7-vitest-raw.txt  blob=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (0B)  worktree=19a65e6055612cba2f281395d63fc3a23ab62927d47a06f2ac422fd379410a9c (24490B)
+  MATCH=FALSE  tools/verification/self-repair/phase3a-u1-final-r7-tsc-raw.txt  blob=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (0B)  worktree=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (0B)
+  MATCH=FALSE  tools/verification/self-repair/phase3a-u1-final-r7-negative-control-vitest-raw.txt  blob=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (0B)  worktree=8b59894fac917daa17909090a1b13bcbba3c642855accec52d1f8d16353e1d99 (24523B)
+  MATCH=FALSE  tools/verification/self-repair/phase3a-u1-final-r7-negative-control-adapter.ts  blob=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 (0B)  worktree=cbf661e79f6e1691de9aa4841022ba0d5ead275471f98df661a30ed79406a42d (29999B)
+
+[C] $ git diff 23604dcb 9ee36837 -- apps/api/src/services/self-repair/trusted-facts-adapter.ts
+exit_code = 0
+diff_bytes = 0（0 = 两提交间该产品文件字节完全相同）
+
+[D] RUN TRANSCRIPT（DATABASE_URL=127.0.0.1:55432/crossclaim_p3r2_iso；工作树产品/测试文件字节已在 [B] 绑定到 9ee36837）
+[D:vitest] $ (cwd=apps/api) node node_modules\vitest\vitest.mjs run --reporter=verbose src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts
+  exit_code = 0
+  raw_output_bytes = 24489  sha256 = 9d9802f8807e707cb69eab7dd04b211e24f36a26bedd0bebedb071fd26fdb68b  file = change38-vitest-raw.txt
+  | ✓ src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts > PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24） > 接口不接受候选载荷 / 模型输出；唯一原生 SQL 是只读事务语句
+  | Test Files  2 passed (2)
+  | Tests  65 passed (65)
+  | Start at  13:28:41
+  | Duration  1.59s (transform 94ms, setup 23ms, collect 162ms, tests 843ms, environment 0ms, prepare 183ms)
+  | [33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+[D:tsc] $ (cwd=apps/api) node node_modules\typescript\bin\tsc --noEmit -p tsconfig.json
+  exit_code = 0
+  raw_output_bytes = 0  sha256 = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  file = change38-tsc-raw.txt
+
+[D] 负向对照准备：把 apps/api/src/services/self-repair/trusted-facts-adapter.ts 临时替换为 CHANGE 32 之前实现（sha256=cbf661e79f6e1691de9aa4841022ba0d5ead275471f98df661a30ed79406a42d）
+[D:negative-control-vitest] $ (cwd=apps/api) node node_modules\vitest\vitest.mjs run --reporter=verbose src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts
+  exit_code = 1
+  raw_output_bytes = 24524  sha256 = ee82763c1b4210b79e40d7f74f7f2fc94356516de7184baefd6366ef9f60297d  file = change38-negative-control-vitest-raw.txt
+  | 709|     // 已失效事务句柄必须报错（fail-closed）；不得静默改用裸 client 返…
+  | 710|     expect(threw).toBe(true);
+  | |                   ^
+  | 711|     expect(value).toBeNull();
+  | 712|     evidence({
+  | ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+[D:negative-control-tsc] $ (cwd=apps/api) node node_modules\typescript\bin\tsc --noEmit -p tsconfig.json
+  exit_code = 0
+  raw_output_bytes = 0  sha256 = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  file = change38-negative-control-tsc-raw.txt
+
+[D] 负向对照还原：apps/api/src/services/self-repair/trusted-facts-adapter.ts 写回原字节 sha256=ad47c6b205192b345b7f1cc180e8e466dd91a382d6571727c29dbe9609b1f14b  RESTORED=true
+
+[E] 运行后仓库状态
+$ git status --porcelain -> ""   （必须为空）
+  apps/api/src/services/self-repair/trusted-facts-adapter.ts sha256 = ad47c6b205192b345b7f1cc180e8e466dd91a382d6571727c29dbe9609b1f14b  equalsReviewedHeadBlob = true
+
