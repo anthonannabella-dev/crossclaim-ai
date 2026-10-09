@@ -419,6 +419,47 @@ PHASE 3 的实现授权须在 PHASE 2 FINAL-R2 关闭并通过独立设计审计
 PHASE 2 四套件合计 **56/56 PASS**（含真实 PostgreSQL 17 用例）；`apps/api tsc --noEmit` **0 error**。
 审计验收名 `TRUSTED_FACTS_SOURCE_CONTRACT` 已达成。
 
+### 2.6 复审裁决（MSG-20261009-10 = PASS WITH REVISE；PHASE 2 仍未 CLOSED）
+
+**裁决原文**：`AI-ARCHITECT-INBOX.md` → `### [MSG-20261009-10]`（逐字归档，FNV1A `83707404`，`FULL_COPY_OK`：127 行 / 缺失 0 / 多出 0）。
+会话：`https://chatgpt.com/c/6ac843b6-15a8-83ec-ae74-9899af07b3ba`。
+
+| 审计项 | 裁决 |
+| --- | --- |
+| CHANGE1_GATE5_NEGATIVE_REDACTION | **PASS** |
+| CHANGE2_REGISTRATION_CONCURRENCY_AND_IDEMPOTENCY | **PASS** |
+| CHANGE3_TRUSTED_FACTS_SOURCE_CONTRACT | **PASS WITH REVISE**（声明约束成立，但声明本身不能证明数据真实来源） |
+| PHASE2_EVIDENCE_SUFFICIENCY | **REVISE**（当前 HEAD 缺少同版本 GATE-1 全量回归证据） |
+| SCOPE_HONESTY | **PASS** |
+
+机器裁决：`PHASE2_CLOSED = NO`、`PHASE3_DESIGN_AUTHORIZED = YES_READ_ONLY`、`PHASE3_IMPLEMENTATION_AUTHORIZED = NO`、
+`NEXT_AUDIT = MSG-20261009-11`。
+
+**新增 CHANGES（三项，均 P1）**：
+
+| CHANGE | 内容（审计原文要点） | 备注 |
+| --- | --- | --- |
+| 4 当前 HEAD 全量回归 | 在 `58c71cc1` 或**最终候选 HEAD** 上运行完整 API 回归，保存提交 SHA、命令、退出码、测试统计、失败详情与证据文件摘要；**不得以旧 HEAD 结果替代** | 旧 HEAD（3acfb195）结果仅作基线证据 |
+| 5 声明不是运行时授权 | 在可信事实契约中增加**强制条款**：来源声明只约束解析器配置；PHASE 3 必须通过受信服务端适配器取得事实，并在执行前**重新读取与校验**；禁止以声明对象、登记快照或模型输出代替授权 | 无需改变执行架构 |
+| 6 来源伪装负向断言 | 验证客户端输入或模型结果**不能仅凭附加合法 `trustedFactSources` 标签**成为可信事实（可用契约测试或静态边界审计） | 若当前无可验证的运行时来源隔离，须**如实登记为 `PHASE3_IMPLEMENTATION_PREREQUISITE`**，不得虚报 |
+
+**审计意见（照录要点，必须保留的约束）**：
+
+1. `triageDecision = A` **仅代表历史时点的候选判断，不构成未来执行授权**；执行时仍必须重新验证组织身份、授权有效性、操作上下文与当前故障状态。
+2. JSONB「合并不丢字段」的结论**仅覆盖送审证明的数据库写入路径**，不得推定其它并发写入路径具备相同性质。
+3. 本轮 CHANGE 1 的 PASS **仅**代表分流决策与登记返回边界的脱敏合格，**不代表**历史持久化字段已完成清洗，也不代表所有后续日志、导出接口天然安全。
+4. 可信来源的三种类别目前仍是**来源声明**而非**来源真实性证明**；若未来适配器把客户端值包装成合法声明，字符串级检查未必能阻止信任提升 —— 因此本轮**不批准 PHASE 3 自动执行**。
+
+**RISKS（原文）**：可信来源声明被伪装（P1）/ 登记后授权或组织事实变化（P1：执行时重新取事实，不能消费旧快照作为权限）/
+全量回归未覆盖当前 HEAD（P1：CHANGE 4 关闭前不得宣布 PHASE2 CLOSED）/ 历史载荷含敏感信息（P2：保留取证数据但限制后续读取、日志与导出）/
+PHASE 3 自动代码修复的错误传播（P0 未来）。
+
+**下一阶段授权**：`NEXT_AUTHORIZED = PHASE2_FINAL_CLOSURE_FIXES + PHASE3_READ_ONLY_DESIGN`。
+允许：补齐 CHANGE 4–6 与最终证据；设计 PHASE 3 裁决/权限边界/隔离工作区/补丁候选/独立 Judge/回滚与 Kill Switch；
+只读分析现有 ONE SI Runtime、故障登记与可信事实读取接口；形成 PHASE 3 设计审计材料并提交独立复审。
+**暂不授权**：创建或启动实际修复代理；自动修改源码 / 提交 / 合并 / 部署；自动执行 A 路径登记候选；
+自动调用真实 Provider / 支付 / 报关或其他外部写；扩展第二套 Runtime / Scheduler / Controller；修改封板 RC / main。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -509,10 +550,12 @@ GATE1_FULL_REGRESSION = PASS（490/490 文件、4926/4926 用例、exit 0；隔�
 GATE4_PHASE2_LAYER = PASS（重复分流幂等 / 并发扫描 / 状态竞争登记保护；运行时层 fencing 与断连由既有运行时门禁覆盖）
 PHASE2_REVIEW_VERDICT = MSG-20261009-09 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A 1d735f7f）
 PHASE2_SAFE_SCOPE_ACCEPTED = YES
-PHASE2_CLOSED = NO（待 CHANGE 1–3 后 FINAL-R2 复审 MSG-20261009-10）
+PHASE2_CLOSED = NO（待 CHANGE 4–6 后最终关闭复审 MSG-20261009-11）
 PHASE3_DESIGN_AUTHORIZED = YES_READ_ONLY（仅只读方案设计；实现授权 NO）
 PHASE2_FINAL_R2_PROGRESS = CHANGE 1 ✅ + CHANGE 2 ✅ + CHANGE 3 ✅（三项 P1 修订全部完成）
-NEXT_UNIT = 整理并投递 PHASE 2 FINAL-R2 复审（MSG-20261009-10）
+PHASE2_REVIEW_VERDICT = MSG-20261009-10 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A 83707404）
+PHASE2_FINAL_CLOSURE_PROGRESS = CHANGE 4/5/6 = NOT_STARTED
+NEXT_UNIT = PHASE 2 FINAL CLOSURE：CHANGE 4（当前 HEAD 全量回归，不得用旧 HEAD 替代）→ CHANGE 5（声明非授权条款）→ CHANGE 6（来源伪装负向断言 / 如缺失则如实登记 PHASE3_IMPLEMENTATION_PREREQUISITE）→ 送 MSG-20261009-11
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```

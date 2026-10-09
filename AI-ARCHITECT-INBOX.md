@@ -169418,3 +169418,327 @@ NEXT_AUDIT=MSG-20261009-10
 
 现阶段最重要的是保持“诊断 → 分流 → 登记”与“自动修改代码 → 执行 → 部署”的权限隔离。前者已具备较好的安全基础；后者仍必须经过独立授权，不能因本次 PASS WITH REVISE 而提前开放。
 ```
+
+### [MSG-20261009-10] PHASE 2 FINAL-R2 独立复审裁决 = PASS WITH REVISE（CHANGE 1–2 PASS、CHANGE 3 PASS WITH REVISE；EVIDENCE=REVISE；新增 CHANGE 4–6，NEXT_AUDIT=MSG-20261009-11）reviewed ref 58c71cc1
+
+```text
+MSG-20261009-10｜PHASE 2 FINAL-R2 独立复审裁决
+
+审计对象： SI/RSI INTERNAL AUTONOMOUS CODE REPAIR V1
+REVIEWED_HEAD： 58c71cc1
+审计范围： PHASE 2 CHANGE 1–3
+审计方式： 基于送审证据的独立逻辑审查，不访问仓库或外部系统。
+
+FINAL VERDICT
+
+PASS WITH REVISE
+
+PHASE2_CLOSED
+
+NO
+
+PHASE3_DESIGN_AUTHORIZED
+
+YES — READ ONLY
+
+PHASE3_IMPLEMENTATION_AUTHORIZED
+
+NO
+
+一、逐项裁决
+
+审计项目
+
+	
+
+裁决
+
+	
+
+依据
+
+
+
+
+CHANGE1_GATE5_NEGATIVE_REDACTION
+
+	
+
+PASS
+
+	
+
+六字段负向注入、返回值脱敏、数据库登记边界均有对应证据
+
+
+
+
+CHANGE2_REGISTRATION_CONCURRENCY_AND_IDEMPOTENCY
+
+	
+
+PASS
+
+	
+
+DB-S6–S12 覆盖重复、并发、状态变化、快照与 JSONB 合并
+
+
+
+
+CHANGE3_TRUSTED_FACTS_SOURCE_CONTRACT
+
+	
+
+PASS WITH REVISE
+
+	
+
+声明约束成立，但声明本身尚不能证明数据真实来源
+
+
+
+
+PHASE2_EVIDENCE_SUFFICIENCY
+
+	
+
+REVISE
+
+	
+
+HEAD 58c71cc1 缺少同版本 GATE-1 全量回归证据
+
+
+
+
+SCOPE_HONESTY
+
+	
+
+PASS
+
+	
+
+执行能力、生产集成、Provider、支付、部署边界均明确保留
+
+总体判断：三项修订基本符合上一轮要求。PHASE 2 安全范围实现可以接受，但尚不足以签发最终 CLOSED。
+
+以下判断以送审测试结果真实、测试实际覆盖所述运行路径为前提，不等同于直接执行代码后的验证结论。
+
+二、核心审计意见
+CHANGE 1 — PASS
+
+值域封闭校验阻止自由文本进入规范分流字段，符合 GATE-5 的目标。
+
+尤其认可：
+
+非规范值统一返回 PAYLOAD_VALUE_NOT_CANONICAL。
+
+不把恶意文本拼入决策或对账说明。
+
+不修改历史故障原始载荷，避免破坏取证。
+
+对含敏感残留的历史 summary，扫描输出仍执行隔离。
+
+剩余边界： 该 PASS 仅代表分流决策及登记返回边界的脱敏合格，不代表历史持久化字段已完成清洗，也不代表所有后续日志、导出接口天然安全。
+
+CHANGE 2 — PASS
+
+first-write-wins 与数据库条件更新构成合理的并发幂等边界。
+
+DB-S7 四路并发仅一次登记、DB-S8 状态转 CLOSED 后禁止登记，以及 DB-S11 事实变化后保留旧登记，能够支持当前设计。
+
+这里必须保留一个不可放宽的约束：
+
+triageDecision=A 仅代表历史时点的候选判断，不构成未来执行授权。
+
+即使登记显示 A，执行时仍必须重新验证组织身份、授权有效性、操作上下文与当前故障状态。
+
+另外，JSONB 合并不丢字段的结论仅覆盖送审证明的数据库写入路径，不得推定其他并发写入路径也已具备相同性质。
+
+CHANGE 3 — PASS WITH REVISE
+
+契约设计合理，三个可信事实分别绑定到声明的来源类别，并在 resolver 创建期和扫描适配器接线期执行校验。
+
+但存在一项需要明确的信任边界：
+
+TRUSTED_PERSISTED_IDENTITY、SERVER_AUTHORIZATION_STATE 和 TRUSTED_EXECUTION_CONTEXT 目前仍是来源声明，不是来源真实性证明。
+
+如果未来适配器把客户端值包装成合法声明，当前字符串级检查未必能够阻止信任提升。
+
+因此，本轮认可声明契约，但不能据此批准 PHASE 3 自动执行。
+
+三、GATE-1 证据裁决
+
+3acfb195 上的 490/490 文件、4926/4926 测试通过，可以作为重要基线证据。
+
+但是：
+
+3acfb195 ≠ 58c71cc1
+
+新增模块内的修改仍可能影响导出接口、类型依赖、测试发现、扫描行为或现有调用方。
+
+因此：
+
+旧 HEAD 全量回归：接受为基线证据
+
+当前 HEAD 56/56 定向验证：接受
+
+当前 HEAD 全量回归：证据缺失
+
+用旧 HEAD 全量结果替代当前 HEAD 关闭门禁：不接受
+
+本次不要求重复 Linux/systemd、真实 Provider、支付或生产部署测试，因为它们不属于 PHASE 2 安全范围。
+
+四、必须执行的 CHANGES
+CHANGE 4 · P1
+
+补齐当前 HEAD 的 GATE-1 全量回归
+
+在 58c71cc1 或包含本次修订的最终候选 HEAD 上运行完整 API 回归，保存提交 SHA、命令、退出码、测试统计、失败详情和证据文件摘要。不得以旧 HEAD 结果替代。
+
+CHANGE 5 · P1
+
+明确可信来源声明不是运行时授权
+
+在可信事实契约中增加强制性条款：来源声明只约束解析器配置；PHASE 3 必须通过受信任的服务端适配器取得事实，并在执行前重新读取和校验，禁止以声明对象、登记快照或模型输出代替授权。
+
+CHANGE 6 · P1
+
+增加可信来源伪装负向断言
+
+验证客户端输入或模型结果不能仅通过附加合法 trustedFactSources 标签成为可信事实。可以通过契约测试或静态边界审计完成；本轮不要求实施 PHASE 3 执行器。
+
+CHANGE 5–6 可以在不改变执行架构的前提下完成。若当前代码没有实现可验证的运行时来源隔离，应如实记录为 PHASE3_IMPLEMENTATION_PREREQUISITE，不得虚报已经具备。
+
+五、下一阶段授权
+
+NEXT_AUTHORIZED = PHASE2_FINAL_CLOSURE_FIXES + PHASE3_READ_ONLY_DESIGN
+
+允许继续：
+
+补齐 CHANGE 4–6 与最终证据。
+
+设计 PHASE 3 内部代码修复代理的状态机、权限边界、隔离工作区、补丁候选、独立 Judge、回滚及 Kill Switch。
+
+只读分析现有 ONE SI Runtime、故障登记与可信事实读取接口。
+
+形成 PHASE 3 设计审计材料，提交独立复审。
+
+暂不授权：
+
+创建或启动实际代码修复代理。
+
+自动修改源代码、提交 Commit、合并分支或部署。
+
+自动执行 A 路径登记候选。
+
+自动调用真实 Provider、支付、报关或其他外部写操作。
+
+扩展第二套 Runtime、Scheduler 或 Controller。
+
+修改封板 RC/main。
+
+六、剩余风险 RISKS
+
+风险
+
+	
+
+等级
+
+	
+
+控制要求
+
+
+
+
+可信来源声明被伪装
+
+	
+
+P1
+
+	
+
+PHASE 3 使用可信服务端适配器和执行时复核
+
+
+
+
+登记后授权或组织事实变化
+
+	
+
+P1
+
+	
+
+执行时重新取事实，不能消费旧快照作为权限
+
+
+
+
+全量回归未覆盖当前 HEAD
+
+	
+
+P1
+
+	
+
+CHANGE 4 关闭前不得宣布 PHASE2 CLOSED
+
+
+
+
+历史载荷含敏感信息
+
+	
+
+P2
+
+	
+
+保留取证数据，但限制后续读取、日志和导出
+
+
+
+
+PHASE 3 自动代码修复的错误传播
+
+	
+
+P0（未来执行阶段）
+
+	
+
+独立 Judge、隔离执行、权限最小化、回滚和人工门禁
+
+七、最终机器可读裁决
+
+MSG-20261009-10
+
+复制裁决
+
+可直接提交给 Codex 作为下一轮执行依据
+
+FINAL_VERDICT=PASS_WITH_REVISE
+REVIEWED_HEAD=58c71cc1
+PHASE2_CLOSED=NO
+
+CHANGE1=PASS
+CHANGE2=PASS
+CHANGE3=PASS_WITH_REVISE
+EVIDENCE=REVISE
+SCOPE_HONESTY=PASS
+
+PHASE3_DESIGN_AUTHORIZED=YES_READ_ONLY
+PHASE3_IMPLEMENTATION_AUTHORIZED=NO
+
+NEXT_AUDIT=MSG-20261009-11
+
+终审结论： 当前 PHASE 2 的安全分流、并发登记和可信事实契约已具备较好的验证基础，未发现必须推翻现有架构的证据。完成 CHANGE 4–6 并提供对应验证后，可申请最小范围最终关闭复审；不需要重做 PHASE 2，也不需要提前开启 PHASE 3 的执行能力。
+```
