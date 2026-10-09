@@ -175458,3 +175458,273 @@ PRODUCTION_READY=NO
 
 最终结论： CHANGE 13–15 已使 U2 设计显著收敛，但 CHANGE 15 的基线与 HEAD 一致性问题仍是实质性 P0 阻断。建议 Codex 只执行 R6 三项设计修订，再提交 MSG-20261009-31。本轮未对仓库进行任何写入。
 ```
+
+### [MSG-20261009-31] U2 设计 R6 = **REVISE**（CHANGE 16 通过、CHANGE 17 基本成立、CHANGE 18 未收口；新增 CHANGE 19–21）—— 九项：`CHANGE16_BASELINE_ANCHOR_VS_RUNTIME_BASELINE_FIXED=PASS`（**CHANGE 16 正式关闭，无需重做**：auditAnchor=9ee36837 仅溯源、baselineRef 须来自当前运行仓库、默认仅 SELF_CONSISTENT_HEAD、AUTHORIZED_FIXED_BASELINE 需独立审批、不得沿用历史 HEAD/旧候选基线、工作树不干净即拒绝）、`CHANGE17_RUNTIME_STRICT_INPUT_WHITELIST_FIXED=PASS_WITH_REVISE`（白名单成立，但① 拒绝优先级不得同级别并列两个原因码——须定明缺失/null/空串/类型错误的唯一返回，例如 MISSING_REQUEST_REF 优先于 INVALID_FIELD_TYPE；② `INPUT_KEY_MISMATCH` 须改定义为「数据库中现有候选与本次计算的权威身份/关联/摘要不一致」，而非「调用方与 Incident 行不一致」）、`CHANGE18_GIT_DB_TOCTOU_BOUNDARY_FIXED=REVISE`（三次 Git 检查**不等于** COMMIT 时基线不变；运维约定不能等同技术门禁）、`U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE`、`U2_IMPLEMENTATION_BOUNDARY=PASS`、`SCOPE_HONESTY=PASS_WITH_NOTE`、`U2_DESIGN_APPROVED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`；**新增 REQUIRED_CHANGES**：**CHANGE 19（P0）Git 写入窗口排他保证**——限定 U2 为**受控、固定提交的隔离工作树**运行模式（不得自动跟随可变远程分支），须证明受控环境禁止他者在事务期间改动工作树/HEAD/ref、排他保证自首次 Git 校验前持续到 DB 提交完成、无法建立则直接拒绝零写入、三次检查保留但不能替代排他、新增 **U2-20**（检查③之后、COMMIT 之前尝试改 HEAD ⇒ 被阻止或事务拒绝零写入），不得为此新增第二套 Runtime/Scheduler/Controller；**CHANGE 20（P1）拒绝码与校验顺序收口**（缺 incidentId/缺 requestRef/null/类型错/空串各有确定裁决、多违规只返回一个最高优先级原因、非法顶层类型不得抛异常或写入、唯一冲突复用须校验候选键/关联 Task/Incident/baselineRef/builderRef 等权威数据且不匹配不得返回既有 candidateId、保留 §13.1 接口结构）；**CHANGE 21（P1）提交证据与变更声明修订**（更正 R5→R6 记录为 GitHub 返回 2 提交 3 文件；明确 `u1SealRef` 写入何种既有合法证据位置且**不得新增 schema**；定义三次 Git 检查的最小审计记录与不一致回滚证据；文档 SHA-256 继续标 `NOT_INDEPENDENTLY_VERIFIED`；R6 文件 blob SHA `ff775d8bc94149db780d209e880836e7dab1388a` 与文档 SHA-256 分别记录不得混用）；审计方并列出 `POSTGRESQL_INTEGRATION_TEST/VITEST/TSC/LINUX_SYSTEMD/CI/PRODUCTION = NOT_VERIFIED`；NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R7_READ_ONLY_CHANGES_19_TO_21 / NEXT_AUDIT=MSG-20261009-32；reviewed ref a12a9f36
+
+```text
+MSG-20261009-31｜U2 设计 R6 独立审计裁决
+REVISE — 暂不授权实施
+审计对象： CrossClaim AI · SI/RSI INTERNAL CODE REPAIR V1
+仓库： anthonannabella-dev/crossclaim-ai
+设计提交： a12a9f36572cb1134100d58adb6174620457e106
+
+本轮已通过 GitHub 连接器读取 R6 设计文档 §12–§14，并独立查询 R5→R6 的提交差异。
+
+初步裁决：CHANGE 16、17 的核心修订方向成立；CHANGE 18 的安全设计仍未完全收口。
+
+R6 已经解决了此前最明显的审计基线矛盾，也明确了输入白名单与三次 Git 检查。但存在一项不能忽略的关键问题：
+
+三次 Git 检查并不等于在数据库 COMMIT 时保证 Git 基线不变。
+
+如果系统能可靠阻止其他进程在写入窗口内修改仓库，三次检查可以作为额外防线；如果仅依靠三次检查本身，第三次检查与 COMMIT 之间仍有竞态窗口。
+
+另外，GitHub 比较结果显示，f115f881 至 a12a9f36 跨越了两个提交，合计涉及三个文件，而非严格只有一个设计文档文件。需要区分“产品代码零变更”和“仓库仅一个文件变更”这两项不同的声明。
+
+因此，本轮暂不批准 U2_PLATFORM_ONLY_INSERT_SUBSET 编码实施，允许继续进行最小范围的设计修订。
+
+一、九项正式裁决
+
+审计项目
+
+裁决
+
+说明
+
+1. CHANGE16_BASELINE_ANCHOR_VS_RUNTIME_BASELINE_FIXED
+
+PASS
+
+审计锚点与运行基线已分离
+
+2. CHANGE17_RUNTIME_STRICT_INPUT_WHITELIST_FIXED
+
+PASS WITH REVISE
+
+严格白名单成立，但拒绝码仍有歧义
+
+3. CHANGE18_GIT_DB_TOCTOU_BOUNDARY_FIXED
+
+REVISE
+
+提交前仍存在竞态，需要可验证的排他机制
+
+4. U2_INPUT_OUTPUT_CONTRACT
+
+PASS WITH REVISE
+
+接口形状成立，部分失败原因及复用语义待收口
+
+5. U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED
+
+REVISE
+
+需补充最后检查至提交的竞争测试
+
+6. U2_IMPLEMENTATION_BOUNDARY
+
+PASS
+
+PLATFORM-only、INSERT-only、禁止接线等边界明确
+
+7. SCOPE_HONESTY
+
+PASS WITH NOTE
+
+产品代码未改的声明与比较结果相符；文件变更数量需纠正
+
+8. U2_DESIGN_APPROVED
+
+NO
+
+尚未具备无条件实施所需的完整设计契约
+
+9. U2_IMPLEMENTATION_AUTHORIZED
+
+NO
+
+暂不开放 U2 编码实施
+
+CHANGE 16：PASS
+
+§14.1 对此前 P0 问题的修复是有效的。
+
+auditAnchor=9ee36837 仅用于溯源。
+
+baselineRef 必须来自当前运行仓库。
+
+默认只允许 SELF_CONSISTENT_HEAD。
+
+AUTHORIZED_FIXED_BASELINE 需要独立审批。
+
+不能沿用历史 HEAD 或旧候选的基线。
+
+工作树不干净时拒绝。
+
+这消除了 U1 封板提交与当前设计分支 HEAD 不相等造成的逻辑冲突。
+
+CHANGE 16 可以关闭，无须重做。
+
+CHANGE 17：PASS WITH REVISE
+
+§14.2 的运行时严格输入白名单已经满足主要安全要求。
+
+但有两个需要规范的小问题。
+
+第一，拒绝优先级不能在同一等级并列两个原因码。
+
+当前：
+
+INVALID_FIELD_TYPE / MISSING_REQUEST_REF
+
+必须确定缺失、null、空字符串，以及字段为错误类型时的唯一返回值。
+
+例如规定：
+
+MISSING_REQUEST_REF 优先于 INVALID_FIELD_TYPE，其余字段按明确顺序检查。
+
+第二，INPUT_KEY_MISMATCH 的触发条件需要改正。
+
+调用方只能提交 incidentId 和 requestRef，已经不可能合法提供 signalKey。
+
+因此该 reason 应保留给数据库中现有候选与本次计算出的权威身份、关联或摘要不一致的情况，而不是继续表述成“调用方与 Incident 行不一致”。
+
+这属于契约修订，不要求扩展接口。
+
+CHANGE 18：REVISE
+
+目前的时序为：
+
+Git 检查 ① → Git 检查 ②
+
+建立并复核运行基线
+
+数据库事务内 INSERT / REUSE
+
+唯一约束、关联验证
+
+Git 检查 ③
+
+最后一次基线复核
+
+尚未收口的竞态窗口
+
+并发 Git 写入可能发生在检查③之后、COMMIT 之前
+
+数据库 COMMIT
+
+设计虽声明“存在并发写入者时必须拒绝”，但还没有定义如何在运行时可靠地判断或保证这一前提。
+
+因此不能把运维约定直接等同于技术门禁。
+
+二、下一轮必须处理的三项 CHANGE
+
+CHANGE 19（P0）：Git 写入窗口排他保证
+
+在保持现有运行时架构不变的条件下，选择可验证的隔离方式。
+
+建议限定 U2 为受控、固定提交的隔离工作树运行模式，不允许自动跟随可变的远程分支。
+
+必须证明：
+
+工作目录处于受控运行环境，禁止其他主体在事务期间修改工作树、HEAD 或相关 ref。
+
+如果排他保证无法建立，直接拒绝，零候选写入。
+
+明确排他保证从首次 Git 校验之前持续到数据库提交完成。
+
+三次 Git 检查继续保留，但不能代替排他保证。
+
+增加 U2-20：在第三次 Git 检查之后、COMMIT 之前尝试修改 HEAD，验证修改被阻止，或事务拒绝且零写入。
+
+不允许为解决该问题新增第二套 Runtime、Scheduler 或 Controller。
+
+CHANGE 20（P1）：拒绝原因码与校验顺序收口
+
+明确 MISSING_REQUEST_REF、INVALID_FIELD_TYPE、INPUT_KEY_MISMATCH 的精确定义。
+
+特别要求：
+
+缺少 incidentId、缺少 requestRef、字段为 null、字段类型错误、空字符串各有确定裁决。
+
+多种违规同时出现时只返回一个最高优先级原因。
+
+非法顶层输入类型同样不能产生运行时异常或写入。
+
+唯一冲突复用必须检查候选键、关联 Task、Incident、baselineRef、builderRef 等权威数据。
+
+任何不匹配均不得返回已有候选 ID。
+
+保留 §13.1 原有接口结构。
+
+CHANGE 21（P1）：提交证据与变更声明修订
+
+补充以下内容：
+
+更正 R5→R6 仓库变更记录：GitHub 返回两个提交、三个文件变更。
+
+明确 u1SealRef 写入何种既有合法证据位置，不准为此新增 schema。
+
+定义 Git 三次检查的最小审计记录及不一致时的回滚证据。
+
+对文档 SHA-256 继续标记 NOT_INDEPENDENTLY_VERIFIED，直到真正完成独立字节复算。
+
+对已返回的 R6 文件 blob SHA，与文档 SHA-256 分别记录，不得混用。
+
+三、下一轮执行授权
+
+下一轮只允许针对 CHANGE 19–21 修改设计和补充只读证据。
+
+无需重新设计 U2 全部模块，也不得以这次设计复审作为实施许可。
+
+建议 Codex 下一轮提交 R7，重点证明写入窗口排他性、拒绝码确定性和审计记录真实性。通过后再独立申请 U2_PLATFORM_ONLY_INSERT_SUBSET 最小实施许可。
+
+四、机器可读裁决
+
+INI
+
+AUDIT_ID=MSG-20261009-31
+REPO=anthonannabella-dev/crossclaim-ai
+BRANCH=feat/si-rsi-internal-code-repair-v1
+U1_CODE_HEAD=9ee36837
+U2_DESIGN_COMMIT_R5=f115f881
+U2_DESIGN_COMMIT_R6=a12a9f36
+U2_DESIGN_DOC_SHA256=0ad1873aa6eda11bb724a7d86504c5fb7f09614e617784776e146331b9d7e336
+U2_DESIGN_DOC_SHA256_VERIFICATION=NOT_INDEPENDENTLY_VERIFIED
+U2_DESIGN_GIT_BLOB_SHA=ff775d8bc94149db780d209e880836e7dab1388a
+FINAL_VERDICT=REVISE
+CHANGE16_BASELINE_ANCHOR_VS_RUNTIME_BASELINE_FIXED=PASS
+CHANGE17_RUNTIME_STRICT_INPUT_WHITELIST_FIXED=PASS_WITH_REVISE
+CHANGE18_GIT_DB_TOCTOU_BOUNDARY_FIXED=REVISE
+U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE
+U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE
+U2_IMPLEMENTATION_BOUNDARY=PASS
+SCOPE_HONESTY=PASS_WITH_NOTE
+U2_DESIGN_APPROVED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PHASE3_A_U3_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE_19_P0,CHANGE_20_P1,CHANGE_21_P1
+CHANGE_19=GIT_DB_EXCLUSIVE_WRITE_WINDOW
+CHANGE_20=DETERMINISTIC_REJECTION_AND_REUSE_CONTRACT
+CHANGE_21=EVIDENCE_AND_CHANGE_SCOPE_CORRECTION
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R7_READ_ONLY_CHANGES_19_TO_21
+NEXT_AUDIT=MSG-20261009-32
+ACCOUNT_SCOPE=NOT_AUTHORIZED
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+POSTGRESQL_INTEGRATION_TEST=NOT_VERIFIED
+VITEST=NOT_VERIFIED
+TSC=NOT_VERIFIED
+LINUX_SYSTEMD=NOT_VERIFIED
+CI=NOT_VERIFIED
+PRODUCTION=NOT_VERIFIED
+
+最终决定：R6 的 CHANGE 16 正式通过，CHANGE 17 主要修复成立；CHANGE 18 因剩余 Git↔DB 竞态尚未关闭，本轮判定 REVISE。U1 封板状态不受影响，U2 暂不进入编码实施。
+
+本裁决仅在当前会话给出，未修改或写入 GitHub 仓库。
+```

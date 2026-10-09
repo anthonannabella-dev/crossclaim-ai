@@ -2201,3 +2201,62 @@ NEXT_AUDIT = MSG-20261009-31
 SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL = FORBIDDEN
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.35 MSG-20261009-31 裁决归档 = **REVISE**（CHANGE 16 关闭；CHANGE 18 未收口，新增 CHANGE 19–21）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-31] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（155/155，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=4777 / NORM_LINES=155 / FNV=ccd6834c`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R5=f115f881`、`REVIEWED_HEAD=a12a9f36`
+> （审计方另记 `U2_DESIGN_GIT_BLOB_SHA=ff775d8bc94149db780d209e880836e7dab1388a`）。
+
+**九项**：`CHANGE16 = PASS`（**正式关闭，无须重做**）、`CHANGE17 = PASS WITH REVISE`、
+`CHANGE18 = REVISE`、`U2_INPUT_OUTPUT_CONTRACT = PASS WITH REVISE`、
+`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED = REVISE`、`U2_IMPLEMENTATION_BOUNDARY = PASS`、
+`SCOPE_HONESTY = PASS WITH NOTE`、`U2_DESIGN_APPROVED = NO`、`U2_IMPLEMENTATION_AUTHORIZED = NO`。
+
+**审计方更正（须在 R7 修正声明）**：`f115f881 → a12a9f36` 跨越**两个提交、三个文件**，
+并非「仅一个设计文档文件」——「产品代码零变更」与「仓库仅一个文件变更」是两项不同声明。
+
+**REQUIRED_CHANGES（下一轮 MSG-20261009-32 只做这三项；`R7`）**
+
+- **CHANGE 19（P0）Git 写入窗口排他保证**：三次 Git 检查**不等于** COMMIT 时基线不变——
+  检查③与 COMMIT 之间仍有竞态；「存在并发写入者时必须拒绝」目前只是运维约定，**不能等同技术门禁**。
+  须：① 限定 U2 为**受控、固定提交的隔离工作树**运行模式，**不得**自动跟随可变远程分支；
+  ② 证明工作目录处于受控环境，禁止其他主体在事务期间修改工作树 / HEAD / 相关 ref；
+  ③ 排他保证须自**首次 Git 校验之前**持续到**数据库提交完成**；④ 无法建立排他 ⇒ 直接拒绝、零写入；
+  ⑤ 三次检查保留但**不能替代**排他保证；⑥ 新增 **U2-20**：在检查③之后、COMMIT 之前尝试修改 HEAD
+  ⇒ 修改被阻止，或事务拒绝且零写入；⑦ **不得**为此新增第二套 Runtime/Scheduler/Controller。
+- **CHANGE 20（P1）拒绝原因码与校验顺序收口**：明确 `MISSING_REQUEST_REF` / `INVALID_FIELD_TYPE` /
+  `INPUT_KEY_MISMATCH` 的精确定义；缺 `incidentId`、缺 `requestRef`、字段为 `null`、类型错误、空字符串
+  **各有确定裁决**；多违规并存**只返回一个最高优先级原因**；非法顶层输入类型**不得**产生运行时异常或写入；
+  唯一冲突复用必须检查候选键、关联 `Task`/`Incident`、`baselineRef`、`builderRef` 等**权威数据**，
+  任何不匹配**不得返回已有候选 ID**；保留 §13.1 的接口结构。
+  （并更正 `INPUT_KEY_MISMATCH` 语义：调用方已不能合法提供 `signalKey`，该码应表示
+  **数据库中现有候选与本次计算的权威身份/关联/摘要不一致**。）
+- **CHANGE 21（P1）提交证据与变更声明修订**：更正 R5→R6 的仓库变更记录（GitHub 返回 2 提交 3 文件）；
+  明确 `u1SealRef` 写入**何种既有合法证据位置**（**不准为此新增 schema**）；
+  定义三次 Git 检查的**最小审计记录**与不一致时的**回滚证据**；
+  文档 SHA-256 继续标 `NOT_INDEPENDENTLY_VERIFIED` 直到真正独立字节复算；
+  R6 文件 **blob SHA**（`ff775d8b…`）与**文档 SHA-256** 必须分别记录，不得混用。
+
+**审计方列出的未验证项**：`POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED`。
+
+```text
+MSG-20261009-31_FINAL_VERDICT = REVISE
+MSG-20261009-31_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 155/155；FNV1A ccd6834c）
+CHANGE_16 = CLOSED（无须重做）
+U2_DESIGN_APPROVED = NO
+U2_IMPLEMENTATION_AUTHORIZED = NO
+PHASE3_A_U3_TO_U5_AUTHORIZED = NO
+REQUIRED_CHANGES = CHANGE_19_P0_GIT_DB_EXCLUSIVE_WRITE_WINDOW ;
+                   CHANGE_20_P1_DETERMINISTIC_REJECTION_AND_REUSE_CONTRACT ;
+                   CHANGE_21_P1_EVIDENCE_AND_CHANGE_SCOPE_CORRECTION
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R7_READ_ONLY_CHANGES_19_TO_21
+NEXT_AUDIT = MSG-20261009-32
+ACCOUNT_SCOPE = NOT_AUTHORIZED · SCHEMA_MIGRATION = HOLD
+RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+```
