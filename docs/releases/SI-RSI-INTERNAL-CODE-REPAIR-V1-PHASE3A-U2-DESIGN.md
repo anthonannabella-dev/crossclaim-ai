@@ -1,13 +1,12 @@
-# PHASE 3-A · U2 设计 R16（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R17（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-38 = REVISE` → `MSG-20261009-39 = REVISE` → `MSG-20261009-40 = REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R16_READ_ONLY_CHANGES_61_TO_63`。
-> 本文件是 **U2 设计 R16** 送审材料（MSG-20261009-41），**不含任何产品代码改动**。
-> **R16 的修订集中在 §24**（`P2` 只是必要非充分证据 / 锁所有权的结构性保证与可查询性候选机制 /
-> `P2` 异常分类与「意外取锁」安全释放 / COMMIT 归因的**执行身份**与 `CANDIDATE_EXISTS` 区分 /
-> `nonce` 消费的 **`CONSUMPTION_UNKNOWN`** 分支），含本仓库范围内的只读证据核验；
-> §1–§23 保留历史；凡冲突者以 §24 为准（**R13/R14/R15/R16 优先于 §20.4.1**）。
+> `MSG-20261009-39 = REVISE` → `MSG-20261009-40 = REVISE` → `MSG-20261009-41 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R17_READ_ONLY_CHANGES_64_TO_66`。
+> 本文件是 **U2 设计 R17** 送审材料（MSG-20261009-42），**不含任何产品代码改动**。
+> **R17 的修订集中在 §25**（`O3` 的证据等级与校验清单 / `O2` 的**统一锁 FD 边界**与全窗口覆盖 /
+> `COMMITTED` 归因的**可信因果绑定**候选机制），含本仓库范围内的只读证据核验；
+> §1–§24 保留历史；凡冲突者以 §25 为准（**R13–R17 优先于 §20.4.1**）。
 
 | 锚点 | 值 |
 | --- | --- |
@@ -27,7 +26,8 @@
 | U2 设计 R13 | `8c42cfc2` |
 | U2 设计 R14 | `b57e5cb8` |
 | U2 设计 R15 | `52308673` |
-| U2 设计 R16 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R16 | `97dee91e` |
+| U2 设计 R17 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -2175,3 +2175,162 @@ R16_NOT_VERIFIED = O3_MECHANISM_VERIFIED（候选 A / fdinfo 语义未在目标�
 
 本文件仍为**纯设计 R16**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
 本轮只读核验**仅**读取 `apps/api/prisma/schema.prisma` 与既有迁移文件，**未**连接任何数据库、**未**执行任何写入。
+
+---
+
+## 25. R17 修订（对应 MSG-20261009-41 的 CHANGE 64–66）
+
+> 授权来源：`MSG-20261009-41 = REVISE` ⇒ `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R17_READ_ONLY_CHANGES_64_TO_66`。
+> 本轮只处理三项（**不重复**已通过的 CHANGE 54/56/58/59，也**不重做**已接受的 `P2` 必要非充分与错误分类设计）。
+> `U2_DESIGN_R16_ACCEPTED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED` **不变**。
+
+| CHANGE | R16 位置 | R17 修订位置 | 变更性质 |
+| --- | --- | --- | --- |
+| **CHANGE 64（P0）** | §24.1.4（`O3` 候选机制 A） | **§25.1** | `O3` 改为**证据等级制**并给出**校验清单**；`F_OFD_GETLK` 不得作自身持锁的肯定证明 |
+| **CHANGE 65（P1）** | §24.1.3（`O2` 不变量） | **§25.2** | `O2` 升级为**统一锁 FD 边界** + **全窗口覆盖**；计数器降为辅助 |
+| **CHANGE 66（P0）** | §24.2（执行身份） | **§25.3** | `COMMITTED` 需**可信因果绑定**；给出现行 schema 下不新增列的候选机制 |
+| 验收矩阵 | §24.4 | **§25.4** | 新增 U2-47a/U2-47b 的落地断言，另加 U2-48a ~ U2-48e、U2-49a ~ U2-49c |
+
+### 25.1 CHANGE 64（P0）—— `O3` 改为**证据等级制**；`F_OFD_GETLK` 不得作自身持锁的肯定证明
+
+**承认审计方的判断**：`F_OFD_GETLK` 是**冲突查询**接口（回答「若现在请求该锁，会不会冲突」），
+**不是**「查询**本 OFD** 是否持锁」的接口；`/proc/self/fdinfo` 的锁条目能否稳定完成 **OFD 归属**关联，
+取决于内核行为与解析方式。R16 把候选 A 表述为「查询并要求仍持有」**过于乐观**，现予**收窄**。
+
+**R17 规则**
+
+1. **`O3` 证据等级（三值，必须显式给出）**：
+
+| 等级 | 含义 | 对 `T2` 门禁的作用 |
+| --- | --- | --- |
+| **`O3-PROVEN`** | 有**本 OFD 归属**的**肯定**证据（锁类型 + 目标对象 + 锁范围 + OFD 归属**四要素齐备**，见第 2 条） | 可作为「仍持有」的**正向**证据（但仍不替代 `O1`+`O2`） |
+| **`O3-CONTRADICTED`** | 有**否定**证据（例如本实例自查显示该 OFD **未**持有目标锁） | **拒绝**（`LOCK_RELEASED_EARLY`），零写入 |
+| **`O3-INCONCLUSIVE`** | 查询**只能**证明「存在冲突锁」或无法完成 OFD 归属判定（含 `F_OFD_GETLK` 单用、`fdinfo` 条目不完整、内核行为未验证） | **不提供任何正向证据**；必须**完全依赖 `O2`**（§25.2）成立；否则 `EXCLUSIVE_WINDOW_UNAVAILABLE` |
+
+2. **`fdinfo` 校验清单（必须四项全查，缺一即 `O3-INCONCLUSIVE`）**：
+   ①**锁类型**：确认条目属于**本实现实际使用的锁族**（OFD 记录锁 / 其他），不得把**同 inode 上其他进程的锁条目**当作本 OFD 的证据；
+   ②**目标对象**：锁条目对应的对象与 `T1` 记录的 `(st_dev, st_ino)` 一致；
+   ③**锁范围**：为**整个目标文件**（或与设计声明的范围完全一致），不接受部分范围冒充全文件锁；
+   ④**OFD 归属**：该条目必须可归因到**本实例自 `T1` 起持有且从未复制**的那个 OFD
+   （依据 §25.2 的唯一持有者边界）；**无法完成归属判定 ⇒ `O3-INCONCLUSIVE`**。
+3. **`F_OFD_GETLK` 的定位（写死）**：**不得**被单独视为「自身持锁」的肯定证明；
+   它最多可产生 `O3-CONTRADICTED`（冲突查询显示存在冲突且非本 OFD）或 `O3-INCONCLUSIVE`。
+4. **机制可用性的前置条件（未验证则不得使用）**：使用任何 `O3` 机制前，必须在**目标内核**上以**可复现实验**确认：
+   接口存在、语义与本文一致、且能区分「本 OFD 持有 / 本 OFD 未持有 / 他方持有」三种情形。
+   未完成验证 ⇒ `O3` 一律按 **`INCONCLUSIVE`** 处理（等价于 `O3` 不可用）。
+   **如实声明**：本轮**未**在任何 Linux 主机上验证任何 `O3` 机制 ⇒ `O3_MECHANISM_VERIFIED = NOT_VERIFIED`（延续 §24.1.4）。
+5. **失败组合的处理（与 §24.1.5 一致）**：`O3` 不可用（`INCONCLUSIVE`）时，
+   **仅当** `O2` 的持续持锁结构保证**确实成立**（§25.2）才可继续；否则 **拒绝写入**。
+6. **禁止事项**：`O3` 绝**不得**用于「重新获取锁」或「掩盖已丧失」（例如在 `T2` 通过再取锁把状态"修好"）；
+   任何 `O3` 查询**不得**改变锁状态（只读）。
+
+### 25.2 CHANGE 65（P1）—— `O2` 升级为**统一锁 FD 边界**与**全窗口覆盖**
+
+**承认审计方的判断**：`releaseCounter == 0` **不能替代**真实的结构保证——
+若某个**未经过锁管理模块**的原生调用执行了 `close(fd)`，计数器**可能仍为零**，而锁已经丢失。
+
+**R17 规则**
+
+1. **统一锁 FD 边界（`LockFdBoundary`，唯一持有与唯一释放点）**：
+   ① **唯一创建**：锁 FD 只能由该边界模块创建（`open` + `O_CLOEXEC`）；
+   ② **不导出**：**禁止**把原始 FD 号或任何可对其调用 `close`/`dup` 的句柄**导出**到边界之外
+   （对外只提供「已持有」的**不透明能力对象**）；
+   ③ **唯一释放**：`close` 与任何 `LOCK_UN` **只能**出现在该模块的 `T3` 释放函数内（**单一释放点**）；
+   ④ **唯一查询**：`fstat`/`flock`/`fdinfo` 等访问**只能**经该模块（保证与 §25.1 的 `O3` 校验同源）。
+2. **必须纳入的运行环境边界（逐条声明并测试）**：
+  ① **native addon / FFI**：U2 执行路径内**禁止**引入可执行 `close`/`dup`/`flock` 的原生扩展或 FFI 调用；
+     如无法排除 ⇒ 该路径**不得**进入排他写入窗口；
+  ② **子进程派生**：派生前后按 §22.2 处理（`O_CLOEXEC` + 显式排除继承集合），并**禁止**以任何形式的 FD 传递（含 `SCM_RIGHTS`）；
+  ③ **异常退出/信号**：进程被 `SIGKILL` 等终止时，因**不存在副本**（第 1 条 ②），内核释放**全部**引用 ⇒ 不依赖时间戳；
+     但**必须**在重启路径上重新走 `T0~T2` 全流程，不得假设「上次的锁还在」；
+  ④ **运行时/语言层**：明确禁止使用可绕过该边界的接口（例如直接调用底层 fd 操作、`process.binding`、第三方库的 `close` on raw fd）。
+3. **静态约束（可审计）**：
+  ① 代码检查规则：在 `LockFdBoundary` 模块**之外**出现 `dup`/`close`/`flock`/`SCM_RIGHTS`/原生 fd 操作 ⇒ **构建失败**；
+  ② 依赖策略：U2 执行路径的依赖清单中**不得**出现原生扩展（或必须提供「无 fd 操作」的证明）。
+4. **运行期辅助（降级为辅助，不构成保证）**：`releaseCounter` / `dupCounter` **保留**，
+   但其语义**明确**为「**发现缺陷**」而不是「证明保持」；**不得**以计数器为 0 宣称结构保证成立。
+5. **全窗口覆盖（关键）**：持锁证明必须覆盖**整个实际写入窗口** ——
+   自 `T2` 门禁通过起，经**事务执行**、**`COMMIT` 尝试**、**结果未知的对账**，直到 `T3` 释放为止；
+   **不得**只在 `T2` 瞬间成立。若在窗口内任何时点可能失去锁（存在未受控释放路径）⇒ 排他窗口**不成立**，**拒绝写入**。
+6. **fail-closed**：无法满足第 1~3 条（或无法证明其成立）⇒ `LOCK_LIFECYCLE_UNPROVEN` / `EXCLUSIVE_WINDOW_UNAVAILABLE`，零写入。
+
+### 25.3 CHANGE 66（P0）—— `COMMITTED` 需**可信因果绑定**（在执行身份与数据库提交事件之间）
+
+**承认审计方的判断**：R16 的随机 `executionRef` 能证明「**执行记录**的身份」，
+**不能**自动证明「**数据库行的创建者**」。审计方反例（E1 提交结果未知 + 有写入权限的 E2 以相同候选 ID 插入内容一致的行 + E1 外部记录仍存在）成立。
+
+**R17 规则**
+
+1. **归因要求**：`THIS_EXECUTION_COMMITTED` 必须建立在**执行身份**与**数据库提交事件**之间的**可信因果绑定**之上；
+   仅「外部记录与候选行内容一致」**不构成**因果绑定。
+2. **候选因果绑定机制（设计候选；必须至少实现一种并给出目标环境证据）**：
+   - **M1（首选，不新增 schema）同事务事务标识 + 行系统列比对**：在**同一事务内**读取**当前事务标识**（PostgreSQL：`pg_current_xact_id()`，返回 64 位 xid8），
+     并在 `COMMIT` 前将其与 `returnedCandidateId` 一并写入**事务外持久记录**；对账时在**权威主库**读取该行的**插入事务标识**
+     （PostgreSQL 行系统列 `xmin`，32 位），与本实例捕获的事务标识**在防回绕窗口内**比对 ⇒ 一致方可支持 `THIS_EXECUTION_COMMITTED`。
+     **优势**：行系统列**由数据库维护**，**其他写入者无法伪造**；且该行若被**他方更新/删除重插**，`xmin` 会变化 ⇒ **自动检测外来修改**（与 CHANGE 57/62 的保守性一致）。
+   - **M2 同事务数据库审计记录**：由**同一事务**写入一条审计记录，关联 `{executionRef, candidateId}`；
+     需要既有可写对象或新表（后者属 schema 变更，当前 `HOLD`）⇒ 若只能新建表 ⇒ **本轮不可用**。
+   - **M3 写入凭证隔离**：证明**只有本次事务**能使用该特定写入凭证（例如每次执行专属的、受控签发的数据库会话/凭证），
+     并从同一事务内可验证地取得该凭证标识 ⇒ 需要基础设施支持。
+   - **M4 受信边界的事务回执**：由**受信数据库写入边界**提供可**持久验证**的事务回执（等价于 M1 的托管形态）。
+3. **M1 的必须注意事项（如实列出；未验证项不得当作已成立）**：
+   ① `xmin` 为 **32 位**，xid8 为 **64 位** ⇒ 比对必须在**防回绕窗口**内进行（捕获与对账之间不得跨过 xid 回绕），
+      跨窗或无法确定 ⇒ **`UNKNOWN`**；
+   ② 读取行系统列需要**原始 SQL**（Prisma 需用 `$queryRaw` 等）；若目标驱动/权限**不允许**读取系统列 ⇒ 机制**不可用** ⇒ `UNKNOWN`；
+   ③ 行被**更新**（含 HOT 更新）或**删除后重插** ⇒ `xmin` 变化 ⇒ 比对失败 ⇒ 结论退回 `UNKNOWN`（保守）；
+   ④ 该机制**不新增 schema**，但**必须**在目标 PostgreSQL 版本上实测确认（函数名/返回值/权限/系统列可读性）。
+4. **只读核验（本仓库范围）**：仓库**已具备**原始 SQL 通道的先例 —— `$queryRaw` / `$executeRaw` 在
+   `apps/api/src` 多处使用（包含 `apps/api/src/services/autonomy/si-budget-concurrency.ts`、`si-budget-policy-store.ts` 各 1 处）
+   ⇒ 机制 M1 的**调用通道**在本仓库范围内存在；
+   但仓库中**未发现**任何 `pg_current_xact_id` / `txid_current` / `xmin` 的既有先例
+   ⇒ M1 的**语义与可用性未验证**：`XID_BINDING_MECHANISM_VERIFIED = NOT_VERIFIED`。
+5. **状态规则（明确允许的保守结论）**：在 `SCHEMA_MIGRATION=HOLD` 且**缺少可信因果绑定**（M1~M4 均不可用或未验证）时：
+   **必须允许** `candidateExists=YES` 与 `thisExecutionCommitted=UNKNOWN` **并存**，
+   **不得**因「外部记录与候选行一致」强行升级为 `YES`。
+6. **反向约束**：`thisExecutionCommitted=YES` **仅在**下列全部成立时给出：
+   §22.4 四条件 + §22.5 全部门禁 + `id` 不复用 + `returnedCandidateId` 持久保存 + **因果绑定成立**（M1~M4 之一，含第 3 条注意事项）+ 权威主库重读一致。
+7. **M1 与既有语义的关系**：M1 **不改变**「U2 路径仅 INSERT」；它**只读**系统列与函数，**不写入**新表。
+   若为读取系统列需要**额外数据库权限**，该权限**必须**显式声明并审计；未获授权 ⇒ 机制不可用 ⇒ `UNKNOWN`。
+
+### 25.4 R17 验收矩阵增补
+
+| 编号 | 场景 | 期望断言 |
+| --- | --- | --- |
+| **U2-47a** | **本实例释放锁、另一进程接管**（审计方要求） | `O3` **不得**报告本实例仍持有；允许的结论仅为 `O3-CONTRADICTED` 或 `O3-INCONCLUSIVE`；若为后者则**必须**由 `O2` 支撑，否则**拒绝写入** |
+| **U2-47b** | E1 提交结果未知 + E2 以相同候选 ID 插入内容一致的行 + E1 外部记录仍存在 | 必须**拒绝**把该行归因于 E1：`candidateExists=YES` 与 `thisExecutionCommitted=UNKNOWN` 并存；**不得**升级为 `YES` |
+| **U2-48a** | `O3` 四项校验缺任意一项 | `O3-INCONCLUSIVE`；不得当作正向证据 |
+| **U2-48b** | 仅使用 `F_OFD_GETLK` 作为「自身持锁」证据 | 视为**设计违规**；只允许 `O3-CONTRADICTED`/`O3-INCONCLUSIVE` |
+| **U2-48c** | `T2` 之外（事务中/提交后对账中）出现未受控 `close(fd)`（模拟原生调用绕过） | 全窗口覆盖断言必须暴露：`releaseCounter` 可能仍为 0，但**静态约束/统一边界**必须阻止该调用；若无法阻止 ⇒ 拒绝写入 |
+| **U2-48d** | `LockFdBoundary` 之外出现 `dup`/`close`/`flock`/原生 fd 操作 | **构建失败**（静态规则），不得进入运行时 |
+| **U2-48e** | 子进程派生后继承锁 FD | 断言派生前后继承集合被显式排除；出现继承副本 ⇒ `LOCK_FD_LEAKED` 并拒绝 |
+| **U2-49a** | 主库可读 `xmin` 且与本事务捕获的事务标识一致 | 允许 `thisExecutionCommitted=YES`（需同时满足全部前提） |
+| **U2-49b** | 期间发生 xid 回绕 / 无法确定回绕窗口 | 必须退回 `UNKNOWN`（不得判 `YES`） |
+| **U2-49c** | 候选行被他方 UPDATE 或删除重插（`xmin` 变化） | 比对失败 ⇒ `thisExecutionCommitted=UNKNOWN`（保守），且 `candidateExists` 可仍为 `YES` |
+
+### 25.5 R17 未变部分
+
+§12 候选键 v2 与 digest 概念、§13.1 接口、§13.2 矩阵（另加 U2-47a ~ U2-49c）、§16.1 `CONTROLLED_FIXED_WORKTREE`、
+§17.1 隔离证明框架、§17.2 U2-20A/B/C、§17.3 零行冲突复用路径、§18.1 释放全链校验、§18.2 行锁与重试边界、
+§19.4 通道/签发者分离、§20.3（CHANGE 42）状态语义、§21.2（CHANGE 45）方向、§21.3.4 验证时机与有效期、
+§22.2 `flock` 释放/继承修正、§22.4 四条件、§22.6 字节级契约、§22.7 原子占用、
+§23.1 `T0`/`T1`/`T2` 分阶段条件、§23.3 检测 vs 保证、§23.4 归因四类、§23.5 证据范围纪律、
+§23.6 字节编码三断言、§23.7 消费持久化、**§24.1 的 `P2` 必要非充分与错误分类（审计方已接受，不重做）**、
+§24.2 的存在性/提交归因区分与状态字段、§24.3 的 `CONSUMPTION_UNKNOWN` 三分支（**CHANGE 63 已 PASS**，不重做）、
+`builderRef` 固定常量、**U2 路径仅 INSERT**、U2 路径无 `UPDATE`/`DELETE`、不新增 schema/migration、
+不接 Runtime/Queue、不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
+`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+
+```text
+R17_NOT_VERIFIED = O3_MECHANISM_VERIFIED（未在目标内核验证任何 O3 机制） ;
+                   XID_BINDING_MECHANISM_VERIFIED（pg_current_xact_id / xmin 语义与权限未验证） ;
+                   LOCKFD_BOUNDARY_STATIC_RULES（构建规则尚未实现） ;
+                   U2_LINUX_MULTIPROCESS_TESTS ; DB_PRIVILEGE_VERIFICATION ; GLOBAL_IMMUTABILITY_PROOF ;
+                   DB_RUNTIME_PRIVILEGES ; DB_TRIGGERS_ACTUAL ; DB_ROLES ; DB_WRITER_SET_ACTUAL ;
+                   OBSERVATION_WINDOW_IMMUTABILITY ; U2_NONCE_CONSUMPTION_STORE ;
+                   POSTGRESQL_INTEGRATION_TEST ; VITEST ; TSC ; LINUX_SYSTEMD ; CI ; PRODUCTION ;
+                   U2_DESIGN_DOC_SHA256（送审方报告）
+```
+
+本文件仍为**纯设计 R17**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+本轮只读核验**仅**读取 `apps/api/prisma/schema.prisma`、既有迁移文件与 `apps/api/src` 中的只读检索结果，
+**未**连接任何数据库、**未**执行任何写入。
