@@ -1900,3 +1900,67 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.30 MSG-20261009-26 裁决归档 = **REVISE**（U2 设计 4 项契约缺口，未批准实施）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-26] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（138/138，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=4313 / NORM_LINES=138 / FNV=c6e0ab64`。
+> 送审锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT=065f950e`。
+
+**九项裁决**：`U2_DESIGN_SCOPE_AND_NON_GOALS=PASS`、`U2_CALL_GRAPH_AND_NO_RUNTIME_WIRING=PASS`、
+`SCOPE_HONESTY=PASS`、`U2_FOUR_DECLARATIONS_HONESTY=PASS_WITH_REVISE`；
+`U2_INPUT_OUTPUT_CONTRACT=REVISE`、`U2_DEDUPE_AND_IDENTITY_VERSION_RULES=REVISE`、
+`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE`、`U2_IMPLEMENTATION_BOUNDARY=REVISE`；
+`U2_DESIGN_APPROVED=NO`。
+
+**审计方独立核对的两点**
+
+1. `9ee36837 → 065f950e` 的 9 个提交**不含 `apps/api` 产品代码变更** ⇒ 未修改 U1（与送审一致）；
+2. 文档自报的 sha256 `739cb312…2792` 本轮**未获独立原始字节复算** ⇒ `U2_DESIGN_DOC_SHA256_VERIFIED=NO`
+   （不影响上述设计缺口的判断）。
+
+**REQUIRED_CHANGES = CHANGE 1–4（下一轮 MSG-20261009-27 只接受这四项的设计修订）**
+
+- **CHANGE 1（P0）identityVersion 来源与可信性**：实际模型是 `PlatformAccount`（默认 `v1`），**不是**
+  `Account`；且 `identityVersion` 是「外部账户身份规范版本」，**不是**凭据版本、**不能**证明授权仍有效。
+  要求：身份版本须来自已验证的 `PlatformAccount`；明确
+  `organizationId + platform + externalAccountId + identityVersion` 的解析规则；
+  **禁止信任调用方字符串**；身份未解析/版本缺失/身份冲突 ⇒ fail-closed。
+- **CHANGE 2（P0）候选失效契约自洽**：原设计「旧候选置 `INVALIDATED`」与「禁止 UPDATE 既有候选」冲突，
+  且 `AutonomyCandidate` 只有 `status`、没有独立失效事件模型。评审方建议唯一机制 = **逻辑失效**：
+  保留旧候选原始记录不变，**重用或消费前重新校验身份版本**，不匹配则返回 `CANDIDATE_INVALIDATED`；
+  必须表述为「实时有效性判定」而非「数据库旧候选状态已被更新」；若要持久化失效事件，须**另行设计并审批**。
+- **CHANGE 3（P1）关联原子性与回滚**：不得改写既有 `AutonomyTask.incidentId`；缺失 Task 时**建议 `REJECTED`**
+  （不新建可执行 Task）；固定 `candidateDigest` 的字段来源/序列化/哈希算法（**证据摘要，不虚构 DB 字段**）；
+  采用**事务原子写入** + 唯一约束冲突后的校验复用；回滚改为**停用 U2 服务入口并保留历史**，
+  **禁止批量删除已关联候选**。
+- **CHANGE 4（P1）并发与负向验收**：新增 U2-7..U2-10，覆盖并发创建同 `dedupeKey`（须安全复用）、
+  同 key 但 Task/baseline/身份版本不同（须拒绝而非复用）、事务失败不留半成品关联、
+  身份版本切换与候选创建并发（须重验或 fail-closed）；并明确 `factsSnapshotRef` 的可信来源/有效期/过期判断，
+  以及 `baselineRef` 必须来自**可信基线**而非调用方任意指定。
+
+**评审方给出的未来最小实施边界（仅在 CHANGE 1–4 通过后申请）**：单一 U2 候选记录服务、使用现有数据模型、
+只读取已验证的内部 Incident/Task/身份版本/可信事实、只向 `AutonomyCandidate` 插入新候选（允许按唯一键校验后复用）、
+不更改既有 Incident/Task/Candidate/Lease 的状态或关联、仅用隔离 PostgreSQL 验证、**不接入运行时/队列/模型/Provider/执行器/部署**、
+**不新增 schema/migration、不做生产迁移**；即使 U2 实施获准，也**不代表**候选可自动进入执行队列。
+
+```text
+MSG-20261009-26_FINAL_VERDICT = REVISE
+MSG-20261009-26_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 138/138；FNV1A c6e0ab64）
+U1_FINAL_CLOSURE = YES（保持；封板 9ee36837 未被改动）
+U2_DESIGN_APPROVED = NO
+U2_IMPLEMENTATION_AUTHORIZED = NO
+PHASE3_A_U3_TO_U5_AUTHORIZED = NO
+REQUIRED_CHANGES = CHANGE_1_P0_IDENTITY_SOURCE_AND_TRUST ; CHANGE_2_P0_INVALIDATION_CONTRACT ;
+                   CHANGE_3_P1_ASSOCIATION_ATOMICITY_AND_ROLLBACK ; CHANGE_4_P1_CONCURRENCY_AND_NEGATIVE_TESTS
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R2_READ_ONLY_CHANGES_1_TO_4
+NEXT_AUDIT = MSG-20261009-27
+SCHEMA_MIGRATION = HOLD
+RUNTIME_WIRING / MODEL_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```

@@ -174117,3 +174117,253 @@ PRODUCTION_READY=NO
 
 本次审计仅在当前会话出具裁决，未修改或写入 GitHub 仓库。
 ````
+
+### [MSG-20261009-26] PHASE 3-A U2 设计审计 = **REVISE**（4 项契约缺口，U2 最小实施未获批）—— 九项 = `U2_DESIGN_SCOPE_AND_NON_GOALS=PASS`、`U2_CALL_GRAPH_AND_NO_RUNTIME_WIRING=PASS`、`SCOPE_HONESTY=PASS`、`U2_FOUR_DECLARATIONS_HONESTY=PASS_WITH_REVISE`、`U2_INPUT_OUTPUT_CONTRACT=REVISE`、`U2_DEDUPE_AND_IDENTITY_VERSION_RULES=REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE`、`U2_IMPLEMENTATION_BOUNDARY=REVISE`、`U2_DESIGN_APPROVED=NO`；**CHANGE 1（P0）identityVersion 来源应为已验证的 PlatformAccount（非 Account），且 U2 禁止信任调用方字符串、身份未解析/版本缺失/冲突须 fail-closed**；**CHANGE 2（P0）候选失效与禁止 UPDATE 冲突——建议逻辑失效（保留旧记录不变、消费前重验身份版本，不匹配返回 CANDIDATE_INVALIDATED），不得隐式引入失效事件存储**；**CHANGE 3（P1）关联原子性与回滚——不得改写既有 Task.incidentId、缺失 Task 建议 REJECTED、固定 candidateDigest 计算契约（不虚构 DB 字段）、事务原子写入 + 唯一冲突校验复用、回滚改为停用入口并保留历史（禁止批量删除）**；**CHANGE 4（P1）补 U2-7..U2-10 并发创建/键冲突/事务回滚/身份版本竞争测试，并明确 factsSnapshotRef 与 baselineRef 的可信来源与有效期**；已确认 9ee36837 → 065f950e 的 9 个提交不含 apps/api 产品代码变更（U1 未被修改），但文档自报 sha256 未获独立复算（`U2_DESIGN_DOC_SHA256_VERIFIED=NO`）；`U1_FINAL_CLOSURE=YES` 保持、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`PHASE3_A_U3_TO_U5_AUTHORIZED=NO`、`SCHEMA_MIGRATION=HOLD`、`RUNTIME_WIRING=FORBIDDEN`、`MODEL_CALL=FORBIDDEN`；NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R2_READ_ONLY_CHANGES_1_TO_4 / NEXT_AUDIT=MSG-20261009-27；reviewed ref 065f950e
+
+```text
+MSG-20261009-26｜PHASE 3-A U2 独立设计审计裁决
+FINAL VERDICT：REVISE
+
+裁决：U2 的总体设计方向可接受，但存在 4 项必须修订的契约缺口。本轮不批准 U2 最小实施单元。
+
+我已通过 GitHub 连接器只读检查指定的 U2 设计文档、两个提交之间的文件差异，以及实际 Prisma schema 和 RSI 任务生成器。没有修改仓库。
+
+核查依据：
+
+U2 设计文档（065f950e）
+
+实际 Prisma schema
+
+RSI Task Generator
+
+一、九项审计结果
+
+审计项
+
+裁决
+
+主要理由
+
+1. U2_DESIGN_SCOPE_AND_NON_GOALS
+
+PASS
+
+候选记录范围与执行边界明确
+
+2. U2_INPUT_OUTPUT_CONTRACT
+
+REVISE
+
+身份来源、版本与结果语义需要校正
+
+3. U2_CALL_GRAPH_AND_NO_RUNTIME_WIRING
+
+PASS
+
+设计未引入 Runtime 接线
+
+4. U2_FOUR_DECLARATIONS_HONESTY
+
+PASS WITH REVISE
+
+四项分类诚实，但 UPDATE/INSERT 声明不一致
+
+5. U2_DEDUPE_AND_IDENTITY_VERSION_RULES
+
+REVISE
+
+失效机制与现有模型不完全匹配
+
+6. U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED
+
+REVISE
+
+需要补充并发、原子性和失效负向测试
+
+7. U2_IMPLEMENTATION_BOUNDARY
+
+REVISE
+
+实施白名单尚不能安全冻结
+
+8. SCOPE_HONESTY
+
+PASS
+
+未实施声明与可见差异一致
+
+9. U2_DESIGN_APPROVED
+
+NO
+
+存在阻断性设计缺口
+
+二、独立发现的问题
+
+CHANGE 1 — P0：identityVersion 来源与现有 schema 不一致
+
+设计文档 §2 引用 Account.identityVersion。
+
+实际 Prisma schema 中，相关模型为 PlatformAccount，其 identityVersion 默认值为 v1，而不是 Account 模型。
+
+另外，identityVersion 在现有 schema 中表示外部账户身份规范版本，不是凭据版本，也不能直接证明授权仍然有效。
+
+要求：
+
+修正身份版本来源为已验证的 PlatformAccount 身份。
+
+明确 organizationId + platform + externalAccountId + identityVersion 的解析规则。
+
+明确 U2 如何获取当前有效身份版本，禁止信任未经核实的调用方字符串。
+
+身份未解析、版本缺失或身份冲突时必须失败关闭。
+
+CHANGE 2 — P0：候选失效机制与禁止 UPDATE 的规定冲突
+
+设计 §6 要求旧候选置为 INVALIDATED，同时 §4、§5 禁止更新已有候选。
+
+实际 AutonomyCandidate 有 status 字段，但没有独立的候选失效事件模型。
+
+因此目前无法同时证明：
+
+旧候选持久化状态已失效；
+
+不更新既有候选；
+
+保持 append-only 历史。
+
+要求确定唯一机制：
+
+建议采用逻辑失效模式：保留旧候选原始记录不变，重用或消费前重新校验身份版本，不匹配则返回 CANDIDATE_INVALIDATED，不允许旧候选进入后续执行路径。
+
+必须明确这是一次实时有效性判定，而不是宣称数据库中的旧候选状态已被更新。
+
+如果要求持久化失效事件，则必须另行设计并审批存储结构，不得在 U2 中隐式引入。
+
+CHANGE 3 — P1：关联写入、事务原子性与回滚规则不一致
+
+实际关联是：
+
+AutonomyCandidate.taskId → AutonomyTask.incidentId → AutonomyIncident.id
+
+已有外键可以支持关联，但设计仍存在三个问题：
+
+§4 允许修改 AutonomyTask.incidentId，§5 却声明只新增记录、不更新既有记录。
+
+§7 要求 candidateDigest 可比对，但 AutonomyCandidate 没有对应字段，也没有明确的计算与存储契约。
+
+§9 允许批量删除候选行，而前文要求保留历史、不得删除，并且候选可能已被评估、推广或回滚记录引用。
+
+要求：
+
+采用现有 Task 关联，不允许改写既有 Task 的 incidentId。
+
+明确缺失 Task 时返回 REJECTED，还是允许创建新的非可执行 Task；本轮建议选择前者。
+
+固定 candidateDigest 的字段来源、序列化与哈希算法，将其定义为证据摘要，不虚构数据库字段。
+
+采用事务原子写入和唯一约束冲突后的校验复用。
+
+回滚改为停用 U2 服务入口及保留历史记录，不得批量删除已关联候选。
+
+CHANGE 4 — P1：并发与负向验收不足
+
+现有 U2-1 至 U2-6 覆盖了基本路径，但尚未证明两个并发事务同时写入同一个 dedupeKey 时，系统能够安全地复用同一候选。
+
+还需明确：
+
+相同 key 但关联 Task、baseline 或身份版本不同，应拒绝而非复用。
+
+factsSnapshotRef 的可信来源、有效期和过期判断。
+
+baselineRef 必须来自可信基线，不能由调用方任意指定。
+
+数据库事务失败后不得保留半成品关联。
+
+当前身份版本切换与候选创建并发发生时，必须有重验或失败关闭策略。
+
+建议增加 U2-7 至 U2-10 四项测试，覆盖并发创建、键冲突、事务回滚、身份版本竞争。
+
+三、已确认的安全边界
+
+独立比对 9ee36837 → 065f950e 显示 9 个提交，变更文件不包含 apps/api 下的产品代码。
+
+可确认本次 Git 差异未修改 U1 产品代码。
+
+不过，文档报告的 SHA-256：
+
+739cb3129d4b934a7fe03d0455809e1276cbeed399341639fafab40f42a72792
+
+尚未通过独立原始字节哈希计算确认。本轮不将其标记为 HASH_VERIFIED。
+
+这不改变上述设计缺口的判断。
+
+四、U2 最小安全实施单元边界
+
+本轮仅批准设计修订，不批准产品代码实施。
+
+完成 CHANGE 1–4 后，下次可申请的最小实施范围限定为：
+
+单一 U2 候选记录服务，使用现有数据模型。
+
+只读取已验证的内部 Incident、Task、身份版本及可信事实。
+
+只向 AutonomyCandidate 插入新候选，允许按唯一键验证后复用已有候选。
+
+不更改已有 Incident、Task、Candidate、Lease 的状态或关联。
+
+仅使用隔离 PostgreSQL 验证事务、并发、幂等、失效和重启重放。
+
+不接入运行时入口、队列入口、模型、Provider、执行器或部署流程。
+
+不新增 schema/migration，不进行生产迁移。
+
+即使 U2 实施获得单独批准，也不意味着候选可以自动进入执行队列。
+
+U3、U4、U5 均保持未授权。
+
+五、下一轮准入条件
+
+MSG-20261009-27 只接受 CHANGE 1–4 的设计修订及证据更新。
+
+须提交修改后的 U2 设计文档、与实际 Prisma 模型一致的契约、修订后的验收矩阵及完整差异说明。
+
+在未通过下一轮审核前，不得将 REVISE 解释为实施许可。
+
+六、机器可读裁决
+
+INI
+
+AUDIT_ID=MSG-20261009-26
+REPO=anthonannabella-dev/crossclaim-ai
+BRANCH=feat/si-rsi-internal-code-repair-v1
+U1_CODE_HEAD=9ee36837
+U2_DESIGN_COMMIT=065f950e
+U2_DESIGN_DOC_SHA256=739cb3129d4b934a7fe03d0455809e1276cbeed399341639fafab40f42a72792
+U2_DESIGN_DOC_SHA256_VERIFIED=NO
+FINAL_VERDICT=REVISE
+U2_DESIGN_SCOPE_AND_NON_GOALS=PASS
+U2_INPUT_OUTPUT_CONTRACT=REVISE
+U2_CALL_GRAPH_AND_NO_RUNTIME_WIRING=PASS
+U2_FOUR_DECLARATIONS_HONESTY=PASS_WITH_REVISE
+U2_DEDUPE_AND_IDENTITY_VERSION_RULES=REVISE
+U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE
+U2_IMPLEMENTATION_BOUNDARY=REVISE
+SCOPE_HONESTY=PASS
+U2_DESIGN_APPROVED=NO
+U1_FINAL_CLOSURE=YES
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PHASE3_A_U3_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE_1_P0_IDENTITY_SOURCE_AND_TRUST;CHANGE_2_P0_INVALIDATION_CONTRACT;CHANGE_3_P1_ASSOCIATION_ATOMICITY_AND_ROLLBACK;CHANGE_4_P1_CONCURRENCY_AND_NEGATIVE_TESTS
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R2_READ_ONLY_CHANGES_1_TO_4
+NEXT_AUDIT=MSG-20261009-27
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终结论：U2 的隔离设计方向成立，但身份版本可信性、候选失效、关联原子性和并发验收尚未形成闭合契约。修订这四项即可申请下一轮设计复审，不需要重做 U1，也不得提前进入 U3–U5。
+```
