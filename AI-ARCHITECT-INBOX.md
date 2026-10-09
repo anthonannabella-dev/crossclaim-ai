@@ -174985,3 +174985,252 @@ NEXT_AUDIT=MSG-20261009-29
 
 最终结论： U2 R3 已针对前轮问题作出实质性修订，但候选键缺失故障身份、U1 事实契约不匹配以及身份版本切换并发保护不足，均会影响实际实现的正确性。维持 REVISE，不开放实施。U1 已关闭状态保持不变，本轮没有修改仓库。
 ```
+
+### [MSG-20261009-29] U2 设计 R4 = **PASS WITH REVISE**（`U2_DESIGN_APPROVED=YES_SCOPED_WITH_CONDITIONS`，实施仍未授权）—— 十项：`CHANGE9_CANDIDATE_KEY_V2_NO_COLLISION_FIXED=PASS`（故障身份入键、base64url 无分隔符碰撞已解决；并提醒 `candidateDigest` 不能代替候选身份键，唯一性仍须由 DB `dedupeKey` 约束保证）、`CHANGE10_U1_CONTRACT_COMPATIBILITY_MATRIX_FIXED=PASS`（已核 U1 白名单与 `internal.repair.propose` 策略；解除错误依赖合理，且未削弱 U1 授权规则）、`CHANGE11_IDENTITY_CURRENTNESS_ACCOUNT_NOT_AUTHORIZED_FIXED=PASS`（ACCOUNT 禁用＝正确 fail-closed）、`CHANGE12_DIGEST_VECTOR_AND_EQUIVALENCE_FIXED=PASS_WITH_CONDITION`（算法与等价性断言正确；Node/.NET 双实现一致属**提交方证据**，审计方未误记为独立复算；R4 文档 sha256 亦为声明值 `U2_DESIGN_DOC_SHA256_INDEPENDENTLY_VERIFIED=NO`）、`U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=PASS_WITH_REVISE`、`U2_IMPLEMENTATION_BOUNDARY=PASS`、`SCOPE_HONESTY=PASS`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`U3–U5=NO`；独立核验：R3→R4 两次提交/三个文档文件、无产品代码变更，`9ee36837→R4` 未发现 apps/api 修改；**新增 REQUIRED_CHANGES = CHANGE 13–15（均 P1，实施前最小收口，不需重做 U2、不改 U1）**：CHANGE 13（§13 统一最终接口 `U2PlatformCandidateInput`/`U2CandidateDecision`，含拒绝优先级、`candidateId=null`+`executionAuthorized=false`、以及 AutonomyCandidate 必填字段 `builderRef`/`taskId`/`baselineRef`/`dedupeKey` 的可信来源——`builderRef` 不得由调用方或模型任意填写）、CHANGE 14（最终验收矩阵对 U2-1..U2-17 逐一标 ACTIVE/SUPERSEDED/NOT_AUTHORIZED，并要求 Task 与 Incident 的**真实外键链**校验、同键冲突仅在完整验证既有行后复用）、CHANGE 15（PLATFORM 基线可信性：`baselineRef` 可信解析接口与来源、与当前 HEAD 的比较规则、稳定拒绝原因、禁止降级接受旧候选及相关负向测试）；NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R5_READ_ONLY_CHANGES_13_TO_15 / NEXT_AUDIT=MSG-20261009-30；三项通过后建议首个实施范围 = `U2_PLATFORM_ONLY_INSERT_SUBSET`（不得扩展为 ACCOUNT/U3–U5/真实自动修复/候选执行/模型调用/生产发布）；reviewed ref 378bfb2a
+
+```text
+MSG-20261009-29｜SI/RSI U2 设计 R4 独立审计裁决
+FINAL VERDICT：PASS WITH REVISE
+审计对象： CrossClaim AI · PHASE 3-A · U2 Design R4
+REVIEWED_HEAD： 378bfb2af11367a34184197c9b23fac42becd478
+U1_CODE_HEAD： 9ee36837
+
+本轮已经通过 GitHub 连接器直接读取 R4 设计文档，并比较 R3、R4 与 U1 封板提交。
+
+初步确认：
+
+R4 确实增加了 §12，覆盖 CHANGE 9–12。
+
+R3 → R4 的提交比较显示两次提交、三个文档文件变更，没有产品代码文件变更。
+
+U1 封板提交至 R4 的比较未发现 apps/api 产品代码修改。
+
+ACCOUNT 被明确排除，U1 客户授权事实不再被错误复用为 PLATFORM 内部故障事实。
+
+审计原则：设计修正可以通过，但不能由此推定已通过实际数据库验收，也不能放开 Runtime、模型、外部写入或自动部署。
+
+一、十项正式裁决
+
+裁决项
+
+结果
+
+审计意见
+
+1. CHANGE 9 — Candidate Key v2
+
+PASS
+
+故障身份纳入键；分隔符碰撞问题解决
+
+2. CHANGE 10 — U1 兼容性
+
+PASS
+
+已核对 U1 主要策略；解除错误依赖合理
+
+3. CHANGE 11 — Identity Currentness
+
+PASS
+
+ACCOUNT 禁用，消除未证明的版本当前性假设
+
+4. CHANGE 12 — Digest
+
+PASS WITH CONDITION
+
+算法定义和等价性断言正确；字节测试向量尚未独立复算
+
+5. U2_INPUT_OUTPUT_CONTRACT
+
+PASS WITH REVISE
+
+尚需明确 R4 唯一有效接口及拒绝顺序
+
+6. U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED
+
+PASS WITH REVISE
+
+新用例合理，但历史用例仍存在冲突
+
+7. U2_IMPLEMENTATION_BOUNDARY
+
+PASS
+
+无产品代码改动；隔离限制清晰
+
+8. SCOPE_HONESTY
+
+PASS
+
+未宣称真实运行、迁移或生产验收通过
+
+9. U2_DESIGN_APPROVED
+
+YES_SCOPED_WITH_CONDITIONS
+
+PLATFORM-only 核心设计获得条件性认可
+
+10. U2_IMPLEMENTATION_AUTHORIZED
+
+NO
+
+先完成接口与矩阵的最小设计收口
+
+二、CHANGE 9–12 的技术判断
+
+CHANGE 9：PASS
+
+candidate:v2 将从 Incident 获取的 signalKey 纳入去重身份，解决了上一轮不同故障在同一作用域与基线下可能复用同一候选的问题。
+
+base64url 不包含冒号，字段分界明确。U2-14、U2-15 也分别覆盖了不同故障区分和相同故障重放。
+
+但 candidateDigest 不能代替候选身份键：digest 是证据摘要，候选唯一性仍须由数据库 dedupeKey 约束保证。
+
+CHANGE 10：PASS
+
+已直接核对 U1 的 trusted-facts-adapter.ts。实际白名单包含 SERVER_REQUEST_GATE、RUNTIME_MEMBER，internal.repair.propose 必须提供 platformAccountId 和 provider。
+
+R4 的处置成立：
+
+平台级内部故障不应借用组织级客户动作授权。
+
+解除 U1 依赖并没有削弱 U1 原有授权规则，因为 U2 不再调用该适配器，也不以 U2 设计授予任何执行权限。
+
+CHANGE 11：PASS
+
+R4 不再尝试利用 PlatformIdentityVerification 推导当前有效身份版本。
+
+这是正确的失败关闭方案。
+
+ACCOUNT 不授权，也就不必在本轮假装解决版本切换、锁竞争或身份撤销问题。
+
+未来重新开放 ACCOUNT，必须另行提交可验证的当前版本裁决机制与并发证明。
+
+CHANGE 12：PASS WITH CONDITION
+
+规范化的语义方向已纠正：输入键顺序或等价时间表示不应改变摘要。删除 factsDigest 也与 CHANGE 10 一致。
+
+R4 文档确实包含完整测试向量：
+
+fa8ed0617c3db797a9e4e8d85b7403c697b0352291ad846e4a6a79ac010db0b8
+
+但文档声称的 Node.js/.NET 双实现一致，属于提交方提供的证据。本轮已确认该声明存在于仓库，未将其误记为审计方独立复算通过。
+
+同样，R4 文档 SHA-256 目前保留为提交方声明值，未独立复算。
+
+三、剩余修订：CHANGE 13–15
+
+这些属于实施前的最小接口与验收收口，不要求重新设计 U2，也不要求修改 U1。
+
+CHANGE 13（P1）：统一最终输入输出契约
+
+§2 仍保留 R2 的强制 identity、factsSnapshotRef、incidentDedupeKey 等输入；§12 已取消其中部分字段或把它们改为服务端解析结果。
+
+虽然文档声明 §12 优先，但实施人员仍需自行推导最终 TypeScript 接口。
+
+要求在 §13 明确：
+
+R4 唯一有效的 U2PlatformCandidateInput 与 U2CandidateDecision。
+
+PLATFORM 作用域由服务端确认，不能接受 ACCOUNT 身份混入。
+
+signalKey、baselineRef、faultClass、时间的权威读取路径。
+
+ACCOUNT 与 U1 事实字段同时出现、或同时存在其他错误时的拒绝优先级。
+
+错误时 candidateId=null、executionAuthorized=false，不暴露其他候选信息。
+
+特别注意：已核对 Prisma schema，AutonomyCandidate.builderRef 为必填字符串；taskId、baselineRef、dedupeKey 也必须在 INSERT 时提供。
+
+实施契约需要明确 builderRef 的固定可信取值和来源，不得由调用方或模型任意填写。
+
+CHANGE 14（P1）：统一验收矩阵
+
+§7 的旧验收用例仍包含 ACCOUNT 身份版本切换、U1 快照过期等场景；§12 则明确它们在 R4 不适用。
+
+要求新增一张最终矩阵，对 U2-1 至 U2-17 逐一标记：
+
+ACTIVE、SUPERSEDED 或 NOT_AUTHORIZED。
+
+同时明确以下断言：Task 必须与 Incident 建立真实外键链；不仅比较 taskDedupeKey 字符串。读取到不一致的 Task、Incident、候选关联时必须拒绝，且不能返回其他作用域的候选 ID。
+
+同键唯一冲突只能在完整验证既有行后复用，不能把任何数据库异常都解释成成功重放。
+
+CHANGE 15（P1）：固定 PLATFORM 基线可信性
+
+R4 声明 baselineRef 来自可信解析，并以当前 HEAD 校验，但还缺少一条完整的、可供实施的规则：在 INSERT 和 REUSE 时如何确认候选基线仍然有效。
+
+要求明确：
+
+baselineRef 的可信解析接口及来源。
+
+固定审核基线与当前 HEAD 的比较规则。
+
+HEAD 不一致、无法解析或基线变化时的稳定拒绝原因。
+
+基线检查失败不得降级为接受旧候选。
+
+对应负向验收测试。
+
+这些要求不涉及重新开放 ACCOUNT、引入新表或改变已有执行权限。
+
+四、下一轮授权
+
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R5_READ_ONLY_CHANGES_13_TO_15
+
+MSG-20261009-30 只需提交最终接口、验收矩阵和基线校验规则三个最小修订。
+
+完成并通过复核后，建议允许的首个实施范围为：
+
+U2_PLATFORM_ONLY_INSERT_SUBSET
+
+其权限最多包括：PLATFORM 故障可信读取、既有 Incident/Task 关联验证、确定性候选键、隔离 PostgreSQL 中的候选 INSERT、同键校验复用，以及相关负向测试。
+
+不能扩展为 ACCOUNT、U3–U5、真实自动代码修复、候选执行、模型调用或生产发布。
+
+五、机器可读审计结果
+
+MSG-20261009-29
+
+复制裁决
+
+以下内容可直接交给 Codex。
+
+INI
+
+AUDIT_ID=MSG-20261009-29
+REPO=anthonannabella-dev/crossclaim-ai
+REVIEWED_HEAD=378bfb2af11367a34184197c9b23fac42becd478
+U1_CODE_HEAD=9ee36837
+U2_DESIGN_COMMIT_R3=ac94ef8e
+U2_DESIGN_COMMIT_R4=378bfb2a
+U2_DESIGN_DOC_SHA256=40f85ab9a6e21cb3fc17849b4509585d88e58c01f195f5c38aab0ca55ad01556
+U2_DESIGN_DOC_SHA256_INDEPENDENTLY_VERIFIED=NO
+FINAL_VERDICT=PASS_WITH_REVISE
+CHANGE9_CANDIDATE_KEY_V2_NO_COLLISION_FIXED=PASS
+CHANGE10_U1_CONTRACT_COMPATIBILITY_MATRIX_FIXED=PASS
+CHANGE11_IDENTITY_CURRENTNESS_ACCOUNT_NOT_AUTHORIZED_FIXED=PASS
+CHANGE12_DIGEST_VECTOR_AND_EQUIVALENCE_FIXED=PASS_WITH_CONDITION
+U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE
+U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=PASS_WITH_REVISE
+U2_IMPLEMENTATION_BOUNDARY=PASS
+SCOPE_HONESTY=PASS
+U2_DESIGN_APPROVED=YES_SCOPED_WITH_CONDITIONS
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PHASE3_A_U3_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE13_P1,CHANGE14_P1,CHANGE15_P1
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R5_READ_ONLY_CHANGES_13_TO_15
+NEXT_AUDIT=MSG-20261009-30
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终裁决：R4 已解决 CHANGE 9–11 的 P0 设计阻断；无需返工这些方案。 CHANGE 12 在设计层面获得条件性认可。
+
+下一轮仅修订 CHANGE 13–15，不授权产品代码实施。仓库没有被本次审计修改，所有生产与外部副作用门禁继续保持关闭。
+```

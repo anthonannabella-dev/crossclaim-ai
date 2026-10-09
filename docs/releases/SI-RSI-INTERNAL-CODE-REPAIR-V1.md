@@ -2089,3 +2089,57 @@ NEXT_AUDIT = MSG-20261009-29
 SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL = FORBIDDEN
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.33 MSG-20261009-29 裁决归档 = **PASS WITH REVISE —— U2 设计（PLATFORM-only）首获条件性认可**
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-29] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（139/139，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=4819 / NORM_LINES=139 / FNV=e4ab17ad`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R3=ac94ef8e`、`REVIEWED_HEAD=378bfb2a`。
+
+**里程碑**：`U2_DESIGN_APPROVED = YES_SCOPED_WITH_CONDITIONS`（PLATFORM-only 核心设计获得条件性认可），
+`CHANGE 9–11 = PASS`、`CHANGE 12 = PASS WITH CONDITION`；但 `U2_IMPLEMENTATION_AUTHORIZED = NO`。
+
+**审计方独立核验**：R3→R4 为**两次提交、三个文档文件**、**无产品代码变更**；
+`9ee36837 → R4` 比较**未发现 `apps/api` 修改**；ACCOUNT 被明确排除，U1 客户授权事实不再被误用为平台内部故障事实。
+
+**审计方保留的两点（不得外推）**
+
+1. `candidateDigest` **不能代替**候选身份键——digest 是证据摘要，候选唯一性仍须由数据库 `dedupeKey` 约束保证；
+2. 文档声称的「Node.js / .NET 双实现一致」属**提交方证据**，审计方确认该声明存在于仓库但**未记为独立复算通过**；
+   `U2_DESIGN_DOC_SHA256_INDEPENDENTLY_VERIFIED=NO`。
+
+**REQUIRED_CHANGES（下一轮 MSG-20261009-30 只做这三项最小收口；不重做 U2、不改 U1）**
+
+- **CHANGE 13（P1）统一最终输入输出契约**：§2 仍留有 R2 的强制 `identity`/`factsSnapshotRef`/`incidentDedupeKey`，
+  与 §12 冲突；须在 **§13** 明确 R4 **唯一有效**的 `U2PlatformCandidateInput` 与 `U2CandidateDecision`：
+  PLATFORM 作用域由**服务端确认**（不接受 ACCOUNT 身份混入）；`signalKey`/`baselineRef`/`faultClass`/时间的
+  **权威读取路径**；ACCOUNT 与 U1 事实字段同时出现或其他错误时的**拒绝优先级**；错误时
+  `candidateId=null`、`executionAuthorized=false`，**不暴露其他候选信息**。
+  并按 Prisma 核对结果明确 `AutonomyCandidate` 必填字段（`builderRef`/`taskId`/`baselineRef`/`dedupeKey`）都必须提供，
+  其中 **`builderRef` 必须有固定可信取值与来源，不得由调用方或模型任意填写**。
+- **CHANGE 14（P1）统一验收矩阵**：§7 旧用例（ACCOUNT 身份版本切换、U1 快照过期等）与 R4 冲突；
+  须新增最终矩阵，对 **U2-1…U2-17 逐一标注 `ACTIVE` / `SUPERSEDED` / `NOT_AUTHORIZED`**；
+  并明确：Task 必须与 Incident 建立**真实外键链**（不只是比较 `taskDedupeKey` 字符串）；
+  读取到不一致的 Task/Incident/候选关联必须**拒绝**且**不得返回其他作用域的候选 ID**；
+  同键唯一冲突**只能在完整验证既有行后复用**，不得把任何数据库异常解释为成功重放。
+- **CHANGE 15（P1）固定 PLATFORM 基线可信性**：须给出 `baselineRef` 的**可信解析接口与来源**、
+  固定审核基线与当前 `HEAD` 的**比较规则**、HEAD 不一致/无法解析/基线变化时的**稳定拒绝原因**、
+  **基线检查失败不得降级为接受旧候选**，以及对应**负向验收测试**。
+
+```text
+MSG-20261009-29_FINAL_VERDICT = PASS_WITH_REVISE
+MSG-20261009-29_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 139/139；FNV1A e4ab17ad）
+U2_DESIGN_APPROVED = YES_SCOPED_WITH_CONDITIONS（PLATFORM-only）
+U2_IMPLEMENTATION_AUTHORIZED = NO（待 CHANGE 13–15 收口）
+PHASE3_A_U3_TO_U5_AUTHORIZED = NO
+REQUIRED_CHANGES = CHANGE_13_P1_FINAL_IO_CONTRACT ; CHANGE_14_P1_FINAL_ACCEPTANCE_MATRIX ;
+                   CHANGE_15_P1_PLATFORM_BASELINE_TRUST
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R5_READ_ONLY_CHANGES_13_TO_15
+NEXT_AUDIT = MSG-20261009-30
+（R5 通过后）建议首个实施范围 = U2_PLATFORM_ONLY_INSERT_SUBSET
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+```
