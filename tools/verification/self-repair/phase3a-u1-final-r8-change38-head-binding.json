@@ -1,0 +1,185 @@
+{
+  "schema": "crossclaim.si-rsi.u1-final-r8-change38/1",
+  "generatedAt": "2026-10-09T04:30:10.629Z",
+  "answersAudit": "MSG-20261009-22 / CHANGE_38_P1_HEAD_BINDING_INDEPENDENT_VERIFICATION",
+  "forNextAudit": "MSG-20261009-23",
+  "reviewedHead": {
+    "short": "9ee36837",
+    "full": "9ee3683725ad694123092e5bafce9a32b75d3fd2"
+  },
+  "evidenceHead": {
+    "short": "aa730476",
+    "full": "aa7304764db30821d2c7c7d53d186f97f13decc5"
+  },
+  "workingHeadAtEvidenceBuild": {
+    "full": "18cadd9a054be58acd58be3e74e8dc3430329f46"
+  },
+  "branch": "feat/si-rsi-internal-code-repair-v1",
+  "gitRawOutputs": {
+    "git rev-parse 9ee36837": "9ee3683725ad694123092e5bafce9a32b75d3fd2",
+    "git rev-parse HEAD": "aa7304764db30821d2c7c7d53d186f97f13decc5",
+    "git status --porcelain (before writing this manifest)": "",
+    "git diff 23604dcb 9ee36837 -- apps/api/src/services/self-repair/trusted-facts-adapter.ts (.status)": 0,
+    "git diff 23604dcb 9ee36837 -- apps/api/src/services/self-repair/trusted-facts-adapter.ts (bytes)": 0,
+    "git diff 9ee36837 HEAD -- apps/api (bytes)": 0,
+    "git diff 9ee36837 HEAD --name-only": "AI-ARCHITECT-INBOX.md\ndocs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1.md\ntools/verification/self-repair/phase3a-u1-final-r7-change37-head-binding.json\ntools/verification/self-repair/phase3a-u1-final-r7-negative-control-adapter.ts\ntools/verification/self-repair/phase3a-u1-final-r7-negative-control-vitest-raw.txt\ntools/verification/self-repair/phase3a-u1-final-r7-tsc-raw.txt\ntools/verification/self-repair/phase3a-u1-final-r7-vitest-raw.txt\ntools/verification/self-repair/phase3a-u1-final-r8-negative-control-adapter.ts\ntools/verification/self-repair/phase3a-u1-final-r8-negative-control-tsc-raw.txt\ntools/verification/self-repair/phase3a-u1-final-r8-negative-control-vitest-raw.txt\ntools/verification/self-repair/phase3a-u1-final-r8-run-transcript.txt\ntools/verification/self-repair/phase3a-u1-final-r8-tsc-raw.txt\ntools/verification/self-repair/phase3a-u1-final-r8-vitest-raw.txt",
+    "git diff --stat 9ee36837 HEAD": " AI-ARCHITECT-INBOX.md                              | 287 +++++++++\n docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1.md    | 125 ++++\n .../phase3a-u1-final-r7-change37-head-binding.json |  39 ++\n ...phase3a-u1-final-r7-negative-control-adapter.ts | 655 +++++++++++++++++++++\n ...e3a-u1-final-r7-negative-control-vitest-raw.txt | 141 +++++\n .../self-repair/phase3a-u1-final-r7-tsc-raw.txt    |   0\n .../self-repair/phase3a-u1-final-r7-vitest-raw.txt | 105 ++++\n ...phase3a-u1-final-r8-negative-control-adapter.ts | 655 +++++++++++++++++++++\n ...hase3a-u1-final-r8-negative-control-tsc-raw.txt |   0\n ...e3a-u1-final-r8-negative-control-vitest-raw.txt | 141 +++++\n .../phase3a-u1-final-r8-run-transcript.txt         |  58 ++\n .../self-repair/phase3a-u1-final-r8-tsc-raw.txt    |   0\n .../self-repair/phase3a-u1-final-r8-vitest-raw.txt | 105 ++++\n 13 files changed, 2311 insertions(+)"
+  },
+  "productTestFilesBoundToReviewedHead": [
+    {
+      "path": "apps/api/src/services/self-repair/trusted-facts-adapter.ts",
+      "existsInCommit": true,
+      "blobBytes": 29986,
+      "blobSha256": "ad47c6b205192b345b7f1cc180e8e466dd91a382d6571727c29dbe9609b1f14b",
+      "worktreeBytes": 29986,
+      "worktreeSha256": "ad47c6b205192b345b7f1cc180e8e466dd91a382d6571727c29dbe9609b1f14b",
+      "MATCH": true
+    },
+    {
+      "path": "apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "existsInCommit": true,
+      "blobBytes": 22434,
+      "blobSha256": "a4b6da62172e2658197cf1dbc4dcb92b9023281654d84dc95ca9dd1a558536c2",
+      "worktreeBytes": 22434,
+      "worktreeSha256": "a4b6da62172e2658197cf1dbc4dcb92b9023281654d84dc95ca9dd1a558536c2",
+      "MATCH": true
+    },
+    {
+      "path": "apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts",
+      "existsInCommit": true,
+      "blobBytes": 36903,
+      "blobSha256": "e465b3e825bbce68c1da72b38bec56e6ef88970355eea45d774587251db40203",
+      "worktreeBytes": 36903,
+      "worktreeSha256": "e465b3e825bbce68c1da72b38bec56e6ef88970355eea45d774587251db40203",
+      "MATCH": true
+    }
+  ],
+  "rawEvidenceFilesBoundToEvidenceHead": [
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-vitest-raw.txt",
+      "existsInCommit": true,
+      "blobBytes": 24489,
+      "blobSha256": "9d9802f8807e707cb69eab7dd04b211e24f36a26bedd0bebedb071fd26fdb68b",
+      "worktreeBytes": 24489,
+      "worktreeSha256": "9d9802f8807e707cb69eab7dd04b211e24f36a26bedd0bebedb071fd26fdb68b",
+      "MATCH": true
+    },
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-tsc-raw.txt",
+      "existsInCommit": true,
+      "blobBytes": 0,
+      "blobSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "worktreeBytes": 0,
+      "worktreeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "MATCH": true
+    },
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-negative-control-vitest-raw.txt",
+      "existsInCommit": true,
+      "blobBytes": 24524,
+      "blobSha256": "ee82763c1b4210b79e40d7f74f7f2fc94356516de7184baefd6366ef9f60297d",
+      "worktreeBytes": 24524,
+      "worktreeSha256": "ee82763c1b4210b79e40d7f74f7f2fc94356516de7184baefd6366ef9f60297d",
+      "MATCH": true
+    },
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-negative-control-tsc-raw.txt",
+      "existsInCommit": true,
+      "blobBytes": 0,
+      "blobSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "worktreeBytes": 0,
+      "worktreeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "MATCH": true
+    },
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-run-transcript.txt",
+      "existsInCommit": true,
+      "blobBytes": 6936,
+      "blobSha256": "9a9c1bc14fd394b1b063b9e7cd21a1f6c87acfa60c4a2d60019ed412bbb781c9",
+      "worktreeBytes": 6936,
+      "worktreeSha256": "9a9c1bc14fd394b1b063b9e7cd21a1f6c87acfa60c4a2d60019ed412bbb781c9",
+      "MATCH": true
+    },
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-negative-control-adapter.ts",
+      "existsInCommit": true,
+      "blobBytes": 29999,
+      "blobSha256": "cbf661e79f6e1691de9aa4841022ba0d5ead275471f98df661a30ed79406a42d",
+      "worktreeBytes": 29999,
+      "worktreeSha256": "cbf661e79f6e1691de9aa4841022ba0d5ead275471f98df661a30ed79406a42d",
+      "MATCH": true
+    }
+  ],
+  "selfCorrection": {
+    "finding": "MSG-20261009-22 送审所用的 r7 清单把 4 个证据文件与 9ee36837 绑在一起，但该提交并不包含这 4 个文件（它们由证据提交 3bff9673 引入）。CHANGE 37 的“全部文件均实际存在于指定 Commit”确实无法成立。",
+    "affectedPaths": [
+      "tools/verification/self-repair/phase3a-u1-final-r7-vitest-raw.txt",
+      "tools/verification/self-repair/phase3a-u1-final-r7-tsc-raw.txt",
+      "tools/verification/self-repair/phase3a-u1-final-r7-negative-control-vitest-raw.txt",
+      "tools/verification/self-repair/phase3a-u1-final-r7-negative-control-adapter.ts"
+    ],
+    "evidenceAtReviewedHead": [
+      {
+        "path": "tools/verification/self-repair/phase3a-u1-final-r7-vitest-raw.txt",
+        "existsInCommit": false,
+        "blobSha256": null,
+        "worktreeSha256": null,
+        "MATCH": false
+      },
+      {
+        "path": "tools/verification/self-repair/phase3a-u1-final-r7-tsc-raw.txt",
+        "existsInCommit": false,
+        "blobSha256": null,
+        "worktreeSha256": null,
+        "MATCH": false
+      },
+      {
+        "path": "tools/verification/self-repair/phase3a-u1-final-r7-negative-control-vitest-raw.txt",
+        "existsInCommit": false,
+        "blobSha256": null,
+        "worktreeSha256": null,
+        "MATCH": false
+      },
+      {
+        "path": "tools/verification/self-repair/phase3a-u1-final-r7-negative-control-adapter.ts",
+        "existsInCommit": false,
+        "blobSha256": null,
+        "worktreeSha256": null,
+        "MATCH": false
+      }
+    ],
+    "impact": "仅为证据绑定/标注缺陷：产品与测试文件（3 个）在 9ee36837 上的字节哈希与工作树完全一致；本轮已将原始输出与负对照文件单独落到 EVIDENCE_HEAD 并复算 MATCH=true。"
+  },
+  "runs": {
+    "databaseUrlMarker": "127.0.0.1:55432/crossclaim_p3r2_iso",
+    "positiveVitest": {
+      "exitCode": 0,
+      "tests": "65 passed (65)",
+      "testFiles": "2 passed (2)",
+      "rawFile": "tools/verification/self-repair/phase3a-u1-final-r8-vitest-raw.txt",
+      "sha256": "9d9802f8807e707cb69eab7dd04b211e24f36a26bedd0bebedb071fd26fdb68b"
+    },
+    "positiveTsc": {
+      "exitCode": 0,
+      "rawFile": "tools/verification/self-repair/phase3a-u1-final-r8-tsc-raw.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "note": "tsc 无 stdout/stderr，故原始输出为 0 字节；退出码 0 记录在同目录 run-transcript"
+    },
+    "negativeControlVitest": {
+      "exitCode": 1,
+      "tests": "2 failed | 63 passed (65)",
+      "rawFile": "tools/verification/self-repair/phase3a-u1-final-r8-negative-control-vitest-raw.txt",
+      "sha256": "ee82763c1b4210b79e40d7f74f7f2fc94356516de7184baefd6366ef9f60297d"
+    },
+    "negativeControlTsc": {
+      "exitCode": 0,
+      "rawFile": "tools/verification/self-repair/phase3a-u1-final-r8-negative-control-tsc-raw.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "transcriptFile": "tools/verification/self-repair/phase3a-u1-final-r8-run-transcript.txt",
+    "negativeControlAdapterSha256": "cbf661e79f6e1691de9aa4841022ba0d5ead275471f98df661a30ed79406a42d"
+  },
+  "allProductMatch": true,
+  "allEvidenceMatch": true,
+  "repoCleanBeforeManifestWrite": true
+}
