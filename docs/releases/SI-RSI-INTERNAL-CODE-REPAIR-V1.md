@@ -4037,3 +4037,54 @@ U1_CODE_CLOSURE = UNCHANGED · U2_DESIGN_R21 = 未重开 · BUSINESS_HEARTBEAT_R
 PRODUCTION_READY = NO · POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 TASK_STATE = AWAITING_INDEPENDENT_AUDIT
 ```
+
+---
+
+### 2.62 MSG-20261009-52 裁决归档 = **PASS WITH REVISE**（R6 文档收口有条件通过；**只读循环停止**、**不自动启动 R7**）+ 实验申请附件交付（CHANGE 101/102）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-52] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（191/191，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=2548 / NORM_LINES=83 / FNV=cc46a52a`。
+> 锚点：`BASELINE=531b6dfd`、`REVIEWED_HEAD=03e6ce91`、`U1_CODE_HEAD=9ee36837`。
+
+**独立核验**：审计范围 1 commit / 2 files、仅新增 R6 文档与 checkpoint 更新、**无产品代码变更**、
+**R6 文档 blob `698a6e0e…` 与申报一致**、已读取完整 R6 文档并核验 CHANGE 98–100 交付内容；
+未完成：SHA-256 独立复算、固定 HEAD 下产品源码逐行核对、PostgreSQL 并发实验 ⇒ **不作源码运行行为已实证通过的声明**。
+
+**逐项**：`CHANGE 98 = PASS_WITH_REVISE`、`CHANGE 99 = REVISE`、`CHANGE 100 = PASS`、`实验申请检查 = PASS_WITH_REVISE`、`R6 只读工作 = ACCEPTED_WITH_FINDINGS`、**`自动进入 R7 = NO`**。
+
+#### 2.62.1 新增要求
+
+- **CHANGE 101（P1）修正 S13b 并发反例的可达性**（审计方否证成立）：旧 reconcile 已把租约标 `EXPIRED` 后，
+  `reclaimExpired()`（要求租约仍 `ACTIVE` 且过期）**选不中**该租约 ⇒ 原 T2「任务被放回 READY」**不可达**；
+  必须给出**真实可执行**的任务重新入队路径，并在 S13b 中安排**确定性交错控制点**。
+- **CHANGE 102（P1）强化 S13a/S13c/S13d 的验收证据**：S13a 须明确「第一步 CAS 成功、第二步 `count=0`」的故障注入方式并保存**实验前后数据库快照**；
+  S13c 须同时覆盖「`ownerRef` 相同 + generation 不同」「旧实例延迟提交」「重启后同 `ownerRef` 重现」（不能只查 owner）；
+  S13d 除数据库最终状态外，还须核验**外部副作用模拟器/可信操作账本**（仅看数据库不足以证明外部副作用未发生）。
+- 精度补充：`hashtext(...)` 为 **32 位**有效哈希，转 `bigint` 不增加有效位数（不改变 CHANGE 100 结论）。
+
+#### 2.62.2 交付：实验申请附件（`CHANGE 101/102` 已并入）
+
+> 新增 `docs/releases/SI-RSI-EXPERIMENT-APPLICATION-ADDENDUM-R6.md`
+> 内容：①**修正后的可执行时序**（A/B/C 三实例；关键三条：requeue 来自**另一 reconcile 实例**、
+> `markLeaseStatus` 的 **0 行结果被忽略**（实现返回 `void`）、陈旧 `requeueTask` **只校验任务状态不校验租约归属**）；
+> ②**确定性交错控制点 CP-1~CP-4** 与 S13b 通过/失败判据；③四项验收前置（原子绑定 / 无 ACTIVE 租约前置 / generation·owner 前置 / 至少检查 `markLeaseStatus` 影响行数）；
+> ④S13a/S13c/S13d 证据强化；⑤32 位哈希精度补充。
+
+```text
+MSG-20261009-52_FINAL_VERDICT = PASS_WITH_REVISE
+R6_DOCUMENT_CLOSURE = ACCEPTED_WITH_FINDINGS
+CHANGE_98=PASS_WITH_REVISE · CHANGE_99=REVISE · CHANGE_100=PASS
+CHANGE_101=REQUIRED_P1_S13B_REACHABILITY · CHANGE_102=REQUIRED_P1_EXPERIMENT_ASSERTIONS
+READ_ONLY_LOOP = STOP · AUTO_R7 = NOT_AUTHORIZED
+EXPERIMENT_APPLICATION_SUBMISSION = ALLOWED · P3_EXPERIMENT_AUTHORIZED = NO
+R6_TASK_STATE = AWAITING_HOST_EVIDENCE_AND_EXPERIMENT_AUTHORIZATION
+NEXT_AUTHORIZED = SUBMIT_ISOLATED_EXPERIMENT_APPLICATION_WITH_CHANGE_101_102_ADDENDUM_ONLY
+F01_STATUS = OPEN_P0 · CARRIER_DECISION = HOLD · U2_IMPLEMENTATION_AUTHORIZED = NO · PRODUCTION_READY = NO
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN · EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · U1_REOPEN = NO · U2_DESIGN_R21_REOPEN = NO
+BUSINESS_HEARTBEAT_RESTORED = NO · OS_TIMER_RESTORED = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
+
+**处置**：R6 临时监督心跳按「队列为空 / 剩余事项需新增授权」停止；不自动开启 R7。

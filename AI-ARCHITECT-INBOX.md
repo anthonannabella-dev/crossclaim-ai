@@ -183755,3 +183755,198 @@ PRODUCTION_READY=NO
 
 本次只读取了仓库，没有写入、提交、推送或更改任何文件。
 ```
+
+### [MSG-20261009-52] U2 前置条件 R6 只读负结果路径收口 = **PASS WITH REVISE**（`R6_DOCUMENT_CLOSURE=ACCEPTED_WITH_FINDINGS`；逐项 `CHANGE 98 = PASS_WITH_REVISE`、`99 = REVISE`、`100 = PASS`、`实验申请检查 = PASS_WITH_REVISE`、`R6 只读工作 = ACCEPTED_WITH_FINDINGS`、**`自动进入 R7 = NO`**；**新增 CHANGE 101/102（均 P1）**；**`READ_ONLY_LOOP = STOP`**、`AUTO_R7 = NOT_AUTHORIZED`、`EXPERIMENT_APPLICATION_SUBMISSION = ALLOWED`、`P3_EXPERIMENT_AUTHORIZED = NO`、`U2_IMPLEMENTATION_AUTHORIZED = NO`、`F01_STATUS = OPEN_P0`、`CARRIER_DECISION = HOLD`、`PRODUCTION_READY = NO`、`R6_TASK_STATE = AWAITING_HOST_EVIDENCE_AND_EXPERIMENT_AUTHORIZATION`）—— **独立核验**：审计范围 `531b6dfd..03e6ce91` 为 **1 commit / 2 files**、仅涉及新增 R6 文档与 checkpoint 更新、**无产品代码变更**、**R6 文档 Git blob `698a6e0e776410fcb752cc514797594c195b76fd` 与申报一致**、已读取完整 R6 文档并核验 CHANGE 98–100 交付内容；**未完成**：独立 SHA-256 字节复算、固定 HEAD 下相关产品源码逐行核对、PostgreSQL 并发实验 ⇒ 审计方明确「**不作源码运行行为已经实证通过的声明**」；**CHANGE 98 = PASS_WITH_REVISE**（KIND-1/KIND-2 区分成立、负结果矩阵覆盖主要路径；**S13a 仍需补充确定性注入条件**）、**CHANGE 99 = REVISE**（并发风险方向成立，**但所提交 T2 时序需要修正**）、**CHANGE 100 = PASS**（advisory lock 两项边界准确，未把已有锁先例误认成 fencing 完成）；**CHANGE 101（P1）修正 S13b 并发反例的可达性**：R6 写「旧 reconcile 已将租约标为 `EXPIRED`，随后新实例调用 `reclaimExpired()`」，但按 R6 自己给出的前置条件，`reclaimExpired()` 要求租约**仍处于 `ACTIVE` 且已过期**；若旧 reconcile 已成功把同一租约改为 `EXPIRED`，则不能假设 `reclaimExpired()` 还能成功 ⇒ **T2 的任务重新进入 `READY` 必须另行证明可达**；要求给出**真实可执行的任务重新入队路径**，并在 S13b 中安排**确定性的交错控制点**，「**不得仅凭概念时序认定反例已经实证成立**」；**CHANGE 102（P1）强化 S13a/S13c/S13d 的验收证据**：**S13a** 明确第一步 CAS 成功、第二步返回 `count=0` 的故障注入方式，验证事务提交后的最终状态并保存**实验前后数据库快照**；**S13c** 同时覆盖 **`ownerRef` 相同 + generation 不同**、**旧实例延迟提交**，不能只检查 owner；**S13d** 除数据库最终状态外，还应核验**外部副作用模拟器或可信操作账本**，证明没有重复执行（**仅看数据库无法证明外部副作用未发生**）；两项修订可并入隔离实验申请的**验收附件**，**不要求启动 R7 设计循环**；**技术边界确认**：CHANGE 98 指出的主要问题合理——Prisma 交互式事务中「第一步写入成功、第二步返回业务失败并使回调正常结束」**不能保证第一步自动回滚** ⇒ `reclaimExpired()`/`settle()`/`fail()` 的**部分提交风险继续列为待实验证实的高优先级安全风险**；CHANGE 100 另有精度说明：**`hashtext(...)` 返回 32 位哈希，转 `bigint` 不会增加有效哈希位数**（不改变碰撞与协议覆盖范围结论）；**最终授权边界**：`R6 文档收口 = 有条件接受`、**`隔离实验申请提交 = 允许`**、**`隔离实验执行 = HOLD`**、**`U2 实施/生产写入/部署 = 禁止`**、**`R7 自动启动 = 不授权`**；`NEXT_AUTHORIZED=SUBMIT_ISOLATED_EXPERIMENT_APPLICATION_WITH_CHANGE_101_102_ADDENDUM_ONLY`；审计方最终结论：**同意停止 R6 只读循环**——「当前最佳路径不是继续重复文档审计，而是将 CHANGE 101/102 纳入**实验申请附件**，等待宿主提供**隔离环境、最小权限账号和明确的实验执行授权**；**没有这些条件，不得宣称 U2 前置条件已通过真实数据库验证**」；本次审计**未修改仓库**；reviewed ref `03e6ce919307bba3094d388d8d4eeeea84c709ce`
+
+```text
+MSG-20261009-52｜独立审计裁决
+PASS WITH REVISE
+
+R6 文档收口有条件通过；同意停止只读循环，不自动启动 R7。
+
+审计对象：CrossClaim AI · SI/RSI INTERNAL CODE REPAIR V1
+审计范围：531b6dfd..03e6ce91
+固定 HEAD：03e6ce919307bba3094d388d8d4eeeea84c709ce
+
+本次已通过 GitHub 连接器独立确认：
+
+审计范围为 1 commit / 2 files，仅涉及新增 R6 文档与 checkpoint 更新，无产品代码变更。
+
+R6 文档 Git blob SHA 与申报的 698a6e0e776410fcb752cc514797594c195b76fd 一致。
+
+已读取完整 R6 文档并核验 CHANGE 98–100 的交付内容。
+
+独立 SHA-256 字节复算、固定 HEAD 下相关产品源码逐行核对，以及 PostgreSQL 并发实验尚未完成。因此，不作源码运行行为已经实证通过的声明。
+
+一、逐项裁决
+
+审计项
+
+
+
+裁决
+
+
+
+说明
+
+
+
+
+CHANGE 98（P0）
+
+
+
+PASS WITH REVISE
+
+
+
+KIND-1/KIND-2 区分成立，负结果矩阵覆盖主要路径；S13a 仍需补充确定性注入条件
+
+
+
+
+CHANGE 99（P1）
+
+
+
+REVISE
+
+
+
+并发风险方向成立，但所提交 T2 时序需要修正
+
+
+
+
+CHANGE 100（P1）
+
+
+
+PASS
+
+
+
+advisory lock 两项边界准确，未将已有锁先例误认成 fencing 完成
+
+
+
+
+实验申请检查
+
+
+
+PASS WITH REVISE
+
+
+
+可以提交申请，执行仍需宿主单独授权
+
+
+
+
+R6 只读工作
+
+
+
+ACCEPTED WITH FINDINGS
+
+
+
+文档工作可以停止，但不代表技术风险解除
+
+
+
+
+自动进入 R7
+
+
+
+NO
+
+
+
+无须继续无证据增量的文档迭代
+
+二、必须保留的修订
+
+CHANGE 101（P1）：修正 S13b 并发反例的可达性。
+
+R6 写明旧 reconcile 已将租约标为 EXPIRED，随后新实例调用 reclaimExpired()。
+
+但按照 R6 自己给出的 reclaimExpired() 前置条件，该方法要求租约仍处于 ACTIVE 且已过期。若旧 reconcile 已成功将同一租约改为 EXPIRED，则不能直接假设此时 reclaimExpired() 还能成功。
+
+因此，T2 的任务重新进入 READY 必须另行证明可达。
+
+要求：给出真实可执行的任务重新入队路径，并在 S13b 中安排确定性的交错控制点。不得仅凭概念时序认定反例已经实证成立。
+
+CHANGE 102（P1）：强化 S13a、S13c、S13d 的验收证据。
+
+S13a：明确第一步 CAS 成功、第二步返回 count=0 的故障注入方式，验证事务提交后的最终状态，并保存实验前后数据库快照。
+
+S13c：同时覆盖 ownerRef 相同、generation 不同和旧实例延迟提交，不能只检查 owner。
+
+S13d：除数据库最终状态外，还应核验外部副作用模拟器或可信操作账本，证明没有重复执行。仅看数据库无法证明外部副作用未发生。
+
+上述修订可以并入隔离实验申请的验收附件，不要求启动 R7 设计循环。
+
+三、技术边界确认
+
+CHANGE 98 指出的主要问题是合理的：在 Prisma 交互式事务中，第一步数据库写入成功后，第二步返回业务失败并使事务回调正常结束，不能保证第一步自动回滚。
+
+因此，针对 reclaimExpired()、settle() 和 fail() 的部分提交风险，应继续列为待实验证实的高优先级安全风险。
+
+CHANGE 100 也有一个值得保留的精度说明：hashtext(...) 返回的是 32 位哈希值，将其转换为 bigint 不会增加有效哈希位数。这不改变 R6 关于哈希碰撞和锁协议覆盖范围的结论。
+
+不授权任何生产写入、真实 Provider 调用、自动合并、自动部署或多实例自动写入。
+
+四、最终授权边界
+
+R6 文档收口
+
+有条件接受
+
+隔离实验申请提交
+
+允许
+
+隔离实验执行
+
+HOLD
+
+U2 实施、生产写入、部署
+
+禁止
+
+R7 自动启动
+
+不授权
+五、机器可读裁决
+
+MSG-20261009-52 · Audit Decision
+
+复制
+
+AUDIT_ID=MSG-20261009-52
+DECISION=PASS_WITH_REVISE
+R6_DOCUMENT_CLOSURE=ACCEPTED_WITH_FINDINGS
+CHANGE_98=PASS_WITH_REVISE
+CHANGE_99=REVISE
+CHANGE_100=PASS
+CHANGE_101=REQUIRED_P1_S13B_REACHABILITY
+CHANGE_102=REQUIRED_P1_EXPERIMENT_ASSERTIONS
+READ_ONLY_LOOP=STOP
+AUTO_R7=NOT_AUTHORIZED
+R6_TASK_STATE=AWAITING_HOST_EVIDENCE_AND_EXPERIMENT_AUTHORIZATION
+EXPERIMENT_APPLICATION_SUBMISSION=ALLOWED
+P3_EXPERIMENT_AUTHORIZED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+F01_STATUS=OPEN_P0
+CARRIER_DECISION=HOLD
+PRODUCTION_READY=NO
+NEXT_AUTHORIZED=SUBMIT_ISOLATED_EXPERIMENT_APPLICATION_WITH_CHANGE_101_102_ADDENDUM_ONLY
+
+最终结论：同意停止 R6 只读循环。 当前最佳路径不是继续重复文档审计，而是将 CHANGE 101/102 纳入实验申请附件，等待宿主提供隔离环境、最小权限账号和明确的实验执行授权。没有这些条件，不得宣称 U2 前置条件已通过真实数据库验证。
+
+本裁决仅在当前会话提供，未修改你的 GitHub 仓库。
+```
