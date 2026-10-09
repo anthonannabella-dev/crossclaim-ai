@@ -1,10 +1,10 @@
-# PHASE 3-A · U2 设计 R4（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R5（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-26 = REVISE` → `MSG-20261009-27 = REVISE` → `MSG-20261009-28 = REVISE` →
-> `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R4_READ_ONLY_CHANGES_9_TO_12`。
-> 本文件是 **U2 设计 R4** 送审材料（MSG-20261009-29），**不含任何产品代码改动**。
-> **R4 的修订集中在 §12；§1–§10 为 R2 原文、§11 为 R3 修订（保留历史）；凡冲突者以 §12 为准。**
+> `MSG-20261009-27 = REVISE` → `MSG-20261009-28 = REVISE` → `MSG-20261009-29 = PASS WITH REVISE
+> （U2_DESIGN_APPROVED=YES_SCOPED_WITH_CONDITIONS）` → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R5_READ_ONLY_CHANGES_13_TO_15`。
+> 本文件是 **U2 设计 R5** 送审材料（MSG-20261009-30），**不含任何产品代码改动**。
+> **R5 的修订集中在 §13（最终接口 / 最终验收矩阵 / 基线可信性）；§1–§12 保留历史；凡冲突者以 §13 为准。**
 
 | 锚点 | 值 |
 | --- | --- |
@@ -12,7 +12,8 @@
 | U2 设计 R1 | `065f950e` |
 | U2 设计 R2 | `5ae09e37` |
 | U2 设计 R3 | `ac94ef8e` |
-| U2 设计 R4 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R4 | `378bfb2a` |
+| U2 设计 R5 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -506,3 +507,132 @@ sha256 = fa8ed0617c3db797a9e4e8d85b7403c697b0352291ad846e4a6a79ac010db0b8
 §9 回滚（停用入口 + 保留历史 + 禁止批量删除）、§10 未实施声明；
 `SCHEMA_MIGRATION=HOLD`；U1 封板锚点 `9ee36837` **不变**。
 本文件仍为**纯设计 R4**：未新增产品代码、未新增表、未执行迁移、未接线运行时、未调用模型。
+
+---
+
+## 13. R5 修订（对应 MSG-20261009-29 的 `REQUIRED_CHANGES = CHANGE 13–15`）
+
+> 本节是 R5 的正式修订，也是**实施前的最终契约**。§1–§12 保留历史；**凡与本节冲突者以本节为准。**
+
+### 13.1 最终输入输出契约（CHANGE 13，P1）
+
+R5 起 **唯一有效**的接口只有下面两个（§2 的 `U2CandidateInput` / `U2CandidateDecision` 自本节点起**作废**，
+仅作历史留存；不得据其实现）：
+
+```ts
+/** PLATFORM-only：U2 只处理平台级内部故障候选。 */
+export interface U2PlatformCandidateInput {
+  /** 由服务端从数据库读取的 Incident 主键；不得由调用方构造。 */
+  incidentId: string;
+  /** 请求标识：仅用于审计与幂等，不参与候选键。 */
+  requestRef: string;
+}
+
+export interface U2CandidateDecision {
+  outcome:
+    | 'CANDIDATE_INSERTED'
+    | 'CANDIDATE_REUSED'
+    | 'REJECTED';
+  /** 稳定、可断言、可审计的原因码（见 13.1.3 拒绝优先级）。 */
+  reason: string;
+  /** 仅在本调用写入或复用成功时非空；失败时恒为 null（不暴露其他候选/作用域信息）。 */
+  candidateId: string | null;
+  /** 证据摘要（§12.5 的 candidateDigest）；失败时为 null。 */
+  candidateDigest: string | null;
+  /** 恒为 false：本调用不是执行授权。 */
+  executionAuthorized: false;
+  checks: readonly { id: string; ok: boolean }[];
+}
+```
+
+**13.1.1 权威读取路径（调用方不得提供这些字段）**
+
+| 字段 | 权威来源 | 说明 |
+| --- | --- | --- |
+| `signalKey` | `AutonomyIncident` 行（按 `incidentId` 读取）的 `dedupeKey` 去掉 `incident:` 前缀 | 与输入不一致 ⇒ `INPUT_KEY_MISMATCH` |
+| `taskDedupeKey` / 关联 | `AutonomyTask.incidentId === incidentId` 的真实外键链 | 缺失或不一致 ⇒ `TASK_LINK_INVALID` |
+| `faultClass` | `AutonomyIncident.riskClass` 之外的故障类别取自既有 intake 落库字段（kind/`sourceRefs` 既有约定） | 读取失败 ⇒ `FAULT_CONTEXT_UNAVAILABLE` |
+| `faultDetectedAtUtc` | `AutonomyIncident.detectedAt`（UTC，毫秒） | — |
+| `scopeKind` / `scopeRef` | **服务端常量**：`PLATFORM` / `platform` | 任何 ACCOUNT 输入 ⇒ `SCOPE_NOT_AUTHORIZED` |
+| `baselineRef` | 服务端可信解析（§13.3） | 解析失败 ⇒ `BASELINE_UNRESOLVABLE` |
+| `builderRef` | **服务端常量字面量** `self-repair-u2-candidate-recorder@v1` | **不得**由调用方或模型填写；`AutonomyCandidate.builderRef` 为必填，INSERT 时必须写入该常量 |
+
+**13.1.2 `AutonomyCandidate` INSERT 必填字段（由服务端填充）**
+
+`taskId`（= 关联 `AutonomyTask.id`）、`dedupeKey`（§12.2 的 v2 键）、`baselineRef`（§13.3）、
+`builderRef`（上述固定字面量）；其余列沿用 schema 默认值。**不写 `status`**（保持默认，不做 UPDATE）。
+
+**13.1.3 拒绝优先级（自上而下，命中即返回，不继续后续检查）**
+
+```text
+1. SCOPE_NOT_AUTHORIZED            —— 出现 ACCOUNT 身份或任何非 PLATFORM 作用域输入
+2. TRUSTED_FACTS_CONTRACT_UNSUPPORTED —— 出现 U1 事实字段（factsSnapshotRef/factsDigest/issuedAt/组织身份）
+3. INPUT_KEY_MISMATCH              —— 调用方提供的 signalKey 等与 Incident 行不一致
+4. INCIDENT_NOT_ELIGIBLE           —— Incident 不存在 / kind≠INTERNAL_FAULT / status≠DIAGNOSED
+5. TASK_LINK_INVALID               —— 无关联 Task 或外键链不一致
+6. FAULT_CONTEXT_UNAVAILABLE       —— 既有故障上下文字段读取失败
+7. BASELINE_UNRESOLVABLE           —— baselineRef 无法可信解析
+8. BASELINE_INVALID                —— 解析结果与当前 HEAD 不一致（§13.3）
+```
+
+**13.1.4 失败语义**：任何拒绝 ⇒ `candidateId=null`、`candidateDigest=null`、`executionAuthorized=false`，
+**不返回**其他候选、其他作用域或数据库内部信息；`reason` 取上述稳定码。
+
+### 13.2 最终验收矩阵（CHANGE 14，P1）
+
+`ACTIVE` = R5 有效；`SUPERSEDED` = 语义已并入其他用例或前提消失；`NOT_AUTHORIZED` = 属未授权能力，不测。
+
+| 用例 | 状态 | 说明 / 断言要点 |
+| --- | --- | --- |
+| U2-1 同因重复 | ACTIVE | 同 signalKey 第二次 ⇒ `CANDIDATE_REUSED`，行数不增 |
+| U2-2 身份版本变化 | SUPERSEDED | 属 ACCOUNT 语义；改由 U2-18 的基线失效覆盖 |
+| U2-3 快照过期 | SUPERSEDED | U1 事实依赖已解除（§12.3） |
+| U2-4 关联完整性 | ACTIVE | 断言 `Candidate.taskId → Task.incidentId → Incident.id` **真实外键链**可枚举（不是字符串比较） |
+| U2-5 三类区分 | ACTIVE | (a) U2 自身原子事务允许；(b) 跨 U1 只读事务写 ⇒ `BLOCK`；(c) 未授权外部副作用 ⇒ `BLOCK` |
+| U2-6 重启重放 | ACTIVE | 同因不重复建候选 |
+| U2-7 并发同键 | ACTIVE | 恰好 1 行 INSERT，另一事务唯一冲突后**完整验证**再复用 |
+| U2-8 同键不同关联 | ACTIVE | ⇒ `INPUT_KEY_MISMATCH`（恶意冲突），**零写入** |
+| U2-9 事务回滚 | ACTIVE | 注入失败 ⇒ 无半成品关联 |
+| U2-10 身份版本竞争 | NOT_AUTHORIZED | ACCOUNT 不授权 |
+| U2-11 三类区分（细化） | ACTIVE | 与 U2-5 合并断言 |
+| U2-12 `INPUT_KEY_MISMATCH` | ACTIVE | 零写入 |
+| U2-13 digest 等价性 | ACTIVE | 键序/空白/等价时间表示 ⇒ 同 digest；语义变化 ⇒ 不同 digest |
+| U2-14 不同 Incident 不碰撞 | ACTIVE | 同平台同 baseline 两个不同 Incident ⇒ 两个不同键、两行 |
+| U2-15 同 Incident 重放 | ACTIVE | 仅一行，复用前完整校验 |
+| U2-16 U1 事实字段 | ACTIVE | ⇒ `TRUSTED_FACTS_CONTRACT_UNSUPPORTED`，零写入 |
+| U2-17 ACCOUNT 输入 | ACTIVE | ⇒ `SCOPE_NOT_AUTHORIZED`，零写入 |
+| **U2-18 基线失效（新）** | ACTIVE | `baselineRef` 与当前 HEAD 不一致 / 无法解析 ⇒ `BASELINE_INVALID` / `BASELINE_UNRESOLVABLE`，**不得降级接受旧候选**，零写入 |
+
+**补充断言（CHANGE 14 明确要求）**：① Task 与 Incident 必须**真实外键链**一致；② 读取到不一致的
+Task/Incident/候选关联 ⇒ 拒绝，且**不返回其他作用域的候选 ID**；③ 同键唯一冲突**只能在完整验证既有行后复用**，
+**不得**把任何数据库异常解释为成功重放。
+
+### 13.3 PLATFORM 基线可信性（CHANGE 15，P1）
+
+**13.3.1 `baselineRef` 的可信解析接口与来源**
+
+- 形态：`refs/heads/<branch>@<commit40>`（例如 `refs/heads/main@9ee36837…`）。
+- **唯一可信来源**：服务端 git 只读解析（既有仓库只读能力），**不接受**调用方传入；
+  解析产物 = `{ branchRef, commit, resolvedAt }`，其中 `commit` 必须由本地仓库对象数据库实际解析得到。
+- **固定审核基线**：U1 封板锚点 `9ee36837`（PENDING 时改为任务记录中登记的基线 commit）；
+  解析结果必须与登记的固定基线 **一致**。
+
+**13.3.2 与当前 HEAD 的比较规则**
+
+1. `baselineRef` 解析出的 `commit` 必须等于**登记的固定审核基线**；
+2. 该基线必须等于**候选写入时刻仓库的当前 HEAD**（同一只读解析调用内取得，避免 TOCTOU）；
+3. 比较失败 ⇒ 拒绝，`reason='BASELINE_INVALID'`；解析失败 ⇒ `reason='BASELINE_UNRESOLVABLE'`；
+4. **不允许**在基线检查失败时降级为「继续复用旧候选」或「沿用上一次解析结果」；
+5. 基线失效不影响既有历史行（只读保留，不做 UPDATE/DELETE）。
+
+**13.3.3 负向验收**：HEAD 不一致、`refs/heads/<branch>` 不存在、commit 无法解析、
+解析期间 HEAD 变化四类，各自断言拒绝且**零写入**，并在证据行中记录
+`{ reason, baselineCommitResolved, headAtResolve, resolvedAt }`（不含任何凭据或敏感数据）。
+
+### 13.4 R5 未变部分与边界（重申）
+
+仅 INSERT；无 UPDATE/DELETE；不新增 schema/migration；不接入 Runtime/Queue；不调用模型/Provider；
+不新增第二套 Runtime/Scheduler/Controller；回滚＝停用入口 + 保留历史；
+`SCHEMA_MIGRATION=HOLD`；U1 封板 `9ee36837` 不变；`ACCOUNT` 保持 `NOT_AUTHORIZED`；
+`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+本文件仍为**纯设计 R5**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
