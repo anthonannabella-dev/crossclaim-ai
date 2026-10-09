@@ -3989,3 +3989,51 @@ SCHEMA_MIGRATION=HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL=FORBIDDEN �
 AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN · U1_REOPEN=NO · U2_DESIGN_R21_REOPEN=NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.61 R6 只读收口交付（授权 `PHASE3_A_U2_PRECONDITION_R6_READ_ONLY_NEGATIVE_PATH_CLOSURE`）
+
+> 交付物：`docs/releases/SI-RSI-R6-NEGATIVE-PATH-CLOSURE.md`（CHANGE 98 负结果矩阵 / S13a–e 验收条件 / CHANGE 99 并发反例 / CHANGE 100 边界 / 实验申请提交前检查）
+> 基线 `531b6dfd`；U1 封板 `9ee36837` 未改动；冻结条件全部保持。
+> 本轮仅**只读源码检查 + 文档**：未修改产品代码、未连接数据库、未运行实验、未启动业务 Runtime/调度器/OS timer。
+
+**CHANGE 98（P0）—— 事务负结果路径矩阵（新发现，针对现有产品代码）**
+
+| 函数 | 两步序列 | 失败方式 | 部分提交可能 |
+| --- | --- | --- | --- |
+| `reclaimExpired()` `:295-321` | ①租约 `ACTIVE+expired → EXPIRED` ②任务 `IN_PROGRESS → READY` | 非抛出：`return false` / `return count===1` | **是** |
+| `settle()` `:328-394` | ①租约 `→ RELEASED` ②任务 `→ PROMOTED/BLOCKED` | 非抛出：`FENCED_LEASE_RACE` / `TASK_STATE_CONFLICT` | **是** |
+| `fail()` `:397-438` | ①租约 `→ RELEASED` ②任务 `→ READY/DEAD_LETTER` | 非抛出：同上 | **是** |
+| `renew()` `:440-459` | 单步 CAS | 非抛出：`FENCED_LEASE_RACE` | 否（单步；读取在事务外 ⇒ U-9） |
+| `claim` `:234-276` | ①任务 `READY→IN_PROGRESS` ②租约 upsert | 非抛出：`return false` | 需验证（悬挂任务风险） |
+
+写死区分：**KIND-1**（尚未发生写入的拒绝 ⇒ 允许）与 **KIND-2**（已发生写入后的失败 ⇒ **必须整体回滚**，不得依赖 `return false`）。
+**本轮不实施修复**（修复方案留待单独授权）。
+
+**S13 验收条件（隔离 PG16，未执行）**：S13a 部分提交（不得残留 `lease=EXPIRED/RELEASED` 而 task 未变，或反之）；S13b reconcile 跨对象竞争；S13c ABA（同 ownerRef 重现不得通过校验）；S13d 结果未知不得重放不可证明幂等的外部副作用；S13e `renew` 单步不变量。
+判定口径：一律以**数据库最终状态**为准，禁用应用返回值/日志推断。
+
+**CHANGE 99（P1）—— Reconcile 并发反例（源码已核实）**：`runRsiRestartReconcile` 顺序调用 `markLeaseStatus(→EXPIRED)` 与 `requeueTask(→READY)`，
+而 Prisma 实现是**两次独立 `updateMany`**（`rsi-reconcile-prisma-store.ts:49-61`），**无事务、未与租约 generation/owner/到期时间绑定**。
+反例时序：旧 reconcile 读快照（L 过期、T=IN_PROGRESS）→ 标 L=EXPIRED → **新实例 reclaim+claim（T→IN_PROGRESS 且租约 owner=O_new/ACTIVE）** → 旧 reconcile 的 `requeueTask` 命中 **O_new 的任务**并改回 READY ⇒ 新持有者仍持 ACTIVE 租约但任务已 READY ⇒ 可被再次领取。
+验收前置三选一：requeue 与 lease 快照原子绑定 / requeue 前置增加「该任务无 ACTIVE 租约」/ 以 lease generation·owner 作附加前置。
+
+**CHANGE 100（P1）—— advisory lock 边界**：①`hashtext(...)::bigint` 无严格一一对应、可能碰撞；②只约束**同协议**参与者 ⇒ 证明的是「仓库已有数据库事务锁先例」，**不等于** U2 fencing 已充分实现。
+
+**隔离实验申请提交前检查**：材料已就绪（范围/场景 S1–S11+S12+S13a–e/判定口径/安全退出/时长）；**但宿主前置未满足**（隔离环境 + 最小权限账号 + 单独实验执行授权）⇒ **仅可提交申请，不得执行**。
+
+```text
+R6_INTERNAL_WORK_COMPLETE = YES
+HOST_EVIDENCE_VERIFIED = NO
+CHANGE_98=收口（矩阵 + KIND-1/2 + S13a；修复留待单独授权）
+CHANGE_99=收口（并发反例 + S13b 验收前置）· CHANGE_100=收口（两项限制）
+EXPERIMENT_APPLICATION = READY_FOR_SUBMISSION_BUT_BLOCKED_ON_HOST_PREREQUISITES
+F01_STATUS = OPEN_P0 · CARRIER_DECISION = HOLD
+P3_EXPERIMENT_AUTHORIZED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · PRODUCTION_WRITE_AUTHORIZED = NO
+MULTI_INSTANCE_AUTOMATED_WRITE = NOT_AUTHORIZED · SCHEMA_MIGRATION = HOLD
+MACRO_BOUNDARY：RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN · EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+U1_CODE_CLOSURE = UNCHANGED · U2_DESIGN_R21 = 未重开 · BUSINESS_HEARTBEAT_RESTORED = NO · OS_TIMER_RESTORED = NO
+PRODUCTION_READY = NO · POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+TASK_STATE = AWAITING_INDEPENDENT_AUDIT
+```
