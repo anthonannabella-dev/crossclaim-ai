@@ -939,3 +939,58 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.14 MSG-20261009-16 裁决（U1 FINAL-R2 + CHANGE 21–23 设计）= PASS WITH REVISE；**U1 仍未关闭**（新增 CHANGE 24–25）
+
+> 归档：`AI-ARCHITECT-INBOX.md`（逐字，**FULL_COPY_OK**：原文行数 239 / 归档行数 239，缺失 0、多出 0）
+> 源文件（页面提取）：`work/self-repair/verdict-msg-20261009-16.txt`，规范化指纹 FNV1A=5333e456（与页面提取一致）
+> REVIEWED_HEAD = `28ea8fdc`；审计会话：https://chatgpt.com/c/6ac85873-4bc0-83ec-91bb-6782bec55081
+
+**A 部分（U1 FINAL-R2 修复与证据）**
+
+| 审计项 | 裁决 | 关键意见 |
+| --- | --- | --- |
+| CHANGE 17 授权唯一性 | PASS WITH REVISE | 多授权冲突拒绝正确，但**缺省资源范围需要安全约束**（→ CHANGE 24） |
+| CHANGE 18 金额与币种 | PASS | 显式货币标记、USD 校验、定点十进制比较符合要求 |
+| CHANGE 19 调用方与事实版本 | PASS WITH REVISE | 边界设计正确，可信上下文与版本来源仍需端到端证据 |
+| CHANGE 20 只读证据 | PASS WITH REVISE | 数据库拒写探针充分支持只读事务性质，**原始执行证据待复核**（→ CHANGE 25） |
+| U1_EVIDENCE_SUFFICIENCY | REVISE | 测试覆盖良好，独立可复核证据与授权范围负向矩阵尚未完全满足 |
+| U1_SCOPE_COMPLIANCE | PASS（按声明范围） | 未发现主动申请执行 / 写入 / 生产权限 |
+
+**B 部分（CHANGE 21–23，设计）**：`CHANGE21 = PASS_DESIGN_ONLY`、`CHANGE22 = PASS_DESIGN_ONLY`、
+`CHANGE23 = PASS_DESIGN_ONLY`（**仅评审设计，均不构成 U2–U5 实施授权**）。
+
+**本轮新增必须执行的修订**
+
+- **CHANGE 24（P0）必需资源范围的可信导出**：按 `actionType` 由**服务端动作策略**决定必需范围维度；
+  必需维度缺失 / 空串 / 非可信来源一律 fail-closed；真正可选的维度才允许缺省（且由服务端策略定义，不由调用者决定）；
+  并增补**单授权情况下**跨账户 / 跨 Provider / 跨司法辖区的负向测试。
+  （审计指出：多条有效授权会被拒绝，但**仅存在一条错误范围的授权时，唯一性本身不能阻止误授权**。）
+- **CHANGE 25（P1）固定 HEAD 的独立证据包**：① 固定 `REVIEWED_HEAD` 的源码 diff + 完整测试输出 + 退出码 + 测试文件对应关系；
+  ② 38 项端口测试与 6 项数据库测试的逐项名称与结果；③ 两条拒写探针**各自独立的 PostgreSQL 原始错误与事务边界**；
+  ④ 证明经**公共 U1 入口**进入只读事务（而非仅测试手工构造的端口）；⑤ 七张相关表的前后状态证据
+  （计数之外增加关键记录摘要）。
+
+**审计特别指出的执行细节（下一轮必须处理）**：两条拒写探针必须分别在**独立事务**中执行 ——
+同一事务在第一条 SQL 报错后通常已进入失败状态，第二条报错可能只是「事务已中止」，不构成对只读机制的独立证明。
+
+```text
+MSG16_VERDICT = PASS_WITH_REVISE（逐字归档 FULL_COPY_OK 239/239；FNV1A 5333e456）
+U1_CHANGE17_AUTHORIZATION_UNIQUENESS = PASS_WITH_REVISE
+U1_CHANGE18_MONETARY_EXPLICITNESS = PASS
+U1_CHANGE19_CALLER_AND_VERSION_BOUNDARY = PASS_WITH_REVISE
+U1_CHANGE20_READ_ONLY_EVIDENCE = PASS_WITH_REVISE
+U1_EVIDENCE_SUFFICIENCY = REVISE
+U1_SCOPE_COMPLIANCE = PASS（按声明范围）
+CHANGE21 / CHANGE22 / CHANGE23 = PASS_DESIGN_ONLY（仅设计，未实施）
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+REQUIRED_CHANGES = CHANGE_24_P0_REQUIRED_SCOPE_TRUST_BOUNDARY;CHANGE_25_P1_INDEPENDENT_EVIDENCE_PACKAGE
+NEXT_UNIT = PHASE3_A_U1_FINAL_R3_CHANGE24_25_ONLY（仅 U1 只读代码 + 关联测试 + 必要审计文档）
+NEXT_AUDIT = MSG-20261009-17
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```

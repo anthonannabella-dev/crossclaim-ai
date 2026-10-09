@@ -172319,3 +172319,287 @@ PRODUCTION_READY=NO
 
 最终结论：U1 只读实现方向认可，但证据及安全契约尚未达到 CLOSED 标准；CHANGE 13–16 设计有条件接受。下一轮仅允许 U1 修订及补证、设计收口，不开放 U2–U5。
 ```
+
+### [MSG-20261009-16] U1 FINAL-R2 修复与证据（CHANGE 17–20）= PASS WITH REVISE（U1 仍未关闭：EVIDENCE=REVISE、新增 CHANGE 24 P0 必需资源范围可信导出 + CHANGE 25 P1 独立证据包）；B 部分 CHANGE 21–23 = DESIGN PASS（仅设计，不授权实施）；NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R3_CHANGE24_25_ONLY / NEXT_AUDIT=MSG-20261009-17；reviewed ref 28ea8fdc
+
+```text
+MSG-20261009-16｜SI/RSI INTERNAL CODE REPAIR V1 独立审计裁决
+
+REVIEWED_HEAD： 28ea8fdc
+审计分支： feat/si-rsi-internal-code-repair-v1
+审计范围： A — U1 FINAL-R2；B — CHANGE 21–23 设计
+审计依据： 本轮送审材料、声明的测试矩阵、前序审计约束
+
+总体裁决：PASS WITH REVISE
+有条件通过
+U1 的四项修复方向合理，38 项端口测试、6 项数据库测试及类型检查构成了较完整的验收矩阵。但仍存在授权范围缺省匹配与证据可独立复核性问题，因此本轮不签发 U1 最终关闭证明。
+
+A · U1 最终关闭
+
+NO
+需最小范围补证及安全收口
+
+B · 设计评审
+
+PASS
+仅认可设计方向，不授权实施
+
+独立性声明： 本轮没有直接读取 28ea8fdc 的源码、原始测试日志或隔离 PostgreSQL 数据库。因此，下述 PASS 表示送审材料中的设计、实现描述或验证方法符合相应审计要求，不代表我已经独立复现其执行结果。对于需要源码级、运行级证据才能签发的最终关闭门禁，保持 REVISE。
+
+第一部分 A：U1 FINAL-R2 修复与证据审计
+
+A1. 六项裁决总表
+
+审计项
+裁决
+关键判断
+CHANGE 17 授权唯一性
+PASS WITH REVISE
+多授权冲突拒绝正确，但缺省资源范围需要安全约束
+CHANGE 18 金额显式性
+PASS
+显式货币标记、USD 校验、定点十进制比较符合 U1 要求
+CHANGE 19 调用方与事实版本
+PASS WITH REVISE
+边界设计正确，但可信上下文与版本来源尚需端到端证据
+CHANGE 20 只读证据
+PASS WITH REVISE
+数据库拒写探针充分支持只读事务性质，原始执行证据待复核
+U1_EVIDENCE_SUFFICIENCY
+REVISE
+测试覆盖良好，独立可复核证据及授权范围负向矩阵尚未完全满足
+U1_SCOPE_COMPLIANCE
+PASS（按声明范围）
+未发现送审范围主动申请执行、写入或生产权限
+
+A2. CHANGE 17 — 授权唯一性
+
+裁决：PASS WITH REVISE
+已满足的核心要求：
+从单行 findFirst 改为完整候选集合 findMany，避免最高版本掩盖其他有效授权。
+有效授权须同时满足撤销状态、有效期、动作与资源范围。
+多条有效授权时返回 AUTHORIZATION_AMBIGUOUS，不得任意选择。
+provenance 绑定具体授权 ID、版本与范围摘要。
+上述机制解决了上一轮的主要问题。
+但存在一个新的 P0 级边界，需要明确。
+送审规则规定：
+未提供的资源维度不构成约束。
+这意味着，当可信服务端未传入某个实际必需的 platformAccountId、provider 或 jurisdiction 时，授权匹配可能扩大到不应覆盖的资源。
+多条有效授权会被拒绝，但仅存在一条错误范围的授权时，唯一性本身不能阻止误授权。
+
+CHANGE 24（P0）：必需资源范围的可信导出
+
+要求：
+按 actionType 建立服务端决定的必需范围维度。
+必需维度缺失、空串、非可信来源，一律 fail-closed。
+真正可选的维度允许缺省，但必须由服务端动作策略定义，而非调用者决定。
+增补单授权情况下的跨账户、跨 Provider、跨司法辖区负向测试。
+此项不要求扩大 U1 成为完整策略引擎，只补足只读匹配的安全边界。
+
+A3. CHANGE 18 — 金额与币种
+
+裁决：PASS（规格与所述测试覆盖）
+本轮符合此前审计要求：
+monetaryAction 必须显式为布尔值。
+金额动作不得缺金额或币种。
+非金额动作不得夹带货币参数。
+请求与授权币种均限制为 USD。
+十进制按字符串精确比较，避免 JavaScript 浮点误差。
+授权金额上限不可解析时拒绝。
+0999.9999 与 1000.0000 的比较符合预期。
+本项不新增强制修复要求。授权上限为负值、非有限表示及非法格式应继续归入拒绝集合；建议将这些情况保留在回归矩阵中。
+
+A4. CHANGE 19 — 调用方与事实版本
+
+裁决：PASS WITH REVISE
+认可：
+仅接受可信上下文注入的 SERVER_REQUEST_GATE、RUNTIME_MEMBER。
+不接受请求字段、Builder 或模型输出自行声明可信来源。
+expectedFactVersion 不一致时返回 STALE_FACT_VERSION。
+运行时复核未确认时拒绝。
+特别认可对 Organization.updatedAt 的限制性声明：它不等于完整、单调、不可回退的事实版本。
+但必须保留两个边界：
+第一，调用方枚举不是身份凭证。 必须验证其值确实由可信组合根或经过认证的服务端入口注入，且不存在客户端可控的透传路径。
+第二，可选版本检查不等于强制版本约束。 若未来要将 U1 结果作为提交许可依据，不能允许调用者省略 expectedFactVersion 来绕过旧事实检测。
+本轮 U1 只读，因此暂不要求实现 U2 的完整版本机制，但必须明确：U1 的通过结果不能成为未来写入或提交的持久授权凭证。
+
+A5. CHANGE 20 — 只读证据
+
+裁决：PASS WITH REVISE
+证据方法比上一轮明显加强：
+以 SET TRANSACTION READ ONLY 约束同一 PostgreSQL 事务。
+在只读事务中尝试 DELETE。
+在只读事务中尝试 CREATE TABLE。
+数据库实际返回 read-only transaction 错误。
+比较七张相关表的前后计数。
+核对 Organization.updatedAt 未变化。
+静态检测仅作补充，而非主要证明。
+需要区别以下两个结论：
+结论
+判断
+被测试事务中写入语句受到 PostgreSQL 只读机制阻止
+所述测试方法可以充分证明
+U1 全部真实运行路径始终调用该只读事务
+仍须源码及路径级证据
+该测试证明整个系统不存在其他写路径
+不成立，也非 U1 要求
+特别注意： 两条拒写探针须分别使用独立事务。PostgreSQL 在第一条 SQL 报错后，事务通常进入失败状态；如果在同一事务连续执行第二条探针，第二条报错可能只是事务已中止，而非独立证明 CREATE TABLE 被只读机制拒绝。
+送审材料未给出两条探针的具体事务边界和原始数据库错误，所以此细节仍需验证。
+
+A6. 证据充分性与范围
+
+U1_EVIDENCE_SUFFICIENCY = REVISE
+本轮报告的验证结果
+38/38
+端口测试·报告通过
+6/6
+PostgreSQL·报告通过
+0
+TS 错误·报告结果
+这些结果足以支持继续进行最小安全收口，而不是要求重做整个 U1。
+
+CHANGE 25（P1）：最终独立证据包
+
+下一轮至少提交：
+固定 REVIEWED_HEAD 的源码 diff、完整测试输出、退出码及测试文件对应关系。
+38 项端口测试、6 项数据库测试的逐项名称与结果。
+两条拒写探针各自的 PostgreSQL 原始错误及独立事务边界。
+证明确实通过公共 U1 入口进入只读事务，而非仅测试手工构造的端口。
+七张相关表的前后状态证据。计数比较只能证明计数未变；如要主张内容完全未变，应增加关键记录摘要或其他状态对比。
+U1_SCOPE_COMPLIANCE = PASS（基于提交声明）。本轮没有申请 Builder、Judge、Patch Apply、外部写入、自动合并或部署权限；缺少 Linux/CI/生产测试也已如实标记，不将其误报为已完成。
+
+第二部分 B：CHANGE 21–23 设计收口审计
+
+本部分仅评审设计。所有 PASS 均不构成 U2–U5 的实施授权。
+
+B1. CHANGE 21 — 共同排序权威
+
+裁决：PASS（设计）
+设计明确禁止把数据库 CAS 自动推导为文件系统或外部系统的原子性，这一原则正确。
+认可三项强制约束：
+撤销与发布必须由共同协调机制确定顺序。
+摘要路径已经存在时必须拒绝覆盖。
+发布后必须核验实际内容与内容摘要一致。
+设计实施前还必须解决一个细节：数据库事务不能天然包裹文件系统原子操作。
+建议以持久化发布状态机表达：
+STAGED
+VERIFIED
+COMMIT_AUTHORIZED
+PUBLICATION_FENCED
+COMMITTED
+仅为设计建议，不代表已实施或已验证。COMMITTED 必须对应可证明的持久化发布完成状态。
+需要特别说明：如果采用独立文件系统发布，协调器不仅要管理 DB 状态，还必须证明提交许可与公共可见性的线性化关系。单纯在文件写入前后各检查一次撤销状态，不足以关闭竞态。
+在无法证明该关系之前，必须停留在 staging-only。
+
+B2. CHANGE 22 — Fencing 与身份规范化
+
+裁决：PASS（设计）
+认可：
+持久化、原子递增的 fencingGeneration。
+租户、事实版本、候选内容的规范化身份。
+可信侧控制 TestRunner。
+Builder 不得控制信任边界。
+环境摘要绑定镜像、依赖、入口和策略版本。
+这里增加一项未来实施时的验收要求：
+旧 fencingGeneration 的持有者，即使拥有尚未过期的历史执行结果，也不得重新获得发布权。
+应在实际提交与发布消费端验证 generation，而不仅在任务认领时验证。
+此要求可纳入 U2–U5 的后续设计验收，不要求本轮修改代码。
+
+B3. CHANGE 23 — A11/A12 故障矩阵
+
+裁决：PASS（设计）
+A11、A12 已覆盖核心故障类型：
+矩阵
+本轮认可的最低验收结果
+A11 崩溃前后
+已确认提交事实不可回退
+A11 重复 settle
+不得重复提交或制造副作用
+A11 owner 变更
+旧 owner 无权修改终态
+A11 回放
+不得重放产生重复外部副作用
+A12 并发发布
+公共发布顺序可证明
+A12 发布中断
+不完整候选不可见
+A12 重试
+不得覆盖已有摘要路径
+A12 持久化失败
+不得宣告发布成功
+还需在未来具体测试规格中定义 crash 注入点、持久化故障注入方法、线性化判定点与恢复后的可观测断言。
+这些属于后续实施前置条件，不影响本轮设计层 PASS。
+
+B4. B 部分总体结论
+
+CHANGE 21、22、23 全部 DESIGN PASS。
+但以下事项仍然禁止：
+执行 Builder 或 Judge。
+生成、应用或合并补丁。
+开启 ISOLATED_WRITE。
+开启外部写入。
+自动合并、自动部署。
+声称生产就绪。
+设计通过不等于技术实现通过，更不等于运行时安全已经得到证明。
+
+第三部分：下一轮授权及验收边界
+
+本轮建议仅登记两项新修订，不重复打开已通过的金额规则，也不扩大到 PHASE 3 的其他实施单元。
+编号
+优先级
+必须完成
+验收标准
+CHANGE 24
+P0
+可信来源确定必需资源维度，缺失则拒绝
+跨租户、账户、Provider、jurisdiction 的单授权负向测试均拒绝错误匹配
+CHANGE 25
+P1
+固定 HEAD 的独立证据包、公共入口复核、只读探针隔离
+证据可复核，测试覆盖对应真实代码路径
+授权的下一最小单元：
+PHASE3_A_U1_FINAL_R3_CHANGE24_25_ONLY
+范围仅限 U1 只读代码、关联测试及必要的审计文档。
+不授权 U2–U5 的任何实施。CHANGE 21–23 保持设计基线状态，暂不进入执行。
+下一轮 U1 关闭条件：
+CHANGE 24、25 均通过。
+不破坏已有 38+6 验证矩阵。
+新增负向测试通过。
+只读边界仍成立。
+未新增执行权限与外部副作用。
+HEAD 与证据一致且可复核。
+满足后，可在 MSG-20261009-17 申请 PHASE3_U1_IMPLEMENTATION_CLOSED=YES。U1 关闭仍不自动授权 U2–U5。
+
+MSG-20261009-16 / FINAL
+
+以下为本轮机器可读裁决，可直接复制给 Codex。
+复制裁决
+纯文本
+MSG-20261009-16 / FINAL
+AUDIT_ID=MSG-20261009-16
+REVIEWED_HEAD=28ea8fdc
+FINAL_VERDICT=PASS_WITH_REVISE
+U1_CHANGE17_AUTHORIZATION_UNIQUENESS=PASS_WITH_REVISE
+U1_CHANGE18_MONETARY_EXPLICITNESS=PASS
+U1_CHANGE19_CALLER_AND_VERSION_BOUNDARY=PASS_WITH_REVISE
+U1_CHANGE20_READ_ONLY_EVIDENCE=PASS_WITH_REVISE
+U1_EVIDENCE_SUFFICIENCY=REVISE
+U1_SCOPE_COMPLIANCE=PASS
+CHANGE21_COMMON_ORDERING_AUTHORITY=PASS_DESIGN_ONLY
+CHANGE22_FENCING_AND_IDENTITY_NORMALIZATION=PASS_DESIGN_ONLY
+CHANGE23_A11_A12_FAULT_MATRIX=PASS_DESIGN_ONLY
+SCOPE_HONESTY=PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED=NO
+PHASE3_A_U2_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE_24_P0_REQUIRED_SCOPE_TRUST_BOUNDARY;CHANGE_25_P1_INDEPENDENT_EVIDENCE_PACKAGE
+NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R3_CHANGE24_25_ONLY
+NEXT_AUDIT=MSG-20261009-17
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终审计意见： A 部分已接近 U1 关闭标准，但安全边界不能仅靠授权记录的唯一性保证，测试通过也不能替代固定版本的独立证据。B 部分三项设计可作为后续开发约束保留。下一轮应只处理 CHANGE 24–25，避免在 U1 尚未正式关闭时提前推进自主代码修复执行链。
+
+本轮未修改仓库、未触发外部系统写入，也未授予任何生产权限。
+```
