@@ -37,6 +37,110 @@ export const TRIAGE_DISPOSITIONS = [
 ] as const;
 export type TriageDisposition = (typeof TRIAGE_DISPOSITIONS)[number];
 
+/**
+ * MSG-20261009-09 / CHANGE 3 —— **可信事实来源契约**。
+ * 三个可信事实各自只允许一个来源；请求参数 / 客户端输入 / 模型输出 **一律禁止**。
+ * 该契约可执行：任何适配器都必须声明来源，声明违规即在**接线时**失败（而不是运行期悄悄放行）。
+ */
+export const TRUSTED_FACT_SOURCE_KINDS = [
+  'TRUSTED_PERSISTED_IDENTITY',
+  'SERVER_AUTHORIZATION_STATE',
+  'TRUSTED_EXECUTION_CONTEXT',
+  'REQUEST_PARAM',
+  'CLIENT_INPUT',
+  'MODEL_OUTPUT',
+  'UNKNOWN',
+] as const;
+export type TrustedFactSourceKind = (typeof TRUSTED_FACT_SOURCE_KINDS)[number];
+
+/** 禁止作为可信事实来源的种类（含 `UNKNOWN`：未声明即不可信）。 */
+export const FORBIDDEN_TRUSTED_FACT_SOURCES = [
+  'REQUEST_PARAM',
+  'CLIENT_INPUT',
+  'MODEL_OUTPUT',
+  'UNKNOWN',
+] as const;
+
+/** 每个可信事实的**唯一允许来源**。 */
+export const TRUSTED_FACT_SOURCE_REQUIREMENTS = {
+  /** 租户身份必须来自可信持久化身份关系（不是请求里的 organizationId）。 */
+  organizationIdResolved: 'TRUSTED_PERSISTED_IDENTITY',
+  /** 授权状态必须来自服务端当前授权状态（重新解析，而非调用方自报）。 */
+  authorizationActive: 'SERVER_AUTHORIZATION_STATE',
+  /** 操作复核必须来自可信执行上下文（只读 / 幂等未生效的再次确认）。 */
+  operationRecheck: 'TRUSTED_EXECUTION_CONTEXT',
+} as const;
+
+export interface TrustedFactSourceDeclaration {
+  organizationIdResolved: TrustedFactSourceKind;
+  authorizationActive: TrustedFactSourceKind;
+  operationRecheck: TrustedFactSourceKind;
+}
+
+/** 契约校验：返回违规字段清单（空数组 = 合法）。 */
+export function assertTrustedFactSources(
+  declaration: Partial<Record<keyof TrustedFactSourceDeclaration, TrustedFactSourceKind>>,
+): { ok: true } | { ok: false; reason: 'FORBIDDEN_TRUSTED_FACT_SOURCE' | 'SOURCE_MISMATCH'; offending: readonly string[] } {
+  const forbidden = FORBIDDEN_TRUSTED_FACT_SOURCES as readonly string[];
+  const offenders: string[] = [];
+  let reason: 'FORBIDDEN_TRUSTED_FACT_SOURCE' | 'SOURCE_MISMATCH' = 'SOURCE_MISMATCH';
+  for (const fact of Object.keys(TRUSTED_FACT_SOURCE_REQUIREMENTS) as (keyof TrustedFactSourceDeclaration)[]) {
+    const declared = declaration[fact];
+    if (declared === undefined) {
+      offenders.push(`${fact}:NOT_DECLARED`);
+      reason = 'FORBIDDEN_TRUSTED_FACT_SOURCE';
+      continue;
+    }
+    if (forbidden.includes(declared)) {
+      offenders.push(`${fact}:${declared}`);
+      reason = 'FORBIDDEN_TRUSTED_FACT_SOURCE';
+      continue;
+    }
+    if (declared !== TRUSTED_FACT_SOURCE_REQUIREMENTS[fact]) {
+      offenders.push(`${fact}:${declared}`);
+    }
+  }
+  if (offenders.length > 0) return { ok: false, reason, offending: offenders };
+  return { ok: true };
+}
+
+/** 契约违规错误（接线期抛出，属于 fail-closed）。 */
+export class TrustedFactSourceContractError extends Error {
+  readonly offending: readonly string[];
+
+  constructor(reason: string, offending: readonly string[]) {
+    super(`TRUSTED_FACTS_SOURCE_CONTRACT_VIOLATION:${reason}:${offending.join(',')}`);
+    this.name = 'TrustedFactSourceContractError';
+    this.offending = offending;
+  }
+}
+
+/**
+ * 可信事实解析器的**唯一推荐构造方式**：绑定来源声明并在创建时校验。
+ * 生产接线必须经由本函数（契约测试会断言：违规声明在创建时即抛错）。
+ */
+export function defineTrustedFactsResolver(
+  declaration: TrustedFactSourceDeclaration,
+  resolver: (incident: { id: string; sourceRefs: unknown }) => Promise<TriageTrustedFacts>,
+): {
+  readonly trustedFactSources: TrustedFactSourceDeclaration;
+  readonly resolveTrustedFacts: (incident: { id: string; sourceRefs: unknown }) => Promise<TriageTrustedFacts>;
+} {
+  const check = assertTrustedFactSources(declaration);
+  if (!check.ok) throw new TrustedFactSourceContractError(check.reason, check.offending);
+  return { trustedFactSources: declaration, resolveTrustedFacts: resolver };
+}
+
+/** 契约登记（供文档与测试逐项核对）。 */
+export const TRIAGE_TRUSTED_FACT_CONTRACT = {
+  requiresDeclarationPerAdapter: true,
+  verifiesAtWiringTime: true,
+  forbiddenSources: FORBIDDEN_TRUSTED_FACT_SOURCES,
+  requirements: TRUSTED_FACT_SOURCE_REQUIREMENTS,
+  /** 分流结果是**快照**：未来运行时不得无条件信任，必须自行复核。 */
+  snapshotNotAuthorization: true,
+} as const;
+
 /** PHASE 1 允许自动恢复的确定性可重试类别（与分类模块的白名单一致）。 */
 const AUTO_RECOVER_FAULT_CLASSES = ['API_TIMEOUT', 'API_RATE_LIMIT', 'DATABASE_TRANSACTION_ERROR'] as const;
 

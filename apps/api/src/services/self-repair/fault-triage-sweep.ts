@@ -18,9 +18,12 @@ import type { PrismaClient } from '@prisma/client';
 
 import { INTERNAL_FAULT_INCIDENT_KIND } from './fault-classification';
 import {
+  assertTrustedFactSources,
   triageFaultIncident,
+  TrustedFactSourceContractError,
   type FaultTriageDecision,
   type PersistedFaultIncidentRow,
+  type TrustedFactSourceDeclaration,
   type TriageTrustedFacts,
 } from './fault-triage';
 
@@ -65,7 +68,16 @@ export function createPrismaFaultTriageSweep(input: {
   resolveTrustedFacts?: (incident: { id: string; sourceRefs: unknown }) => Promise<TriageTrustedFacts>;
   /** 是否登记结论（默认 true）。登记只写 `TRIAGE_REGISTRATION_FIELDS` 三项。 */
   register?: boolean;
+  /**
+   * MSG-20261009-09 / CHANGE 3 —— 可信事实来源声明。**生产适配器必须提供**；
+   * 一旦提供即在此处校验，违规（请求参数 / 客户端输入 / 模型输出 / 未声明）**接线期抛错**。
+   */
+  trustedFactSources?: TrustedFactSourceDeclaration;
 }): FaultTriageSweep {
+  if (input.trustedFactSources !== undefined) {
+    const check = assertTrustedFactSources(input.trustedFactSources);
+    if (!check.ok) throw new TrustedFactSourceContractError(check.reason, check.offending);
+  }
   const now = (): Date => (input.now ?? (() => new Date()))();
   const register = input.register ?? true;
   const failClosedFacts: TriageTrustedFacts = {
@@ -181,4 +193,7 @@ export const FAULT_TRIAGE_SWEEP_BOUNDARY = {
   mergesJsonbWithoutLosingOtherRefs: true,
   /** 登记是**快照**，不是运行时授权凭证；运行时仍须自行复核。 */
   registrationIsSnapshotNotAuthorization: true,
+  /** MSG-20261009-09 CHANGE 3：适配器必须声明可信事实来源，违规在接线期失败。 */
+  requiresTrustedFactDeclarationForAdapters: true,
+  verifiesTrustedFactSourcesAtWiringTime: true,
 } as const;

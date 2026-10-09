@@ -351,7 +351,7 @@ PHASE 3 的实现授权须在 PHASE 2 FINAL-R2 关闭并通过独立设计审计
 | --- | --- | --- | --- |
 | 1 GATE-5 脱敏负向验收 | P1 | **本轮完成** | 见下 |
 | 2 并发登记与时间戳幂等语义 | P1 | **本轮完成** | 见下 |
-| 3 可信事实来源契约（文档 + 测试） | P1 | NOT_STARTED | — |
+| 3 可信事实来源契约（文档 + 测试） | P1 | **本轮完成** | 见下 |
 
 **CHANGE 1 实现口径**（`fault-triage.ts`）：
 
@@ -399,6 +399,25 @@ PHASE 3 的实现授权须在 PHASE 2 FINAL-R2 关闭并通过独立设计审计
 | DB-S12 jsonb 合并不丢字段 | 并发扫描后 `unrelatedRefA` / `nested` / PHASE 1 的 `faultClass` 全部完整，`triageDecision` 正确 |
 
 门禁：PHASE 2 三套件 **45/45 PASS**；`apps/api tsc --noEmit` **0 error**。审计要求的验收名 `GATE4_TRIAGE_REGISTRATION = PASS` 已达成。
+
+**CHANGE 3 实现口径（契约 + 文档 + 测试）**：
+
+- 契约正文：`docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE2-TRUSTED-FACTS-CONTRACT.md`。
+- 可执行契约（`fault-triage.ts`）：
+  · `TRUSTED_FACT_SOURCE_REQUIREMENTS`：`organizationIdResolved → TRUSTED_PERSISTED_IDENTITY`、
+    `authorizationActive → SERVER_AUTHORIZATION_STATE`、`operationRecheck → TRUSTED_EXECUTION_CONTEXT`；
+  · `FORBIDDEN_TRUSTED_FACT_SOURCES`：`REQUEST_PARAM` / `CLIENT_INPUT` / `MODEL_OUTPUT` / `UNKNOWN`（未声明即不可信）；
+  · `assertTrustedFactSources()`：返回违规字段清单（禁止来源 / 配对错位 / 未声明）；
+  · `defineTrustedFactsResolver()`：**唯一推荐**的解析器构造方式，违规声明在**创建期**抛
+    `TrustedFactSourceContractError`；
+  · `createPrismaFaultTriageSweep({ trustedFactSources })`：接线期再次校验，违规即抛错。
+- **快照语义**：分流结论只是某一时刻的快照（`snapshotNotAuthorization`）；first-write-wins 保证「计算 → 写入」之间的
+  可信事实变化**不改写**已登记内容，因此运行时**不得**把该快照当授权凭证，必须自行复核。
+
+**CHANGE 3 验收**：契约负向矩阵（三个事实 × 禁止来源）、配对错位、未声明事实、构造期抛错、合法声明可解析、
+源码级边界（不出现 `req./request.` 取值形态与 `modelOutput`、零日志）—— 共 **11 用例 PASS**；
+PHASE 2 四套件合计 **56/56 PASS**（含真实 PostgreSQL 17 用例）；`apps/api tsc --noEmit` **0 error**。
+审计验收名 `TRUSTED_FACTS_SOURCE_CONTRACT` 已达成。
 
 ## 3. 状态（截至本文件提交）
 
@@ -492,8 +511,8 @@ PHASE2_REVIEW_VERDICT = MSG-20261009-09 = PASS WITH REVISE（逐字归档 FULL_C
 PHASE2_SAFE_SCOPE_ACCEPTED = YES
 PHASE2_CLOSED = NO（待 CHANGE 1–3 后 FINAL-R2 复审 MSG-20261009-10）
 PHASE3_DESIGN_AUTHORIZED = YES_READ_ONLY（仅只读方案设计；实现授权 NO）
-PHASE2_FINAL_R2_PROGRESS = CHANGE 1 ✅（GATE5_NEGATIVE = PASS）+ CHANGE 2 ✅（GATE4_TRIAGE_REGISTRATION = PASS）→ NEXT = CHANGE 3（可信事实来源契约）
-NEXT_UNIT = PHASE 2 FINAL-R2：CHANGE 3（可信事实来源契约写入文档+测试）→ 送 MSG-20261009-10 复审
+PHASE2_FINAL_R2_PROGRESS = CHANGE 1 ✅ + CHANGE 2 ✅ + CHANGE 3 ✅（三项 P1 修订全部完成）
+NEXT_UNIT = 整理并投递 PHASE 2 FINAL-R2 复审（MSG-20261009-10）
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
