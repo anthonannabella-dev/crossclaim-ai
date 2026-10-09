@@ -2029,3 +2029,63 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.32 MSG-20261009-28 裁决归档 = **REVISE**（U2 设计 R3 方向正确，新增 CHANGE 9–12）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-28] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（172/172，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=5088 / NORM_LINES=172 / FNV=de5c9133`。
+> 锚点：`U1_CODE_HEAD=9ee36837`（继续封板）、`U2_DESIGN_COMMIT_R2=5ae09e37`、`U2_DESIGN_COMMIT_R3=ac94ef8e`。
+
+**十项**：`CHANGE5/6/7/8 = REVISE`、`U2_INPUT_OUTPUT_CONTRACT=REVISE`、
+`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=PASS_WITH_REVISE`、`U2_IMPLEMENTATION_BOUNDARY=PASS`、
+`SCOPE_HONESTY=PASS_WITH_NOTE`、`U2_DESIGN_APPROVED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`U3–U5=NO`。
+
+**REQUIRED_CHANGES（下一轮 MSG-20261009-29 仅关闭这四项）**
+
+- **CHANGE 9（P0）候选去重键缺少故障身份**：R3 §11.4 的
+  `candidate:<scopeKind>:<scopeRef>#<identityVersion|NONE>#<baselineRef>` 在「两个不同 Incident、同 PLATFORM、
+  同 `baselineRef`」下**必然碰撞**（例：`CI_FAIL:abc:100` 与 `CI_FAIL:abc:200` 得到同一 `candidateDedupeKey`），
+  在 `dedupeKey` 唯一约束下会导致第二个故障无法建候选或错误复用。修复：键改为
+  `candidate:v2:<scopeKind>:<encodedScopeRef>:<encodedSignalKey>:<identityVersion|NONE>:<encodedBaselineRef>`；
+  **signalKey 必须从已读取且验证的 Incident 派生**（不信任调用方字符串）；所有可变长字段用**无歧义编码/长度前缀**
+  防分隔符碰撞；新增「不同 Incident 不碰撞」与「同 Incident 重放只留一个」测试。
+- **CHANGE 10（P0）U1 契约与 PLATFORM 事实不匹配**：U1 的 `internal.repair.propose` 策略要求
+  `platformAccountId`+`provider`（组织/账户授权语义），**不能**自动解释为 PLATFORM 内部故障事实；
+  U1 现有输出也未证明含 U2 可校验的 Incident/Task 关联事实。修复：给出 U1 实际输入/输出与 U2 消费字段的
+  **逐字段映射**；为 PLATFORM 内部故障明确**独立可信事实来源**；做不到时必须返回
+  `REJECTED / TRUSTED_FACTS_CONTRACT_UNSUPPORTED`；**禁止**用虚构 `issuedAt`/`factsSnapshotRef`/组织身份补齐；
+  **禁止**绕过 U1 调用方白名单与作用域策略；如需扩展 U1 契约须**单独送审**。
+- **CHANGE 11（P0）当前身份版本仍缺可信裁决状态**：`VerifiedPlatformIdentity.identityVersion` 是**可选**字段，
+  该结构只证明「一次验证结果」，不证明① 哪个版本当前有效 ② 旧版本是否撤销 ③ 两次验证谁优先 ④ 是否版本回退；
+  且 PostgreSQL `READ COMMITTED` 下同事务二次读**不能**阻止之后提交的版本变更。修复：明确当前性裁决的
+  可信来源/优先级/冲突拒绝规则；明确版本切换与候选 INSERT 的**锁或串行化机制**；覆盖「第二次读取之后、
+  INSERT 提交之前」的竞争；无法保证串行化时**拒绝创建或复用 ACCOUNT 候选**；缺失/过期/冲突一律 fail-closed；
+  **本项不授权新增身份管理表或迁移**。R4 可将 ACCOUNT 明确标为 `NOT_AUTHORIZED`，只保留 PLATFORM 设计。
+- **CHANGE 12（P1）digest 与验收规范尚未成为可复算契约**：① 测试向量仍是占位符
+  （`SEAL_COMMIT`/`factsDigest`/`candidateDigest` 待填）；② **U2-13 断言与规范相反**——键序/无意义空白/
+  等价时间表示经正确规范化后应得到**相同** digest，只有规范化后的**语义字段**变化才应不同；
+  ③ `factsDigest` 计算规范缺失（白名单字段、字段类型、数组排序、空值处理、时间规范、脱敏规则、摘要版本）。
+  修复：R4 给出**完整十六进制 SHA-256 测试向量**，并用**至少两种独立实现交叉复算**。
+
+**审计方附带更正**：`R2 5ae09e37 → R3 ac94ef8e` 实际包含 **2 个提交、3 个文档文件**
+（不是「仅 1 个设计文件」）；变更清单未列 `apps/api`，但审计方注明这不等于本地完整代码树的独立一致性检查。
+
+```text
+MSG-20261009-28_FINAL_VERDICT = REVISE
+MSG-20261009-28_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 172/172；FNV1A de5c9133）
+U1_FINAL_CLOSURE = YES（保持；9ee36837 继续封板）
+U2_DESIGN_APPROVED = NO
+U2_IMPLEMENTATION_AUTHORIZED = NO
+PHASE3_A_U3_TO_U5_AUTHORIZED = NO
+REQUIRED_CHANGES = CHANGE_9_P0_CANDIDATE_KEY_COLLISION ; CHANGE_10_P0_U1_PLATFORM_FACT_CONTRACT ;
+                   CHANGE_11_P0_IDENTITY_VERSION_CURRENTNESS_AND_SERIALIZATION ;
+                   CHANGE_12_P1_DIGEST_VECTOR_AND_EQUIVALENCE
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R4_READ_ONLY_CHANGES_9_TO_12
+NEXT_AUDIT = MSG-20261009-29
+（四项关闭后）可复审 U2_PLATFORM_ONLY_INSERT_SUBSET 最小实施单元
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+```

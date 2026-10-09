@@ -174654,3 +174654,334 @@ R2 已实质修正上一轮指出的四类设计问题，但仍不能证明身�
 
 以上为基于指定 GitHub 文档、提交比较及现有 Prisma schema 的独立静态审计。未运行 PostgreSQL 并发测试、CI 或生产验证，也未向仓库写入任何内容。
 ```
+
+### [MSG-20261009-28] U2 设计 R3 = **REVISE**（新增 CHANGE 9–12；实施仍不授权）—— 十项：`CHANGE5/6/7/8 = REVISE`、`U2_INPUT_OUTPUT_CONTRACT=REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=PASS_WITH_REVISE`、`U2_IMPLEMENTATION_BOUNDARY=PASS`、`SCOPE_HONESTY=PASS_WITH_NOTE`、`U2_DESIGN_APPROVED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`；`REQUIRED_CHANGES=CHANGE9–12`：**CHANGE 9（P0）候选键缺故障身份**——`candidate:<scopeKind>:<scopeRef>#<identityVersion|NONE>#<baselineRef>` 在「两个不同 Incident、同 PLATFORM、同 baselineRef」下会碰撞（例 `CI_FAIL:abc:100` 与 `CI_FAIL:abc:200`），须改为 `candidate:v2:<scopeKind>:<encodedScopeRef>:<encodedSignalKey>:<identityVersion|NONE>:<encodedBaselineRef>`，signalKey 必须从已验证 Incident 派生且所有可变长字段用无歧义编码/长度前缀，并新增「不同 Incident 不碰撞 / 同 Incident 重放只留一个」测试；**CHANGE 10（P0）U1 契约与 PLATFORM 事实不匹配**——U1 的 `internal.repair.propose` 需要 `platformAccountId`+`provider`（组织/账户授权语义），不能等同 PLATFORM 内部故障事实，须逐字段映射 U1 实际输入输出与 U2 消费字段、为 PLATFORM 明确独立可信事实来源，做不到就返回 `REJECTED / TRUSTED_FACTS_CONTRACT_UNSUPPORTED`，禁止用虚构 issuedAt/factsSnapshotRef/组织身份补齐，禁止绕过 U1 白名单与作用域策略；**CHANGE 11（P0）身份版本当前性仍缺可信裁决**——`VerifiedPlatformIdentity.identityVersion` 可选且只证一次验证结果，不证「哪个版本当前有效/是否撤销/谁优先/是否回退」，且 READ COMMITTED 下同事务二次读不能防止之后提交的版本变更，须明确当前性裁决来源与优先级、版本切换与候选 INSERT 的锁/串行化机制、覆盖「二次读之后、INSERT 提交之前」竞争，无法保证串行化时拒绝 ACCOUNT 候选（R4 可将 ACCOUNT 标为 NOT_AUTHORIZED，只留 PLATFORM）；**CHANGE 12（P1）digest 与验收规范不成契约**——测试向量仍是占位符（SEAL_COMMIT/factsDigest/candidateDigest 待填）、U2-13 断言与规范相反（键序/空白/等价时间规范化后应得**相同** digest）、factsDigest 计算规范缺失（白名单字段/类型/数组排序/空值/时间/脱敏/摘要版本），R4 须给完整十六进制 SHA-256 向量并用两种独立实现交叉复算；审计方并指出 R2→R3 区间实为 2 个提交、3 个文档文件（非"仅一个设计文件"），但未列 apps/api 变更；NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R4_READ_ONLY_CHANGES_9_TO_12 / NEXT_AUDIT=MSG-20261009-29；四项关闭后可复审 `U2_PLATFORM_ONLY_INSERT_SUBSET` 最小实施单元；reviewed ref ac94ef8e
+
+```text
+MSG-20261009-28｜U2 设计 R3 独立审计裁决
+FINAL_VERDICT = REVISE
+审计对象： CrossClaim AI · SI/RSI INTERNAL CODE REPAIR V1
+设计提交： ac94ef8e5a63b17924677806b1d1580cdb0e70bc
+审计范围： PHASE 3-A U2 设计 R3，CHANGE 5–8
+
+一、总体裁决
+
+本轮已通过 GitHub 连接器读取 R3 提交中的原始设计文件，并比对 R2 与 R3 的提交差异。
+
+R3 的修订方向正确，但尚不能批准 U2 实施。
+
+CHANGE 5–8 已覆盖上轮指出的四类重要风险：当前身份版本选择、可信事实来源、作用域隔离、验收矩阵与摘要规范化。
+
+不过，R3 仍存在影响候选去重正确性及事务一致性的设计缺口，需要进一步收口。
+
+当前决定：
+
+U2_DESIGN_APPROVED = NO
+
+U2_IMPLEMENTATION_AUTHORIZED = NO
+
+PHASE3_A_U3_TO_U5_AUTHORIZED = NO
+
+U1_CODE_HEAD = 9ee36837，继续封板。
+
+所有生产、外写、模型调用及自动部署限制保持不变。
+
+另外，GitHub 提交对比显示，R2 5ae09e37 至 R3 ac94ef8e 包含两个提交，涉及三个文档文件，而非整个提交区间只有一个设计文件变化。当前返回的变更清单未列出 apps/api 文件，但这不能替代本地完整代码树的独立一致性检查。
+
+二、十项审计裁决
+
+审计项目
+
+裁决
+
+说明
+
+1. CHANGE5_CURRENT_IDENTITY_VERSION_AND_CONCURRENCY_FIXED
+
+REVISE
+
+可信身份来源改善，但当前版本裁决与并发串行化仍不充分
+
+2. CHANGE6_TRUSTED_FACT_REFERENCE_PROVENANCE_FIXED
+
+REVISE
+
+服务端主动获取事实正确，但与现有 U1 契约不完全匹配
+
+3. CHANGE7_TENANT_SCOPE_AND_ASSOCIATION_INTEGRITY_FIXED
+
+REVISE
+
+发现 P0 候选键碰撞问题
+
+4. CHANGE8_ACCEPTANCE_MATRIX_AND_DIGEST_CANONICALIZATION_FIXED
+
+REVISE
+
+摘要规范化改善，但测试向量与规范存在缺口
+
+5. U2_INPUT_OUTPUT_CONTRACT
+
+REVISE
+
+PLATFORM/ACCOUNT 输入类型和拒绝原因尚需统一
+
+6. U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED
+
+PASS WITH REVISE
+
+失败关闭方向正确，缺少若干关键负向用例
+
+7. U2_IMPLEMENTATION_BOUNDARY
+
+PASS
+
+仅 INSERT、禁止执行接线及外写，边界明确
+
+8. SCOPE_HONESTY
+
+PASS WITH NOTE
+
+未声称生产完成，但变更文件范围需准确表述
+
+9. U2_DESIGN_APPROVED
+
+NO
+
+设计仍存在 P0 阻断
+
+10. U2_IMPLEMENTATION_AUTHORIZED
+
+NO
+
+本轮不开放实施权限
+
+三、必须修复的设计问题
+
+CHANGE 9（P0）—— 候选去重键缺少故障身份
+
+R3 §11.4 将候选键定义为：
+
+纯文本
+
+candidate:<scopeKind>:<scopeRef>
+
+#<identityVersion|NONE>#<baselineRef>
+
+这存在确定性的逻辑缺口。
+
+当两个不同 CI 故障都属于 PLATFORM、使用相同 baselineRef 时，两个不同 Incident 将生成相同候选键。
+
+例如：
+
+纯文本
+
+Incident A = CI_FAIL:abc:100
+
+Incident B = CI_FAIL:abc:200
+
+scopeKind = PLATFORM
+
+scopeRef  = platform
+
+identityVersion = NONE
+
+baselineRef = refs/heads/main@abc
+
+结果是两个独立故障产生相同的 candidateDedupeKey。
+
+由于数据库对 dedupeKey 存在唯一约束，这可能导致第二个故障无法创建合法候选，或者落入错误的复用判断。
+
+修复要求：
+
+候选键必须同时包含故障身份与作用域身份：
+
+纯文本
+
+candidate:v2:
+
+<scopeKind>:<encodedScopeRef>:
+
+<encodedSignalKey>:
+
+<identityVersion|NONE>:
+
+<encodedBaselineRef>
+
+要求 signalKey 从已读取且验证的 Incident 派生，不得信任调用方自行提供的字符串。所有可变长度字段必须使用无歧义的编码或长度前缀，防止分隔符碰撞。
+
+必须新增测试：同一平台、同一 baseline 下两个不同 Incident 必须能创建两个不同候选；相同 Incident 重放必须只保留一个候选。
+
+CHANGE 10（P0）—— 现有 U1 适配器与 PLATFORM 事实契约不匹配
+
+我读取了实际代码：
+
+apps/api/src/services/self-repair/trusted-facts-adapter.ts
+
+其中定义的既有动作策略包括：
+
+TypeScript
+
+'internal.repair.propose': {
+
+required: ['platformAccountId', 'provider'],
+
+optional: ['domain', 'jurisdiction']
+
+}
+
+现有 U1 适配器围绕组织身份、授权记录和资源作用域提供可信事实。
+
+但 R3 §11.3 规定，PLATFORM 输入没有租户字段，同时要求 U1 返回的事实能够直接绑定 incidentId、taskId 与 PLATFORM 作用域。
+
+这里有两个未解决的问题：
+
+现有 U1 所需的组织、账户授权上下文，不等于 PLATFORM 内部故障上下文。
+
+R3 没有证明 U1 现有输出本身包含可供 U2 校验的 Incident/Task 关联事实。
+
+不能把组织授权事实自动解释成平台内部故障事实。
+
+修复要求：
+
+制定 U1 实际输入、实际输出与 U2 消费字段的逐字段映射。
+
+为 PLATFORM 内部故障明确独立的可信事实来源。
+
+如果 U1 当前不能提供该事实，必须返回 REJECTED / TRUSTED_FACTS_CONTRACT_UNSUPPORTED。
+
+不允许用虚构的 issuedAt、factsSnapshotRef 或组织身份补齐缺失事实。
+
+不允许绕过 U1 的调用方白名单与作用域策略。
+
+如需扩展 U1 契约，应单独送审，不得在 U2 实施中隐式修改封板代码。
+
+CHANGE 11（P0）—— 当前身份版本选择仍缺少可信裁决状态
+
+我读取了：
+
+apps/api/src/services/connectors/platform-identity-verifier.ts
+
+代码确实定义了：
+
+TypeScript
+
+PlatformIdentityVerification {
+
+source;
+
+evidenceRef;
+
+verifiedAt;
+
+identity;
+
+}
+
+但 VerifiedPlatformIdentity.identityVersion 是可选字段，并且这个结构本质上证明一次身份验证的结果。
+
+它并没有天然证明：
+
+哪个身份版本当前有效；
+
+旧版本是否已被撤销；
+
+两次验证结果谁优先；
+
+是否发生身份版本回退。
+
+因此，R3 所说的“唯一可信身份验证产物”尚不足以解决并存版本的当前性问题。
+
+另外，在 PostgreSQL 常见的 READ COMMITTED 隔离级别下，同一事务内读取两次相同记录，并不自动防止另一事务在第二次读取之后提交身份变更。
+
+修复要求：
+
+明确当前性裁决的可信来源、优先级和冲突拒绝规则。
+
+明确身份版本切换操作与候选 INSERT 共享的锁或串行化机制。
+
+必须覆盖“第二次读取之后、INSERT 提交之前”的版本切换竞争。
+
+无法建立有效串行化保证时，拒绝创建或复用 ACCOUNT 候选。
+
+identityVersion 缺失、证据过期、证据冲突均应失败关闭。
+
+本项不授权新增身份管理表或迁移。
+
+CHANGE 12（P1）—— Digest 与验收规范需形成真正可复算的契约
+
+R3 §11.5 已定义：
+
+纯文本
+
+sha256("u2cd:v1\n" + canonicalJson(fields))
+
+这是正确的方向，但仍需三处收口。
+
+第一，测试向量不完整。
+
+目前 SEAL_COMMIT 与 factsDigest 都是占位符，candidateDigest 也是待填常量。因此还不能作为独立复算的固定测试向量。
+
+第二，测试断言部分与规范相反。
+
+R3 U2-13 声明“字段顺序/空白/时间精度变化 ⇒ 不同 digest”。
+
+如果这些变化仅是输入 JSON 键顺序、无意义空白或等价时间表示，正确规范化后应当得到相同 digest。
+
+只有规范化后的语义字段发生变化，才应得到不同 digest。
+
+第三，factsDigest 计算规范缺失。
+
+需要明确 U1 事实的白名单字段、字段类型、数组排序、空值处理、时间规范、脱敏规则和摘要版本。
+
+修复要求是在 R4 中提供完整十六进制 SHA-256 测试向量，并用至少两种独立实现交叉复算。
+
+四、下一轮授权与验收要求
+
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R4_READ_ONLY_CHANGES_9_TO_12
+
+只允许针对上述四项问题进行设计文档修订和只读取证。
+
+下一轮 MSG-20261009-29 应当提交以下可复核结果：
+
+CHANGE 9：候选键正式语法、无歧义编码规则，以及不同 Incident 不碰撞的测试设计。
+
+CHANGE 10：U1 实际接口、返回字段与 U2 PLATFORM/ACCOUNT 输入的兼容性矩阵。
+
+CHANGE 11：当前身份版本的可信裁决来源与 PostgreSQL 并发时序证明。
+
+CHANGE 12：完整固定摘要测试向量、factsDigest 规范及规范化等价性断言。
+
+对于 ACCOUNT 作用域，如果可信当前版本机制尚不存在，可以在 R4 中明确将 ACCOUNT 候选标记为 NOT_AUTHORIZED，只保留 PLATFORM 设计。不得为了让设计通过而假定现有系统具备不存在的能力。
+
+以上四项关闭后，可以重新审查是否授权 U2_PLATFORM_ONLY_INSERT_SUBSET 这一最小实施单元；届时仍需明确只使用隔离数据库、禁止 Runtime 接线、禁止模型调用及禁止外部副作用。
+
+五、机器可读裁决
+
+以下为本轮审计输出，可直接复制给 Codex。
+
+MSG-20261009-28
+
+复制裁决
+
+最终审计状态
+
+纯文本
+
+FINAL_VERDICT=REVISE
+CHANGE5=REVISE
+CHANGE6=REVISE
+CHANGE7=REVISE
+CHANGE8=REVISE
+U2_INPUT_OUTPUT_CONTRACT=REVISE
+U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=PASS_WITH_REVISE
+U2_IMPLEMENTATION_BOUNDARY=PASS
+SCOPE_HONESTY=PASS_WITH_NOTE
+U2_DESIGN_APPROVED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PHASE3_A_U3_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE9,CHANGE10,CHANGE11,CHANGE12
+NEXT_AUDIT=MSG-20261009-29
+
+最终结论： U2 R3 已针对前轮问题作出实质性修订，但候选键缺失故障身份、U1 事实契约不匹配以及身份版本切换并发保护不足，均会影响实际实现的正确性。维持 REVISE，不开放实施。U1 已关闭状态保持不变，本轮没有修改仓库。
+```
