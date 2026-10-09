@@ -1779,3 +1779,64 @@ PRODUCTION_READY = NO
 **待用户决定（HOST_ACTION_REQUIRED）**：CHANGE 39 要求「审计方可读取的仓库地址 + 固定提交访问权限」。
 该私有仓库若保持私有，审计侧连接器无法读取；把它改为公开属于仓库可见性变更（超出当前授权边界，需用户决定）。
 备选：把包含 Git 对象的可核验离线归档（对象字节 + `git hash-object` 复算）作为会话附件交付给审计方复核。
+
+---
+
+### 2.28 MSG-20261009-24 裁决归档 = **PASS — CHANGE 39 CLOSED**（首次独立仓库核验通过）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-24] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（155/155，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=3512 / NORM_LINES=155 / FNV=7e261bb0`。
+> 本轮送审 HEAD（未改动产品代码）：`7dc317eb`。
+
+**通道变化**：审计侧的 GitHub 连接器已可直接读取 `anthonannabella-dev/crossclaim-ai`。
+因此 CHANGE 39 的「独立仓库访问」障碍解除，本轮**未**传输源码字节（不需要离线归档）。
+
+**审计方独立完成的核验（非照抄送审值）**
+
+| 项目 | 结果 |
+| --- | --- |
+| 五个指定提交是否实际存在（BASE/REVIEWED/EVIDENCE/MANIFEST/CURRENT） | 全部存在 |
+| `23604dcb → 9ee36837` | 前进 6 个提交 |
+| `9ee36837 → 23584224` | 前进 4 个提交 |
+| `9ee36837 → 23584224` 差异是否含 `apps/api` | 不含（符合产品代码未变） |
+| `23604dcb → 9ee36837` 差异是否含 `trusted-facts-adapter.ts` | 不含（符合适配器未变） |
+| 九个文件的提交归属 / git blob SHA-1 / 字节长度 / SHA-256 | **9/9 PASS**（用 GitHub 返回的 Base64 原文自行解码并独立计算 SHA-256） |
+
+**运行证据核验（基于仓库内已归档原始日志）**：正向 `65 passed / 2 files passed`（PASS）；
+负向 `2 failed / 63 passed`，失败用例正是 `U1-DB9`（事务句柄隔离断言）与 `U1-DB11`
+（事务结束后 fail-closed 断言）（PASS）；tsc 0 字节输出、exit 0 有记录；隔离库
+`127.0.0.1:55432/crossclaim_p3r2_iso`；原字节恢复与工作树 clean 均有记录。
+
+**审计方明确写下的证据边界**：「我独立验证了已归档日志的字节指纹与内容，但没有在自己的
+PostgreSQL 环境中重新运行测试，也不能由 GitHub 历史文件证明当前本机工作树仍然 clean。
+因此这里的 RUN_RECORD_VERIFIED 指原始记录的真实性和内部一致性，不等同于重新执行验收。」
+（`INDEPENDENT_TEST_RERUN=NO`）
+
+**八项正式裁决**：`CHANGE39_REPOSITORY_ACCESS_AVAILABLE=YES`、
+`CHANGE39_HEAD_EXISTENCE_VERIFIED=YES`、`CHANGE39_FILE_ATTRIBUTION_SIZE_SHA256_VERIFIED=YES`
+（`CHANGE39_FILE_COUNT_VERIFIED=9/9`）、`CHANGE39_DIFF_VERIFIED=YES`、
+`CHANGE39_RUN_RECORD_VERIFIED=YES_ARCHIVED_RECORD`、`U1_READ_ONLY_BOUNDARY_PRESERVED=PASS_SCOPED`、
+`SCOPE_HONESTY=PASS`、`PHASE3_U1_IMPLEMENTATION_CLOSED=NO · FINAL_CLOSURE_PENDING`。
+
+**最终结论**：`FINAL_VERDICT=PASS`、`CHANGE39_CLOSED=YES`、
+`INDEPENDENT_REPOSITORY_VERIFIED=YES`、`U1_FINAL_CLOSURE_REVIEW_AUTHORIZED=YES`、
+`REQUIRED_CHANGES=NONE_FOR_CHANGE39`。按上一轮约定，下一轮**直接提交 MSG-20261009-25 申请
+U1 FINAL CLOSURE**，无需重复上传九个大文件（除非 HEAD 或证据变化）。
+
+```text
+MSG-20261009-24_FINAL_VERDICT = PASS
+MSG-20261009-24_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 155/155；FNV1A 7e261bb0）
+CHANGE39_CLOSED = YES
+REQUIRED_CHANGES = NONE_FOR_CHANGE39
+INDEPENDENT_REPOSITORY_VERIFIED = YES
+INDEPENDENT_TEST_RERUN = NO
+U1_FINAL_CLOSURE_REVIEW_AUTHORIZED = YES
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO（FINAL_CLOSURE_PENDING）
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+NEXT_AUTHORIZED = PHASE3_A_U1_FINAL_CLOSURE_REQUEST_ONLY
+NEXT_AUDIT = MSG-20261009-25
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```

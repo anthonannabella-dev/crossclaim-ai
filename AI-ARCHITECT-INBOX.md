@@ -173588,3 +173588,283 @@ PRODUCTION_READY=NO
 
 本次未修改、提交或写入任何仓库文件。
 ```
+
+### [MSG-20261009-24] U1 FINAL-R8（CHANGE 39）= **PASS — CHANGE 39 CLOSED**（首次取得独立仓库核验）—— GitHub 连接器已可直接读取 anthonannabella-dev/crossclaim-ai：五个指定提交全部存在、23604dcb→9ee36837 前进 6 个提交、9ee36837→23584224 前进 4 个提交，且 9ee36837→23584224 差异不含 apps/api、23604dcb→9ee36837 差异不含 trusted-facts-adapter.ts；审计方用 GitHub 返回的 Base64 原文独立解码并自行计算 SHA-256，**九个文件 9/9 全部 PASS**（提交归属/ blob SHA-1 / 字节长度 / SHA-256），非照抄送审值；运行证据核验 65 passed/2 files、负向 2 failed/63 passed（U1-DB9/U1-DB11 预期断言失败）、tsc exit 0 空输出、隔离库 127.0.0.1:55432/crossclaim_p3r2_iso、原字节恢复与工作树 clean 均有记录；八项 = 5 YES + PASS_SCOPED/PASS + PHASE3_U1_IMPLEMENTATION_CLOSED=NO·FINAL_CLOSURE_PENDING；**INDEPENDENT_REPOSITORY_VERIFIED=YES、U1_FINAL_CLOSURE_REVIEW_AUTHORIZED=YES、REQUIRED_CHANGES=NONE_FOR_CHANGE39**、NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_CLOSURE_REQUEST_ONLY / NEXT_AUDIT=MSG-20261009-25；PHASE3_A_U2_TO_U5_AUTHORIZED=NO；证据边界：审计方未在本机 PostgreSQL 重跑测试（INDEPENDENT_TEST_RERUN=NO）；reviewed ref 7dc317eb
+
+```text
+MSG-20261009-24｜SI/RSI 独立审计裁决
+GitHub 仓库访问已验证
+
+本轮已成功通过 GitHub 连接器直接读取 anthonannabella-dev/crossclaim-ai 的指定历史提交，并取得 GitHub 返回的真实提交信息和跨提交差异。
+
+目前已独立确认：
+
+5 个指定提交均存在，包括 BASE、REVIEWED、EVIDENCE、MANIFEST 和 CURRENT HEAD。
+
+23604dcb → 9ee36837 是前进 6 个提交的历史关系。
+
+9ee36837 → 23584224 是前进 4 个提交的历史关系。
+
+9ee36837 → 23584224 的差异不包含 apps/api 下的文件，符合产品代码未变更的声明。
+
+23604dcb → 9ee36837 的差异不包含 trusted-facts-adapter.ts，符合适配器代码未变更的声明。
+
+这意味着上一轮 CHANGE 39 所要求的独立仓库访问障碍已解除。但提交存在、文件指纹正确和运行记录真实，是三个不同的审计结论，不能互相替代。
+
+一、CHANGE 39 独立复核结果
+
+CHANGE 39：PASS
+
+我进一步使用 GitHub 直接返回的 Base64 文件内容，解码为原始字节，并独立计算 SHA-256。九个文件全部匹配，不是照抄项目方提供的哈希值。
+
+文件
+
+Git blob SHA-1
+
+字节长度
+
+SHA-256
+
+1. Adapter
+
+PASS
+
+29,986 PASS
+
+PASS
+
+2. Unit Test
+
+PASS
+
+22,434 PASS
+
+PASS
+
+3. DB Test
+
+PASS
+
+36,903 PASS
+
+PASS
+
+4. Vitest Raw
+
+PASS
+
+24,489 PASS
+
+PASS
+
+5. TSC Raw
+
+PASS
+
+0 PASS
+
+PASS
+
+6. Negative Vitest
+
+PASS
+
+24,524 PASS
+
+PASS
+
+7. Negative TSC
+
+PASS
+
+0 PASS
+
+PASS
+
+8. Run Transcript
+
+PASS
+
+6,936 PASS
+
+PASS
+
+9. Negative Adapter
+
+PASS
+
+29,999 PASS
+
+PASS
+
+9/9 文件的提交归属、Git blob、字节长度、SHA-256 均符合送审预期。
+
+二、运行证据核验
+
+通过 GitHub 读取正向和负向原始 Vitest 日志，核对结果如下：
+
+核验项
+
+仓库内证据
+
+裁决
+
+正向测试
+
+65 passed / 2 files passed
+
+PASS
+
+正向 exit code
+
+Transcript 记录 0
+
+PASS（记录）
+
+TypeScript
+
+0 字节输出，exit 0 有记录
+
+PASS（记录）
+
+PostgreSQL 环境
+
+127.0.0.1:55432/crossclaim_p3r2_iso
+
+PASS（记录）
+
+负向测试
+
+2 failed / 63 passed
+
+PASS
+
+U1-DB9
+
+事务句柄隔离断言失败
+
+PASS
+
+U1-DB11
+
+事务结束后 fail-closed 断言失败
+
+PASS
+
+负向 exit code
+
+Transcript 记录 1
+
+PASS（记录）
+
+原字节恢复
+
+Transcript 记录恢复成功
+
+PASS（记录）
+
+工作树 clean
+
+Transcript 记录为空
+
+PASS（记录）
+
+特别重要的是，负向对照失败并非随机故障：原始日志明确显示 U1-DB9 和 U1-DB11 的两个预期断言失败，与 CHANGE 32 的事务隔离及生命周期约束一致。
+
+证据边界： 我独立验证了已归档日志的字节指纹与内容，但没有在自己的 PostgreSQL 环境中重新运行测试，也不能由 GitHub 历史文件证明当前本机工作树仍然 clean。因此这里的 RUN_RECORD_VERIFIED 指原始记录的真实性和内部一致性，不等同于重新执行验收。
+
+三、八项正式裁决
+
+裁决项
+
+结果
+
+CHANGE39_REPOSITORY_ACCESS_AVAILABLE
+
+YES
+
+CHANGE39_HEAD_EXISTENCE_VERIFIED
+
+YES
+
+CHANGE39_FILE_ATTRIBUTION_SIZE_SHA256_VERIFIED
+
+YES · 9/9
+
+CHANGE39_DIFF_VERIFIED
+
+YES
+
+CHANGE39_RUN_RECORD_VERIFIED
+
+YES · ARCHIVED_RECORD
+
+U1_READ_ONLY_BOUNDARY_PRESERVED
+
+PASS_SCOPED
+
+SCOPE_HONESTY
+
+PASS
+
+PHASE3_U1_IMPLEMENTATION_CLOSED
+
+NO · FINAL_CLOSURE_PENDING
+
+最终审计结论：PASS — CHANGE 39 CLOSED
+
+本轮 CHANGE 39 所要求的独立证据复核已经通过，无新的 CHANGE 39 修复要求。
+
+不过，U1 只读边界的判断限于本次核对的代码差异、测试记录及其断言范围，不代表对整个系统所有运行路径重新完成安全审计。
+
+因此按照上一轮约定：
+
+允许下一轮直接提交 MSG-20261009-25，申请 U1 FINAL CLOSURE。
+
+不需要重复上传九个大文件，除非代码 HEAD 或相关证据发生变化。
+
+不授权 U2–U5 实施，也不开放自动修复的外部执行权限。
+
+不允许自动合并、自动部署或解除生产门禁。
+
+四、发给 Codex 的机器可读裁决
+
+INI
+
+AUDIT_ID=MSG-20261009-24
+REPO=anthonannabella-dev/crossclaim-ai
+BRANCH=feat/si-rsi-internal-code-repair-v1
+BASE_HEAD=23604dcb18d960a4697a987249b398dc4bfe5567
+REVIEWED_HEAD=9ee36837
+EVIDENCE_HEAD=aa730476
+MANIFEST_HEAD=23584224
+CURRENT_HEAD=7dc317eb
+FINAL_VERDICT=PASS
+CHANGE39_CLOSED=YES
+CHANGE39_REPOSITORY_ACCESS_AVAILABLE=YES
+CHANGE39_HEAD_EXISTENCE_VERIFIED=YES
+CHANGE39_FILE_ATTRIBUTION_SIZE_SHA256_VERIFIED=YES
+CHANGE39_FILE_COUNT_VERIFIED=9/9
+CHANGE39_DIFF_VERIFIED=YES
+CHANGE39_RUN_RECORD_VERIFIED=YES_ARCHIVED_RECORD
+POSITIVE_TEST_RECORD=65_PASS
+NEGATIVE_TEST_RECORD=2_FAIL_63_PASS
+NEGATIVE_EXPECTED_FAILURES=U1-DB9,U1-DB11
+TSC_RECORD=EXIT_0_EMPTY_OUTPUT
+INDEPENDENT_TEST_RERUN=NO
+U1_READ_ONLY_BOUNDARY_PRESERVED=PASS_SCOPED
+SCOPE_HONESTY=PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED=NO
+U1_FINAL_CLOSURE_REVIEW_AUTHORIZED=YES
+INDEPENDENT_REPOSITORY_VERIFIED=YES
+PHASE3_A_U2_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=NONE_FOR_CHANGE39
+NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_CLOSURE_REQUEST_ONLY
+NEXT_AUDIT=MSG-20261009-25
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+给 Codex 的执行口径： CHANGE 39 已经关闭。下一轮只需针对固定的 U1 代码 HEAD 提交正式关闭申请，复用本轮已验证的仓库证据，并清楚声明未重新执行测试的边界。不得把此次证据验收扩展解释为 U2–U5 的实施许可或生产上线批准。
+```
