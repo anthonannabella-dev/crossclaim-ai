@@ -994,3 +994,54 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.15 PHASE 3-A · U1 FINAL-R3（CHANGE 24–25）实施与**独立证据包**
+
+> 授权：MSG-20261009-16 → `NEXT_AUTHORIZED = PHASE3_A_U1_FINAL_R3_CHANGE24_25_ONLY`
+> 代码 commit（REVIEWED_HEAD）= `612f687d`；证据包 = `tools/verification/self-repair/phase3a-u1-final-r3-evidence.json`
+> （含该 commit 的源码 diff、逐项用例名称、退出码、测试文件对应关系、DB 探针原始错误、七张表前后状态）
+> 范围：**仅** U1 只读代码 + 关联测试 + 审计文档；**不构成**队列 / Runtime / Prisma schema / 任何写路径的修改授权。
+
+**CHANGE 24（P0）必需资源范围的可信导出**
+
+- 新增**服务端动作策略** `TRUSTED_FACTS_ACTION_SCOPE_POLICY`：按 `actionType` 决定**必需 / 可选**范围维度
+  （`recovery.read` 与 `internal.repair.propose` 的必需维度 = `platformAccountId` + `provider`；`domain` / `jurisdiction` 为可选）。
+  未登记的动作类型 ⇒ `SCOPE_POLICY_NOT_DEFINED`（fail-closed，不猜测）。
+- **资源范围值改为只来自可信执行上下文**（`executionContext.resourceScope`，服务端解析注入）；
+  `resolve()` 入参**不再接受** `resourceScope` —— 调用者既不能决定必需维度，也不能通过省略维度放大匹配面。
+- 必需维度缺失 / 空串 / 非字符串 ⇒ `REQUIRED_SCOPE_MISSING`（fail-closed）。
+- 授权匹配覆盖 `provider` / `platformAccountId` / `domain` / `jurisdiction`（已提供的维度一律参与匹配，空串视为不匹配）。
+- provenance 新增 `scopePolicy`（actionType、required、optional、providedDimensions），可审计「谁决定必需维度」。
+- 单授权错误范围负向测试（审计明确要求）：**跨账户 / 跨 Provider / 跨 domain / 跨 jurisdiction** 均 ⇒ `AUTHORIZATION_NOT_FOUND`。
+
+**CHANGE 25（P1）固定 HEAD 的独立证据包**
+
+| 审计要求 | 交付 |
+| --- | --- |
+| 固定 `REVIEWED_HEAD` 的源码 diff、完整测试输出、退出码、测试文件对应关系 | `phase3a-u1-final-r3-evidence.json` 字段 `codeCommit` / `codeCommitSubject` / `u1FileSha256` / `u1DiffFromCommit` / `commands[].exitCode` / `testFileMapping`；另附原始输出 `phase3a-u1-final-r3-vitest-raw.txt`、`phase3a-u1-final-r3-tsc-raw.txt` |
+| 48 项端口测试、7 项数据库测试的逐项名称与结果 | `tests[]`（file / name / status），共 55 项，全部 `passed` |
+| 两条拒写探针**各自独立事务**及**原始 PostgreSQL 错误** | `dbProbeEvidence[]`：`DELETE_IN_READ_ONLY_TX` 与 `CREATE_TABLE_IN_READ_ONLY_TX` 各 `independentTransaction: true`，错误均为 `PrismaClientKnownRequestError` / PG `25006`，消息分别含 `cannot execute DELETE …` 与 `cannot execute CREATE TABLE …`（证明第二条不是「事务已中止」的连带错误） |
+| 证明经**公共 U1 入口**进入只读事务 | `dbProbeEvidence[]` 的 `PUBLIC_ENTRY_PROBE`：在 `resolve()` → 端口 `withReadOnlyTransaction` **实际使用的同一事务**内读到 `transaction_read_only = on`，且同事务内写入被拒（`writeRejected: true`） |
+| 七张表前后状态证据（计数 + 关键记录摘要） | `dbProbeEvidence[]` 的 `TABLE_SNAPSHOT`：七张表计数 + `Organization.updatedAt` + 授权行 `id:version:revocationState:scopeDigest` 摘要，前后 `identical: true` |
+
+**验证结果（本机实测）**：端口级 **48/48 PASS**、真实 PostgreSQL **7/7 PASS**（隔离库 `crossclaim_p3r2_iso`）、`apps/api tsc --noEmit` **0 error**。
+证据行共 5 条（1 条范围负向 + 2 条独立拒写探针 + 1 条公共入口探针 + 1 条表快照）。
+
+**未验证项（如实标注）**：Linux / systemd 实机、真实浏览器端到端、真实 Provider / 模型调用（HOLD）、CI、生产环境 = **NOT VERIFIED**。
+
+```text
+PHASE3_U1_FINAL_R3_PROGRESS = CHANGE 24 OK / CHANGE 25 OK
+PHASE3_U1_FINAL_R3_CODE_COMMIT = 612f687d
+PHASE3_U1_FINAL_R3_EVIDENCE = tools/verification/self-repair/phase3a-u1-final-r3-evidence.json（+ vitest/tsc 原始输出）
+PHASE3_U1_FINAL_R3_TESTS = 端口级 48/48 + 真实 PG 7/7 = 55/55 PASS；api tsc 0
+PHASE3_U1_FINAL_R3_DB_PROBES = 两条独立事务拒写探针（PG 25006，各自 verb）+ 公共入口 transaction_read_only=on 且写入被拒 + 七张表计数与摘要一致
+PHASE3_U1_SCOPE_VALUE_SOURCE = TRUSTED_EXECUTION_CONTEXT（请求入参已移除 resourceScope）
+PHASE3_U1_REQUIRED_SCOPE = SERVER_ACTION_POLICY（platformAccountId + provider；未登记动作 ⇒ SCOPE_POLICY_NOT_DEFINED）
+NEXT_UNIT = 送审 MSG-20261009-17（申请 PHASE3_U1_IMPLEMENTATION_CLOSED=YES；U2–U5 仍 NO）
+NEXT_AUDIT = MSG-20261009-17
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```
