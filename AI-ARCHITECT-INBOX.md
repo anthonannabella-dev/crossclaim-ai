@@ -171112,3 +171112,649 @@ RUNTIME_TESTS_EXECUTED: NO
 
 本裁决仅依据本会话提交材料作出，未修改仓库或访问外部系统。
 ```
+
+### [MSG-20261009-14] PHASE 3 设计 FINAL-R3 裁决 = PASS WITH REVISE（**PHASE3_A_MINIMAL_SCOPE_AUTHORIZED = YES：仅 U1 只读子集**；完整实施仍 NO；新增 CHANGE 13–16 与 A11/A12；NEXT=PHASE3_A_U1_READ_ONLY_IMPLEMENTATION + DESIGN_ONLY_CHANGES_13_TO_16 / NEXT_AUDIT=MSG-20261009-15）reviewed ref 46e9cd9d
+
+```text
+MSG-20261009-14｜SI/RSI INTERNAL CODE REPAIR V1 · PHASE 3 DESIGN FINAL-R3 独立复审裁决
+
+REVIEWED_HEAD：46e9cd9d
+审计分支： feat/si-rsi-internal-code-repair-v1
+审计性质： PHASE 3 FINAL-R3 只读设计收口
+审计依据： 本轮提交的 CHANGE 9–12、验收矩阵 A1–A10、实施单元 U1–U5 及未实施声明。
+
+本次仅依据送审文本作设计审查，未直接核验 Git HEAD、仓库文件或测试证据。因此，本裁决不构成代码实施验收。
+
+FINAL VERDICT
+
+PASS WITH REVISE
+
+设计主体通过，允许受限推进 PHASE 3-A；执行能力与自动修复仍不得开放。
+
+CHANGE 9–12 已覆盖上一轮要求的核心安全边界，但提交点线性化、文件系统原子性、恢复状态不变量和实施单元边界还需明确。
+
+一、逐项裁决
+
+审计项目
+
+	
+
+结果
+
+	
+
+裁决依据
+
+
+
+
+CHANGE 9：动作分类与提交协议
+
+	
+
+PASS WITH REVISE
+
+	
+
+分类合理；隔离文件写入不能直接套用 PostgreSQL CAS 原子性证明
+
+
+
+
+CHANGE 10：权威身份与幂等
+
+	
+
+PASS WITH REVISE
+
+	
+
+身份链合理；Attempt 与 Lease 的对应关系需要更严格定义
+
+
+
+
+CHANGE 11：沙箱与 Judge 信任边界
+
+	
+
+PASS WITH REVISE
+
+	
+
+三方隔离原则正确；需要不可变验证产物绑定与执行环境约束
+
+
+
+
+CHANGE 12：状态转移语义
+
+	
+
+PASS WITH REVISE
+
+	
+
+已覆盖 UNKNOWN、fencing、恢复；终态和恢复态仍有定义冲突
+
+
+
+
+A1–A10 验收矩阵
+
+	
+
+PASS WITH REVISE
+
+	
+
+覆盖主要风险；部分测试尚需细化故障注入和判定断言
+
+
+
+
+U1–U5 最小实施划分
+
+	
+
+PASS WITH REVISE
+
+	
+
+顺序总体合理；应拆开只读基础设施与真正提交能力
+
+
+
+
+DESIGN_ONLY_SCOPE_HONESTY
+
+	
+
+PASS
+
+	
+
+未宣称代码完成或真实环境验证通过
+
+综合结论：PHASE3_DESIGN_R3_ACCEPTED = YES。
+
+这里的 YES 表示设计框架可以作为受限实施的基础，不表示所有设计细节已经通过无条件验收。
+
+二、必须落实的修订
+CHANGE 13（P0）—— 分离数据库提交与隔离文件提交的线性化协议
+
+当前 CHANGE 9 将授权版本 CAS、intent/outcome 和唯一提交点用于各类允许写入动作，整体方向正确，但有一个关键区别。
+
+PostgreSQL 内部提交可以通过同一事务中的授权状态锁定和条件更新建立线性化顺序。
+
+隔离工作区文件写入则不能仅依靠数据库 CAS 宣称与撤销原子化。
+
+必须补充：
+
+PURE_READ 不构成副作用提交，但仍须检查租户、授权和数据访问范围。
+
+ISOLATED_WRITE 必须定义隔离工作区内的 staging、原子发布、不可变摘要和清理机制。
+
+如果撤销检查与文件发布不能建立可验证的统一顺序，则不得宣称“撤销后绝无写入”。
+
+无法证明顺序时，必须退回 BLOCK，或限制为不向其他组件暴露的临时产物。
+
+REVERSIBLE_INTERNAL_COMMIT 和 IRREVERSIBLE_OR_EXTERNAL 继续保持 NOT_AUTHORIZED。
+
+关闭标准： 每种允许写入的动作均有独立的提交点、授权时效模型和失败恢复定义，不允许把数据库 CAS 的保证扩展到文件系统或外部系统。
+
+CHANGE 14（P0）—— 消除状态终态与 RECOVERING 的语义冲突
+
+当前 §11 中存在两处需要收口的地方。
+
+首先，CANCELED_BEFORE_COMMIT、REJECTED_AT_COMMIT 和 SETTLED 被定义为终态，但同时允许“任意状态 → RECOVERING”。
+
+其次，REJECTED_AT_COMMIT 必须与“提交结果无法确认”严格分离。
+
+要求：
+
+已有可信终态凭证的状态不得进入会覆盖业务事实的 RECOVERING。
+
+RECOVERING 应优先建模为独立恢复作业或恢复控制状态，而非覆盖不可逆的提交事实。
+
+只有权威机制明确确认未提交时，才允许 REJECTED_AT_COMMIT。
+
+已确认 COMMITTED 后，即使 settle 失败，也不能回退为取消或拒绝提交。
+
+COMMIT_OUTCOME_UNKNOWN 不得根据超时自动转成 REJECTED_AT_COMMIT。
+
+SETTLED 必须携带明确的最终结果类型，不得默认等价于成功执行。
+
+必须证明提交事实、任务执行状态、恢复控制状态三者可以独立表达，且不发生事实覆盖。
+
+CHANGE 15（P1）—— 收紧 Candidate、Task、Attempt 的身份和幂等边界
+
+当前合同写明“Attempt 由 lease 唯一标识”，需要明确历史 Attempt 和当前 Lease 的区别。
+
+要求：
+
+每次实际认领生成可追踪的唯一 attemptId 或持久化等价标识。
+
+leaseId、fencingToken、attemptId 必须有明确对应关系。
+
+Lease 续约不得无意生成新的业务 Attempt。
+
+同一任务重新认领必须增加 fencing 世代。
+
+Candidate 的去重键应以服务端解析的权威目标、任务类型和事实版本为输入，且包含必要的租户隔离维度。
+
+去重冲突不得静默丢弃事实不同的候选；应返回已有记录或产生显式冲突证据。
+
+identityVersion 失效后，旧 Attempt 不得继续提交，但历史审计事实必须保留。
+
+CHANGE 16（P1）—— 强化验证产物绑定与沙箱失效条件
+
+Judge 的可信输入必须绑定：
+
+baselineCommit + candidateDigest + verificationPolicyVersion + testEnvironmentDigest + testResultDigest
+
+同时明确：
+
+Builder 不能控制 TestRunner 的执行程序、策略和结果存储。
+
+禁止未经许可的网络访问、凭据读取、宿主挂载和特权容器操作。
+
+不允许从不可信工作区直接执行未经约束的 hooks 或测试入口。
+
+路径验证须处理符号链接、硬链接、目录替换、子模块及其他逃逸路径。
+
+realpath 本身不足以消除 TOCTOU，实际打开和写入操作必须采用安全的文件句柄及目录约束。
+
+隔离失败、超时、结果缺失或摘要不一致一律 NO_PASS。
+
+Judge 输出必须显式记录：
+
+VERIFICATION_PASS != SECURITY_APPROVAL != MERGE_AUTHORIZATION != DEPLOY_AUTHORIZATION
+
+三、A1–A10 验收矩阵复核
+
+测试
+
+	
+
+裁决
+
+	
+
+关键补充
+
+
+
+
+A1
+
+	
+
+保留，P0
+
+	
+
+撤销/提交双方向竞争，证明唯一顺序
+
+
+
+
+A2
+
+	
+
+保留，P0
+
+	
+
+崩溃点覆盖提交前、提交后、outcome 写入前
+
+
+
+
+A3
+
+	
+
+保留
+
+	
+
+Judge PASS 后修改候选及验证记录，均须拒绝
+
+
+
+
+A4
+
+	
+
+保留
+
+	
+
+身份漂移同时覆盖旧 worker 与恢复 worker
+
+
+
+
+A5
+
+	
+
+保留
+
+	
+
+证明事实重新读取，不只是刷新时间戳
+
+
+
+
+A6
+
+	
+
+保留
+
+	
+
+预算包含已用、预留、失败计费与恢复
+
+
+
+
+A7
+
+	
+
+扩展，P0
+
+	
+
+加入目录替换、硬链接、受控文件句柄测试
+
+
+
+
+A8
+
+	
+
+保留
+
+	
+
+证明拒绝结果无法被 Builder 覆盖
+
+
+
+
+A9
+
+	
+
+保留
+
+	
+
+验证动作准入层实际阻断越权请求
+
+
+
+
+A10
+
+	
+
+保留
+
+	
+
+并发插入、唯一约束、事务回滚、重复投递
+
+另外增加两项实施验收要求：
+
+A11 — Terminal State Integrity
+
+验证已经权威确认的终态不能被崩溃恢复或旧 fencing owner 改写。
+
+A12 — Workspace Publication Boundary
+
+验证文件发布与撤销存在竞争时，系统能够证明其允许的顺序；无法证明时必须拒绝公开候选产物。
+
+A1–A12 仅是后续实施验收要求，本轮均不宣称已通过。
+
+四、PHASE 3-A 最小实施范围裁决
+
+批准进入受限的 PHASE 3-A，但仅授权 U1 的严格只读子集。
+
+PHASE 3-A · U1
+
+受限授权
+
+允许范围： 权威可信事实读取适配器、服务端来源解析、租户隔离校验、provenance 只读链路、失败关闭判断及对应只读测试。
+
+明确禁止： 写业务表、创建实际候选执行任务、接入 runtime 自动执行、修改队列认领语义、提交补丁、生成可执行修复动作、触发外部副作用。
+
+实施单元
+
+	
+
+本轮授权
+
+	
+
+说明
+
+
+
+
+U1 权威适配器与 provenance
+
+	
+
+YES — READ-ONLY ONLY
+
+	
+
+满足前置条件后可实施
+
+
+
+
+U2 候选记录及关联
+
+	
+
+NO
+
+	
+
+需 U1 验收后独立送审
+
+
+
+
+U3 提交协议
+
+	
+
+NO
+
+	
+
+CHANGE 13/14 关闭前不得开放
+
+
+
+
+U4 沙箱与验证
+
+	
+
+NO
+
+	
+
+需隔离威胁模型及独立验收
+
+
+
+
+U5 状态恢复与预算
+
+	
+
+NO
+
+	
+
+需持久化事实模型及恢复测试设计
+
+U1 开始实施的前置条件
+
+固定 46e9cd9d 作为本轮设计评审锚点，实施采用独立可追溯提交。
+
+给出 U1 文件白名单、接口签名、可信数据来源及非目标。
+
+runtimeSourceIsolationImplemented = false 继续作为阻断执行接线的硬门，不得通过本轮 U1 绕过。
+
+验证所有外部输入不能伪造租户、Incident 来源、可信主体和 provenance。
+
+不修改 Prisma schema/migration、既有任务队列、runtime 控制流或封板分支。
+
+实施后提供测试命令、退出码、真实数据库适用范围和证据摘要，再申请 U1 实现审计。
+
+注意： 此授权是设计层面的范围许可，不代表 U1 实施完成，更不代表授权无人值守代码修复。
+
+五、剩余风险
+
+风险
+
+	
+
+等级
+
+	
+
+当前控制
+
+
+
+
+文件提交与撤销竞态
+
+	
+
+P0
+
+	
+
+U3/U4 禁止实施
+
+
+
+
+UNKNOWN 状态被误判未提交
+
+	
+
+P0
+
+	
+
+禁止自动重试副作用
+
+
+
+
+身份漂移造成跨租户执行
+
+	
+
+P0
+
+	
+
+U1 只读 + fail-closed
+
+
+
+
+Builder 污染 TestRunner/Judge
+
+	
+
+P0
+
+	
+
+U4 未授权
+
+
+
+
+恶意补丁执行与宿主逃逸
+
+	
+
+P0
+
+	
+
+禁止实际 Builder 执行
+
+
+
+
+历史测试债、残留载荷
+
+	
+
+P1
+
+	
+
+不计入本次关闭范围
+
+
+
+
+Linux/systemd、CI、真实 Provider 未验证
+
+	
+
+P1
+
+	
+
+生产开闸继续 HOLD
+
+六、最终机器可读裁决
+纯文本
+AUDIT_ID = MSG-20261009-14
+REVIEWED_HEAD = 46e9cd9d
+AUDIT_TYPE = PHASE3_DESIGN_FINAL_R3_READ_ONLY
+
+FINAL_VERDICT = PASS_WITH_REVISE
+
+CHANGE9_ACTION_CLASSIFICATION_AND_COMMIT_PROTOCOL = PASS_WITH_REVISE
+CHANGE10_AUTHORITATIVE_IDENTITY_AND_IDEMPOTENCY_CONTRACT = PASS_WITH_REVISE
+CHANGE11_SANDBOX_AND_JUDGE_TRUST_BOUNDARY = PASS_WITH_REVISE
+CHANGE12_STATE_TRANSITION_SEMANTICS = PASS_WITH_REVISE
+
+ACCEPTANCE_MATRIX_A1_TO_A10 = PASS_WITH_REVISE
+MINIMAL_IMPLEMENTATION_UNITS_U1_TO_U5 = PASS_WITH_REVISE
+DESIGN_ONLY_SCOPE_HONESTY = PASS
+
+PHASE3_DESIGN_R3_ACCEPTED = YES
+PHASE3_IMPLEMENTATION_AUTHORIZED = NO
+PHASE3_A_MINIMAL_SCOPE_AUTHORIZED = YES
+PHASE3_A_AUTHORIZED_UNITS = U1_READ_ONLY_SUBSET
+
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+PHASE3_U2_TO_U5_AUTHORIZED = NO
+
+AUTONOMOUS_CODE_REPAIR_AUTHORIZED = NO
+BUILDER_EXECUTION_AUTHORIZED = NO
+JUDGE_EXECUTION_AUTHORIZED = NO
+PATCH_APPLY_AUTHORIZED = NO
+
+EXTERNAL_WRITE = HOLD
+REAL_PROVIDER_EXECUTION = NOT_AUTHORIZED
+AUTO_MERGE = FORBIDDEN
+AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+
+REQUIRED_CHANGES =
+  CHANGE_13_P0_FILESYSTEM_COMMIT_LINEARIZATION
+  CHANGE_14_P0_TERMINAL_STATE_RECOVERY_SEMANTICS
+  CHANGE_15_P1_CANDIDATE_ATTEMPT_IDENTITY_CONTRACT
+  CHANGE_16_P1_SANDBOX_VERIFICATION_ARTIFACT_BINDING
+
+ADDITIONAL_ACCEPTANCE =
+  A11_TERMINAL_STATE_INTEGRITY
+  A12_WORKSPACE_PUBLICATION_BOUNDARY
+
+NEXT_AUTHORIZED =
+  PHASE3_A_U1_READ_ONLY_IMPLEMENTATION
+  PLUS_DESIGN_ONLY_CHANGES_13_TO_16
+
+NEXT_AUDIT = MSG-20261009-15
+七、最终结论与下一步指令
+
+MSG-20261009-14 = PASS WITH REVISE。
+
+PHASE 3 FINAL-R3 的设计已经具备受限实施基础。CHANGE 9–12 解决了主要架构问题，剩余问题集中在关键语义证明和安全边界上，尚不足以授权真正的自主修复执行。
+
+下一轮 MSG-20261009-15 仅接收两类内容：
+
+U1 只读实现及验证证据：权威来源、租户绑定、provenance、fail-closed，不允许任何执行接线。
+
+CHANGE 13–16 的只读设计修订：同步补齐 A11/A12，并给出状态及提交协议的精确定义。
+
+两部分必须分别呈现证据和结果，不能用 U1 的实现通过代替 U2–U5 的设计或实施验收。
+
+最终执行边界：可以开始构建可信的只读事实基础，但不得开始自主代码修复、补丁应用、自动合并或生产部署。
+```
