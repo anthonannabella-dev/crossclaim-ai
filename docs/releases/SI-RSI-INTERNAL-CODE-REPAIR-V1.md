@@ -345,6 +345,36 @@ PHASE 3 的实现授权须在 PHASE 2 FINAL-R2 关闭并通过独立设计审计
 未验证 CI·Linux·systemd（P2）/ PHASE 3 代理越权修复代码（P0 未来）/
 生产真实 Provider 与外写未验证（P0 上线，继续 HOLD）。
 
+### 2.5 PHASE 2 FINAL-R2 进度（MSG-20261009-09 指定的三项修订）
+
+| CHANGE | 级别 | 状态 | 证据 |
+| --- | --- | --- | --- |
+| 1 GATE-5 脱敏负向验收 | P1 | **本轮完成** | 见下 |
+| 2 并发登记与时间戳幂等语义 | P1 | NOT_STARTED | — |
+| 3 可信事实来源契约（文档 + 测试） | P1 | NOT_STARTED | — |
+
+**CHANGE 1 实现口径**（`fault-triage.ts`）：
+
+- 新增**值域校验**（`validatesPayloadValueDomains`）：`faultClass` / `requiredAction` / `replayDisposition` /
+  `operationKind` / `idempotencyGuarantee` / `ownerGatedAction` 必须落在既有封闭值域内，否则整条载荷 fail-closed
+  （`PAYLOAD_VALUE_NOT_CANONICAL`）。
+- 由此**结构性**保证：被篡改成携带任意文本的字段既不会被当作语义使用，也**不可能**经由分流返回值外泄 ——
+  例如对账要求文本原会拼接 `faultClass:operationKind`，值域校验后该串只可能由规范枚举拼接而成。
+- 登记的三项仍为服务端固定字段（`triageDecision` / `triageReason` / `triagedAt`），只写枚举码与 ISO 时间。
+- **未改动历史故障载荷的保留策略**（审计明确要求）：测试只观察登记边界，不重写既有字段。
+
+**CHANGE 1 验收（真实 PostgreSQL + 纯函数）**：
+
+| 用例 | 结论 |
+| --- | --- |
+| 纯函数 DB-等价负向矩阵（6 个字段逐一被塞入 `sk-DUMMYKEY-…` / 邮箱 / `<script>` / `/etc/passwd`） | 一律 `BLOCK_HUMAN_REVIEW` + `PAYLOAD_VALUE_NOT_CANONICAL`，且 `JSON.stringify(decision)` 不含任何注入文本 |
+| 对账路径文本规范性 | `reconciliationRequirement` 形如 `^[A-Z_]+:[A-Z_]+ `，**不可能**夹带自由文本 |
+| DB-S9 真实登记路径 | 恶意载荷（含未知键 `attackerExtraKey`）⇒ 结论与返回值零泄露；登记的三个字段均为规范值；**历史字段与未知键保持原样**；零任务零租约 |
+| DB-S10 历史残留摘要 | 历史 `summary` 含敏感残留时，**扫描返回值仍不夹带**（登记边界不外泄） |
+| 回归 | 正常载荷行为不变（A 路径 / 修复候选各自如常） |
+
+门禁：PHASE 2 三套件 **43/43 PASS**；`apps/api tsc --noEmit` **0 error**。审计要求的验收名 `GATE5_NEGATIVE = PASS` 已达成。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -437,7 +467,8 @@ PHASE2_REVIEW_VERDICT = MSG-20261009-09 = PASS WITH REVISE（逐字归档 FULL_C
 PHASE2_SAFE_SCOPE_ACCEPTED = YES
 PHASE2_CLOSED = NO（待 CHANGE 1–3 后 FINAL-R2 复审 MSG-20261009-10）
 PHASE3_DESIGN_AUTHORIZED = YES_READ_ONLY（仅只读方案设计；实现授权 NO）
-NEXT_UNIT = PHASE 2 FINAL-R2：CHANGE 1（GATE-5 脱敏负向）→ CHANGE 2（并发登记与时间戳幂等语义，含 JSON 不丢失其它引用）→ CHANGE 3（可信事实来源契约文档+测试）→ 送 MSG-20261009-10
+PHASE2_FINAL_R2_PROGRESS = CHANGE 1 ✅（GATE5_NEGATIVE = PASS）→ NEXT = CHANGE 2（并发登记与时间戳幂等语义，含 JSON 不丢失其它引用）
+NEXT_UNIT = PHASE 2 FINAL-R2：CHANGE 2（并发登记与时间戳幂等语义）→ CHANGE 3（可信事实来源契约）→ 送 MSG-20261009-10
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```

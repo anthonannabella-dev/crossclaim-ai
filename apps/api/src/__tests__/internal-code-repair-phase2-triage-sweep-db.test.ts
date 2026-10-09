@@ -222,4 +222,77 @@ describe(`PHASE 2 分流扫描 × 真实 PostgreSQL（${testDatabaseMarker()}）
     expect(row.status).toBe('CLOSED');
     expect((row.sourceRefs as Record<string, unknown>).triageDecision).toBeUndefined();
   });
+
+  /**
+   * MSG-20261009-09 / CHANGE 1 —— GATE-5 负向验收（真实登记写入路径）。
+   */
+  it('DB-S9 恶意载荷：登记字段只写规范值，恶意自由文本不落库也不经返回值泄露', async () => {
+    const id = await seed({ ...BASE, errorCode: 'PROVIDER_TIMEOUT', operationKind: 'READ_ONLY' });
+    const secrets = [
+      'sk-DUMMYKEY-9f8e7d6c5b4a3210',
+      'buyer@example.test',
+      '/etc/crossclaim/secrets/provider.key',
+      'TOKEN=abcd1234efgh5678',
+      '<img src=x onerror=alert(1)>',
+    ];
+    // 篡改「历史载荷」：把恶意文本塞进既有字段与一个未知键（**不修改历史保留策略**，只观察登记边界）
+    await prisma.$executeRaw`
+      UPDATE "AutonomyIncident"
+         SET "sourceRefs" = "sourceRefs" || ${JSON.stringify({
+           faultClass: secrets[0],
+           operationKind: secrets[2],
+           summary: secrets[1] + ' ' + secrets[4],
+           attackerExtraKey: secrets[3],
+         })}::jsonb
+       WHERE "id" = ${id}
+    `;
+
+    const sweep = createPrismaFaultTriageSweep({
+      prisma,
+      now: () => T0,
+      resolveTrustedFacts: async () => ({ ...TRUSTED }),
+    });
+    const result = await sweep.sweepOnce();
+
+    // ① 结论本身不含任何注入文本
+    const serialized = JSON.stringify(result);
+    for (const secret of secrets) expect(serialized).not.toContain(secret);
+    expect(result.decisions[0]!.disposition).toBe('BLOCK_HUMAN_REVIEW');
+    expect(result.decisions[0]!.reason).toBe('PAYLOAD_VALUE_NOT_CANONICAL');
+
+    // ② 登记字段只写规范值
+    const row = await prisma.autonomyIncident.findUniqueOrThrow({ where: { id } });
+    const refs = row.sourceRefs as Record<string, unknown>;
+    expect(String(refs.triageDecision)).toMatch(/^[A-Z_]+$/);
+    expect(String(refs.triageReason)).toMatch(/^[A-Z_]+$/);
+    expect(refs.triagedAt).toBe(T0.toISOString());
+    for (const secret of secrets) {
+      expect(String(refs.triageDecision)).not.toContain(secret);
+      expect(String(refs.triageReason)).not.toContain(secret);
+      expect(String(refs.triagedAt)).not.toContain(secret);
+    }
+    // ③ 历史载荷（含未知键）保持原样，未被登记流程改写
+    expect(refs.attackerExtraKey).toBe(secrets[3]);
+    expect(refs.summary).toBe(secrets[1] + ' ' + secrets[4]);
+
+    // ④ 零执行
+    expect(await prisma.autonomyTask.count()).toBe(0);
+    expect(await prisma.autonomyLease.count()).toBe(0);
+  });
+
+  it('DB-S10 历史载荷含敏感摘要时，扫描返回结果仍不夹带（登记边界不外泄）', async () => {
+    const id = await seed({ ...BASE, errorName: 'AdapterMappingError' });
+    await prisma.$executeRaw`
+      UPDATE "AutonomyIncident"
+         SET "sourceRefs" = "sourceRefs" || ${JSON.stringify({ summary: 'legacy residue token=abcd1234efgh5678' })}::jsonb
+       WHERE "id" = ${id}
+    `;
+    const result = await createPrismaFaultTriageSweep({
+      prisma,
+      now: () => T0,
+      resolveTrustedFacts: async () => ({ ...TRUSTED }),
+    }).sweepOnce();
+    expect(JSON.stringify(result)).not.toContain('abcd1234efgh5678');
+    expect(result.decisions[0]!.disposition).toBe('CODE_REPAIR_CANDIDATE');
+  });
 });

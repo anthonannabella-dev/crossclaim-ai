@@ -240,9 +240,65 @@ describe('PHASE 2 分流 —— 契约与边界', () => {
       requiresTrustedServerFacts: true,
       externalWriteAlwaysHold: true,
       failClosedOnMalformedPayload: true,
+      validatesPayloadValueDomains: true,
       requiresRuntimeRecheck: true,
       autoRecoverIsNotExecutionAuthorization: true,
       phase3RepairAgentImplemented: false,
     });
+  });
+});
+
+/**
+ * MSG-20261009-09 / CHANGE 1 —— GATE-5 负向验收（纯函数层）：
+ * 被篡改成携带**任意文本 / 凭据形状文本**的载荷字段，既不得被当作语义使用，
+ * 也不得经由分流结论（含对账要求文本）回传 —— 值域校验必须 fail-closed。
+ */
+describe('PHASE 2 / CHANGE 1 GATE-5 负向：载荷值域与返回值不夹带自由文本', () => {
+  const SECRET_TEXT = 'sk-DUMMYKEY-9f8e7d6c5b4a3210';
+  const ATTACK_TEXT = 'buyer@example.test <script>alert(1)</script> /etc/passwd';
+
+  const tamper = (field: string, value: unknown): FaultTriageInput => {
+    const observation: FaultObservation = { ...BASE, errorCode: 'PROVIDER_TIMEOUT', operationKind: 'READ_ONLY' };
+    const { intent } = buildFaultIncidentIntent(observation);
+    const sourceRefs = { ...(intent.sourceRefs as unknown as Record<string, unknown>), [field]: value };
+    return { incident: { ...row(observation), sourceRefs }, trusted: { ...trustedOk } };
+  };
+
+  it.each([
+    ['faultClass', SECRET_TEXT],
+    ['requiredAction', SECRET_TEXT],
+    ['replayDisposition', ATTACK_TEXT],
+    ['operationKind', SECRET_TEXT],
+    ['idempotencyGuarantee', ATTACK_TEXT],
+    ['ownerGatedAction', ATTACK_TEXT],
+  ])('字段 %s 被篡改为非规范值 ⇒ BLOCK 且结论中不含该文本', (field, value) => {
+    const decision = triageFaultIncident(tamper(field, value));
+    expect(decision.disposition).toBe('BLOCK_HUMAN_REVIEW');
+    expect(decision.reason).toBe('PAYLOAD_VALUE_NOT_CANONICAL');
+    expect(decision.runtimeHandoffAuthorized).toBe(false);
+    const serialized = JSON.stringify(decision);
+    expect(serialized).not.toContain(SECRET_TEXT);
+    expect(serialized).not.toContain('buyer@example.test');
+    expect(serialized).not.toContain('/etc/passwd');
+  });
+
+  it('对账路径的说明文本只由规范值拼接（不可能夹带自由文本）', () => {
+    const decision = triageFaultIncident({
+      incident: row({ ...BASE, errorCode: 'PROVIDER_TIMEOUT', operationKind: 'EXTERNAL_WRITE' }),
+      trusted: { ...trustedOk },
+    });
+    expect(decision.disposition).toBe('RECONCILE');
+    expect(decision.reconciliationRequirement).toMatch(/^[A-Z_]+:[A-Z_]+ /);
+    expect(decision.reconciliationRequirement).not.toContain(SECRET_TEXT);
+  });
+
+  it('正常载荷不受影响（值域校验不放宽任何既有路径）', () => {
+    expect(triageFaultIncident(HEALED).disposition).toBe('AUTO_RECOVER_VIA_RUNTIME');
+    expect(
+      triageFaultIncident({
+        incident: row({ ...BASE, errorName: 'AdapterMappingError' }),
+        trusted: { ...trustedOk },
+      }).disposition,
+    ).toBe('CODE_REPAIR_CANDIDATE');
   });
 });

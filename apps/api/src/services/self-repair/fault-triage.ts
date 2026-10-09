@@ -12,7 +12,16 @@
  * 输出 = 分流结论（含原因码、待办动作、对账要求与逐项检查结果）。任何执行仍由既有运行时路径负责。
  */
 
-import { INTERNAL_FAULT_INCIDENT_KIND } from './fault-classification';
+import { RSI_OWNER_GATED_ACTIONS } from '../autonomy/rsi-lifecycle';
+
+import {
+  FAULT_CLASSES,
+  FAULT_IDEMPOTENCY_GUARANTEES,
+  FAULT_OPERATION_KINDS,
+  FAULT_REQUIRED_ACTIONS,
+  INTERNAL_FAULT_INCIDENT_KIND,
+  REPLAY_DISPOSITIONS,
+} from './fault-classification';
 
 export const TRIAGE_DISPOSITIONS = [
   /** A：可恢复业务故障 —— **只是把候选交回既有 ONE SI Runtime**（本层不执行动作）。 */
@@ -80,6 +89,7 @@ export interface FaultTriageDecision {
 
 const str = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
 const bool = (value: unknown): boolean | null => (typeof value === 'boolean' ? value : null);
+const inSet = (value: string, set: readonly string[]): boolean => set.includes(value);
 
 interface ParsedPayload {
   classificationAuthority: string;
@@ -121,6 +131,23 @@ export function parsePersistedFaultPayload(
   }
   if (requiresReconciliation === null || autoRecoverAuthorized === null || escalatedBySecuritySignal === null) {
     return { ok: false, reason: 'PAYLOAD_INCOMPLETE' };
+  }
+  /**
+   * MSG-20261009-09 / CHANGE 1（GATE-5 负向验收）—— **值域校验**：
+   * 所有枚举字段必须落在既有封闭值域内；否则整条载荷 fail-closed。
+   * 这样「被篡改成携带任意文本」的字段既不会被当作语义使用，也不会经由返回值 / 登记字段外泄
+   * （例如对账要求文本会拼接 `faultClass:operationKind`，值域校验后不可能夹带自由文本）。
+   */
+  if (!inSet(faultClass, FAULT_CLASSES)) return { ok: false, reason: 'PAYLOAD_VALUE_NOT_CANONICAL' };
+  if (!inSet(requiredAction, FAULT_REQUIRED_ACTIONS)) return { ok: false, reason: 'PAYLOAD_VALUE_NOT_CANONICAL' };
+  if (!inSet(replayDisposition, REPLAY_DISPOSITIONS)) return { ok: false, reason: 'PAYLOAD_VALUE_NOT_CANONICAL' };
+  if (!inSet(operationKind, FAULT_OPERATION_KINDS)) return { ok: false, reason: 'PAYLOAD_VALUE_NOT_CANONICAL' };
+  const idempotencyGuarantee = str(raw.idempotencyGuarantee);
+  if (idempotencyGuarantee === null || !inSet(idempotencyGuarantee, FAULT_IDEMPOTENCY_GUARANTEES)) {
+    return { ok: false, reason: 'PAYLOAD_VALUE_NOT_CANONICAL' };
+  }
+  if (ownerGatedAction !== null && !inSet(ownerGatedAction, RSI_OWNER_GATED_ACTIONS)) {
+    return { ok: false, reason: 'PAYLOAD_VALUE_NOT_CANONICAL' };
   }
   return {
     ok: true,
@@ -290,6 +317,7 @@ export const FAULT_TRIAGE_BOUNDARY = {
   requiresTrustedServerFacts: true,
   externalWriteAlwaysHold: true,
   failClosedOnMalformedPayload: true,
+  validatesPayloadValueDomains: true,
   requiresRuntimeRecheck: true,
   autoRecoverIsNotExecutionAuthorization: true,
   phase3RepairAgentImplemented: false,
