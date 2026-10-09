@@ -1,0 +1,39 @@
+{
+  "schema": "crossclaim.si-rsi.u1-final-r7-head-binding/1",
+  "generatedAt": "2026-10-09T04:16:00.644Z",
+  "auditId": "MSG-20261009-22",
+  "fullCommit": "9ee3683725ad694123092e5bafce9a32b75d3fd2",
+  "shortCommit": "9ee36837",
+  "branch": "feat/si-rsi-internal-code-repair-v1",
+  "sourceOriginAtRun": "本机工作区（git 检出）D:/crossclaim-ai；运行测试时的工作区 HEAD = 9ee36837",
+  "sha256": {
+    "apps/api/src/services/self-repair/trusted-facts-adapter.ts": "ad47c6b205192b345b7f1cc180e8e466dd91a382d6571727c29dbe9609b1f14b",
+    "apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts": "a4b6da62172e2658197cf1dbc4dcb92b9023281654d84dc95ca9dd1a558536c2",
+    "apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts": "e465b3e825bbce68c1da72b38bec56e6ef88970355eea45d774587251db40203",
+    "tools/verification/self-repair/phase3a-u1-final-r7-vitest-raw.txt": "19a65e6055612cba2f281395d63fc3a23ab62927d47a06f2ac422fd379410a9c",
+    "tools/verification/self-repair/phase3a-u1-final-r7-tsc-raw.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tools/verification/self-repair/phase3a-u1-final-r7-negative-control-vitest-raw.txt": "8b59894fac917daa17909090a1b13bcbba3c642855accec52d1f8d16353e1d99",
+    "tools/verification/self-repair/phase3a-u1-final-r7-negative-control-adapter.ts": "cbf661e79f6e1691de9aa4841022ba0d5ead275471f98df661a30ed79406a42d"
+  },
+  "runResultsAtThisHead": {
+    "vitestExitCode": 0,
+    "tscExitCode": 0,
+    "testsSummary": "65 passed (65)",
+    "testFilesSummary": "2 passed (2)"
+  },
+  "negativeControlAtThisHead": {
+    "command": "把 createPrismaTrustedFactsReadPort 还原为实例级 activeTransaction（CHANGE 32 之前）后运行同一套测试",
+    "expectedFailure": "U1-DB9 必须失败，且失败断言为事务句柄被复用（expected 1 not to be 1）",
+    "observedLines": [
+      " × src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB9（CHANGE 32）同一端口实例、双组织并发交错：事务归属独立 / 无跨调用复用 / 无跨租户串扰 / 异常路径 fail-closed",
+      " × src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts > PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（127.0.0.1:55432/crossclaim_p3r2_iso） > U1-DB11（CHANGE 33）事务结束后脱离生命周期的异步任务不得回落裸 client（fail-closed）",
+      "      Tests  2 failed | 63 passed (65)",
+      "AssertionError: expected 1 to be 2 // Object.is equality",
+      "AssertionError: expected false to be true // Object.is equality"
+    ]
+  },
+  "fingerprintReproduction": {
+    "node": "crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')",
+    "note": "比对时请以 git show <commit>:<path>（或 checkout 后的工作区文件）的字节为准；Windows 检出可能显示 CRLF。"
+  }
+}

@@ -1579,3 +1579,56 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.25 U1 FINAL-R7（CHANGE 34–37）实施完成，待送审 MSG-20261009-22
+
+> 授权：MSG-20261009-21 → `NEXT_AUTHORIZED = PHASE3_A_U1_FINAL_R7_CHANGES34_TO37_ONLY`
+> 代码 commit（REVIEWED_HEAD）= **9ee36837**（`fullCommit = 9ee3683725ad694123092e5bafce9a32b75d3fd2`）
+> 证据：`tools/verification/self-repair/phase3a-u1-final-r7-*` 与 `…-r7-change37-head-binding.json`
+
+**CHANGE 34（P0）并发门闩确定性**（U1-DB9）
+
+- 新增不可伪造的 `entered` 标志与 `enteredAt/leftAt` 区间记录；门闩等待改为 `waitOrFail`：**超时即抛错使测试失败**（不再「超时后继续跑」）；
+  包装内另有 `releaseGuard`（15s 未释放即抛错）。
+- **释放门闩前**断言 `entered.A && entered.B`，并在**同一重叠窗口内**断言 A/B 句柄序号互异（`new Set(...).size === 2`）；
+  完成后断言两事务活动区间确实重叠（`realConcurrentOverlap=true`，证据行内含 A/B 的 enteredAt/leftAt 时间戳）。
+
+**CHANGE 35（P1）PostgreSQL SQLSTATE 25006**（新增 U1-DB12）
+
+- 四个写入探针各在**独立只读事务**内执行，先读 `transaction_read_only` 再写入并捕获错误：
+  DELETE / CREATE TABLE / UPDATE / INSERT(SELECT … WHERE false) ⇒ 四个 `sqlstate` 均为 **`25006`**，
+  且四个探针的 `readOnly` 均为 `on`（证明拒绝发生在被测只读事务内）。
+- SQLSTATE 提取方式：优先 Prisma `error.meta.code`，回退到错误消息正则 `Code: (\d{5})`（代码与证据行均落盘）。
+
+**CHANGE 36（P1）异步生命周期确定性**
+
+- U1-DB10：改为断言**真实事务开启次数** `transactionsOpenedAtDb === 1`（统计 `$transaction` 调用次数，每次 = 一次真实 BEGIN/COMMIT）；
+  `pg_stat_database` 计数仅作补充记录（其刷新有延迟，故不作断言，已在证据行注明）。
+- U1-DB11：用**显式事务结束信号**（`transactionEnded` Promise，在 `withReadOnlyTransaction` 返回后才释放）取代 `setTimeout(60)`。
+
+**CHANGE 37（P1）HEAD 绑定清单**（机器可核对）
+
+- `change37-head-binding.json` 含：`fullCommit`（40 位）、`branch`、源/测试/原始 vitest/tsc/负对照原始输出与负对照实现的 **SHA256**、
+  本次运行的退出码与摘要（`65 passed (65)` / `2 passed (2)` / vitest 0 / tsc 0）、负对照执行结果与预期失败断言、指纹复算说明。
+
+**负向对照（本轮更强）**：把端口还原为 CHANGE 32 之前的实例级共享实现后，**两个**用例失败：
+`U1-DB9`（句柄被复用）与 **`U1-DB11`（失效句柄静默回落裸 client、未抛错）** ⇒
+新实现的「拒绝而非回落」安全目标得到可执行证明。
+
+```text
+PHASE3_U1_FINAL_R7_CODE_COMMIT = 9ee36837（full 9ee3683725ad694123092e5bafce9a32b75d3fd2）
+PHASE3_U1_FINAL_R7_TESTS = 端口级 53 + 真实 PG 12 = 65/65 PASS；api tsc 0
+CHANGE34_REAL_CONCURRENT_OVERLAP = PASS（entered 断言 + 超时即失败 + 重叠窗口内句柄互异 + 区间重叠）
+CHANGE35_PG_25006_ASSERTION = PASS（四探针 SQLSTATE 均 25006，且均在只读事务内）
+CHANGE36_ASYNC_LIFECYCLE_DETERMINISTIC = PASS（$transaction 计数=1；显式事务结束信号）
+CHANGE37_HEAD_BINDING = tools/verification/self-repair/phase3a-u1-final-r7-change37-head-binding.json
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO（等待 MSG-20261009-22）
+NEXT_UNIT = 送审 MSG-20261009-22（内联 CHANGE 34–37 关键片段与清单）
+NEXT_AUDIT = MSG-20261009-22
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```
