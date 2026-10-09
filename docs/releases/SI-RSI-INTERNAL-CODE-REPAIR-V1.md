@@ -221,7 +221,7 @@ Linux 路径 / Windows 路径 / 邮箱 / 长数字）逐例断言**密钥原文�
 | --- | --- | --- |
 | 0 | 现有能力审计（本文件 §1） | **本轮完成** |
 | 1 | 内部故障诊断中心（API_TIMEOUT / RATE_LIMIT / TOKEN_EXPIRED / SCHEMA_CHANGED / PARSER_FAILURE / … / UNKNOWN_ERROR 的确定性分类 → Incident） | **CLOSED**（MSG-20261009-08；PHASE 0 + PHASE 1 全部收口） |
-| 2 | 自动恢复 vs 代码修复分流（A 可恢复业务故障 → 既有 ONE SI Runtime；B 可复现 Bug → `CODE_REPAIR_CANDIDATE`；C 需外部权限 → BLOCK / HUMAN_REVIEW_REQUIRED） | **AUTHORIZED（仅内部安全范围）**，尚未实施 |
+| 2 | 自动恢复 vs 代码修复分流（A 可恢复业务故障 → 既有 ONE SI Runtime；B 可复现 Bug → `CODE_REPAIR_CANDIDATE`；C 需外部权限 → BLOCK / HUMAN_REVIEW_REQUIRED） | **IN_PROGRESS**：确定性分流模块已完成并验收（见 §2.1）；HIGH_RISK 路径仍 HOLD |
 | 3 | 内置 AI Code Repair Agent（复用 Model Gateway；隔离工作区；最小 Patch；受限命令白名单；成本/超时/文件范围限制；Prompt Injection 防护） | NOT_STARTED |
 | 4 | 独立 Judge 与自动验证（Builder ≠ Judge；真实测试命令 + 退出码 + 输出证据；REVISE 有界重试） | NOT_STARTED |
 | 5 | 受控发布准备（生成修复分支 / Patch / **可审计 PR**；**禁止**自动合并主线、自动改封板、自动生产迁移/发布） | NOT_STARTED |
@@ -229,6 +229,35 @@ Linux 路径 / Windows 路径 / 邮箱 / 长数字）逐例断言**密钥原文�
 | 7 | 真实端到端验收 A–P（含恶意日志 Prompt Injection、越预算阻断、无凭据安全阻断、幂等去重、中断恢复、生成 PR 而非自动部署） | NOT_STARTED |
 
 **安全隔离要点（PHASE 3 必须实现，先记录为设计约束）**：不在运行中的 API/RSI 目录直接改码；独立容器或等效隔离；低权限 + 受限文件系统 + 命令白名单；CPU/内存/磁盘/超时/模型成本上限；默认禁访问生产库与生产密钥、默认禁互联网外写；不得让模型读取生产 env 文件；不得为让测试通过而改封板或安全门禁；对客户内容 / Provider 响应 / 日志做 Prompt Injection 防护。
+
+### 2.1 PHASE 2 进展（安全范围）：确定性故障分流
+
+新增（**纯新增**）：`apps/api/src/services/self-repair/fault-triage.ts`（纯函数）
+与 `src/__tests__/internal-code-repair-phase2-triage.test.ts`（20 用例）、
+`src/__tests__/internal-code-repair-phase2-triage-db.test.ts`（真实 PostgreSQL 往返，5 用例）。
+
+分流结论（5 种，均**不执行任何动作**）：
+
+| 分流结论 | 触发条件（判定顺序即优先级） | 语义 |
+| --- | --- | --- |
+| `BLOCK_HUMAN_REVIEW` | kind ≠ `INTERNAL_FAULT`／状态 ≠ `DIAGNOSED`／载荷非白名单对象或非确定性来源／安全或权限信号／OWNER-gated 动作／`FORBIDDEN` 且非修复路径／可信事实复核未过／授权不活跃／租户身份未解析／**外部写** | BLOCK，必要时给出既有 OWNER-gated 待办动作 |
+| `NEEDS_CLASSIFICATION` | 未分类故障 | 人工，默认禁止自动恢复 |
+| `RECONCILE` | `RECONCILE_FIRST` 或 `requiresReconciliation` | **先对账，禁止直接重放**（给出对账要求文本） |
+| `CODE_REPAIR_CANDIDATE` | `FORBIDDEN` 且 `requiredAction = CODE_REPAIR_CANDIDATE` | 交 PHASE 3 修复代理（**尚未实现**，本层只登记候选） |
+| `AUTO_RECOVER_VIA_RUNTIME` | PHASE 1 显式重放授权 + 类别在确定性可重试白名单 + 非外写 + 可重放操作 + 租户身份可信 + 授权活跃 + **运行时复核确认** | **只把候选交回既有 ONE SI Runtime**（`runtimeHandoffAuthorized` 仅表示"可再校验"，不是执行授权） |
+
+关键安全口径（对应 MSG-20261009-08 的 GATE-2/GATE-3 与附加约束）：
+
+- **不新增第二套运行时**：本层 `executesNothing`、不建任务、不建租约、不调 Provider；一切执行仍由既有运行时路径承担。
+- **不信落库声明**：A 路径必须由服务端**可信事实**复核通过（`organizationIdResolved` / `authorizationActive` /
+  `operationRecheck`），不允许从请求参数、客户端输入或模型输出取得身份 —— 哈希引用不是授权。
+- **外写恒 HOLD**：即便载荷被篡改为 `AUTO_RETRY_CANDIDATE`，`operationKind = EXTERNAL_WRITE` 也在分流层被拦下（纵深防御用例）。
+- **fail-closed 解析**：载荷缺字段 / 类型不符 / `classificationAuthority ≠ DETERMINISTIC_RULES_ONLY` 一律 BLOCK。
+- **模型无权**：载荷中即使存在模型"建议"（`untrustedModelHint`）也不改变分流结论（有专门用例）。
+
+验收：纯函数 **20/20 PASS**（含 5 路径矩阵、篡改用例与边界声明断言）；真实 PostgreSQL **5/5 PASS**
+（真实落库行的 A 路径、外部写对账、修复候选、未分类、终态行不可分流；全程零任务零租约）；
+PHASE 1 + PHASE 2 合并定向回归 **7 文件 / 123 tests 全绿**；`apps/api tsc --noEmit` **0 error**。
 
 ## 3. 状态（截至本文件提交）
 
@@ -316,7 +345,8 @@ PHASE1_REVIEW_VERDICT = MSG-20261009-08 = PASS WITH REVISE（逐字归档 FULL_C
 **全过程门禁**：纯函数 61 用例 + 真实 PostgreSQL 14 用例（隔离库 `crossclaim_p3r2_iso`）；
 定向回归 5 文件 / **98 tests 全绿**；`apps/api tsc --noEmit` **0 error**；未跑全量回归（如实登记）。
 
-NEXT_UNIT = PHASE 2 安全范围实施（确定性分流：RECONCILE_FIRST / FORBIDDEN / NEEDS_CLASSIFICATION → 明确安全路径）→ GATE-1 全量回归 → PHASE 2 独立复审
+PHASE2_PROGRESS = TRIAGE_MODULE_IMPLEMENTED（5 路径确定性分流 + 真实 PG 往返；A 路径仅交回既有运行时）
+NEXT_UNIT = PHASE 2 收口（接线到既有运行时入口的**只读候选登记**）→ GATE-1 全量 API 回归 → PHASE 2 独立复审
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
