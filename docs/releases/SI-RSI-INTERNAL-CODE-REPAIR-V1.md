@@ -46,12 +46,43 @@
 
 **与进行中 SI/RSI 补强的关系**：SI/RSI 客户自治执行（PHASE 1–3）已独立审计 CLOSED，无在飞未审计改动；本分支基于其基线创建，**不打断、不并行修改同一批代码**。两者共享 Incident / Judge / Model Gateway / Evidence / Outcome / 成本与权限基础设施。
 
+### 1.3 PHASE 1 实施与验收（本轮：确定性故障分类中心）
+
+新增（**纯新增**，未修改任何既有运行时文件）：
+
+| 文件 | 作用 |
+| --- | --- |
+| `apps/api/src/services/self-repair/fault-classification.ts` | 确定性分类（纯函数 / 零 IO / 零模型调用）+ 脱敏 + 去重键 + 可信 Incident 意图 |
+| `apps/api/src/services/self-repair/fault-incident-intake.ts` | 复用既有 `AutonomyIncident` 持久化（kind = `INTERNAL_FAULT`）：原子聚合、容器不劫持、终态不复活 |
+| `apps/api/src/__tests__/internal-code-repair-phase1-classification.test.ts` | 12 类逐类可达 + 确定性 + 模型无权 + 脱敏（29 用例） |
+| `apps/api/src/__tests__/internal-code-repair-phase1-incident-db.test.ts` | 真实 PostgreSQL：聚合 / 6 路并发 / 容器隔离 / 终态 / 权限隔离 / 落库脱敏（6 用例） |
+
+边界与判定口径（可复核）：
+
+- **12 类**（指令顺序）：API_TIMEOUT / API_RATE_LIMIT / TOKEN_EXPIRED / PROVIDER_SCHEMA_CHANGED / PARSER_FAILURE / WORKFLOW_PLANNING_ERROR / DATA_CONFLICT / DATABASE_TRANSACTION_ERROR / RUNTIME_EXCEPTION / INTEGRATION_CONTRACT_MISMATCH / REGRESSION_FAILURE / UNKNOWN_ERROR；规则表**顺序即优先级**，同一证据必然同一结论（含去重键）。
+- **不猜**：HTTP 403 等无确定证据的情形**不冒充** TOKEN_EXPIRED，落 UNKNOWN_ERROR + HUMAN_REVIEW（有专门用例）。
+- **模型无权限**：`annotateUntrustedModelHint()` 只记录模型声称的类别与理由，`authority = 'NONE'`，不参与分类 / 风险 / 重试 / 权限；即使「猜对」也不构成授权。
+- **单向升级**：触及安全 / 权限语义时只允许更保守（HIGH + HUMAN_REVIEW + 禁自动重试），原有 AUTO_RECOVER 会被收回。
+- **AUTO_RECOVER 仅限确定性可重试类别**（API_TIMEOUT / API_RATE_LIMIT / DATABASE_TRANSACTION_ERROR）；其余一律 CODE_FIX_REQUIRED / 人工。
+- **OWNER 动作来自既有清单**：TOKEN_EXPIRED ⇒ `ownerGatedAction = 'PRODUCTION_CREDENTIALS'`（`requiresOwnerApproval()` 为真，RSI 不能自我授权）。
+- **脱敏**：Token / Bearer / JWT / API key / 邮箱 / 长数字 / 绝对路径在摘要、落库载荷与模型提示归档中一律打码；组织 / Provider 只以 `org-<sha16>` / `provider-<sha16>` 不可逆引用落库。
+- **权限隔离（结构级）**：修复平面 Incident kind = `INTERNAL_FAULT` ≠ 客户执行面 `CUSTOMER_GOAL_QUEUE`；既有 `createAutonomyTaskSource().claim()` 对前者一律拒绝并持久化 BLOCKED。
+
+验收证据（本轮实测）：
+
+| 项目 | 命令 | 结果 |
+| --- | --- | --- |
+| 纯函数分类 | `vitest run src/__tests__/internal-code-repair-phase1-classification.test.ts` | **29/29 PASS** |
+| 真实 PostgreSQL | 隔离库 `crossclaim_p3r2_iso`（本任务自建） | **6/6 PASS** |
+| 定向回归 | classification + incident-db + rsi-schema-contract + si-rsi-phase1-authorization + si-rsi-phase1-durable-queue | **5 文件 / 58 tests 全绿** |
+| 类型检查 | `tsc --noEmit -p apps/api/tsconfig.json` | **0 error** |
+
 ## 2. 阶段计划与当前状态
 
 | PHASE | 内容 | 状态 |
 | --- | --- | --- |
 | 0 | 现有能力审计（本文件 §1） | **本轮完成** |
-| 1 | 内部故障诊断中心（API_TIMEOUT / RATE_LIMIT / TOKEN_EXPIRED / SCHEMA_CHANGED / PARSER_FAILURE / … / UNKNOWN_ERROR 的确定性分类 → Incident） | NOT_STARTED |
+| 1 | 内部故障诊断中心（API_TIMEOUT / RATE_LIMIT / TOKEN_EXPIRED / SCHEMA_CHANGED / PARSER_FAILURE / … / UNKNOWN_ERROR 的确定性分类 → Incident） | **本轮完成（PASS，见 §1.3）** |
 | 2 | 自动恢复 vs 代码修复分流（A 可恢复业务故障 → 既有 ONE SI Runtime；B 可复现 Bug → `CODE_REPAIR_CANDIDATE`；C 需外部权限 → BLOCK / HUMAN_REVIEW_REQUIRED） | NOT_STARTED |
 | 3 | 内置 AI Code Repair Agent（复用 Model Gateway；隔离工作区；最小 Patch；受限命令白名单；成本/超时/文件范围限制；Prompt Injection 防护） | NOT_STARTED |
 | 4 | 独立 Judge 与自动验证（Builder ≠ Judge；真实测试命令 + 退出码 + 输出证据；REVISE 有界重试） | NOT_STARTED |
@@ -66,7 +97,7 @@
 ```
 ONE_SI_RUNTIME_UNCHANGED = YES（未新增第二套运行时/调度器/控制器）
 CUSTOMER_AUTONOMOUS_RECOVERY = CLOSED（PHASE 1–3 已审计；本任务基线）
-INTERNAL_DIAGNOSIS = NOT_STARTED
+INTERNAL_DIAGNOSIS = PHASE_1_IMPLEMENTED（确定性分类；12 类逐类可达；29 纯函数用例 + 6 真实 PG 用例 PASS）
 INTERNAL_CODE_REPAIR_AGENT = NOT_IMPLEMENTED（PHASE 0 实测：无 code-repair 模块）
 CODEX_RUNTIME_DEPENDENCY = STILL_PRESENT（本次建设期间由 Codex 完成；建成后须自证可脱离 Codex）
 MODEL_GATEWAY_REUSED = 计划复用（未接线）
@@ -81,9 +112,9 @@ DURABLE_REPAIR_TASK = 复用既有 durable task/lease（未接线）
 EXPERIENCE_LEARNING = 复用既有 Experience/Meta（未接线）
 AUTO_PRODUCTION_CODE_MODIFICATION = FORBIDDEN
 AUTO_PRODUCTION_DEPLOYMENT = FORBIDDEN
-FULL_REGRESSION = 基线 100% PASS（PHASE 3 收官）；本任务改动尚未开始
+FULL_REGRESSION = 本单元定向回归 5 文件 / 58 tests 全绿（真实 PG 隔离库）；全量回归待 PHASE 7
 NEW_RELEASE_CANDIDATE = NOT_STARTED
-INDEPENDENT_AUDIT = PENDING（PHASE 0 审计待送审）
+INDEPENDENT_AUDIT = PENDING（PHASE 0 / PHASE 1 送审中）
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
