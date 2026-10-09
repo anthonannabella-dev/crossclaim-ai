@@ -709,6 +709,55 @@ Provider / 支付 / 报关 / 物流及其他外部副作用。
 两部分须**分别**呈现证据与结果，**不得**用 U1 实现通过代替 U2–U5 的设计或实施验收）。
 审计最终边界：**可以开始构建可信的只读事实基础，但不得开始自主代码修复、补丁应用、自动合并或生产部署。**
 
+### 2.12 U1 + CHANGE 13–16 裁决（MSG-20261009-15 = PASS WITH REVISE；**U1 未关闭**）
+
+**裁决原文**：`AI-ARCHITECT-INBOX.md` → `### [MSG-20261009-15]`（逐字归档，FNV1A `fa1509df`，`FULL_COPY_OK`：214 行 / 缺失 0 / 多出 0）。
+会话：`https://chatgpt.com/c/6ac8556a-d50c-83ec-83e9-c0cc27fc5e7f`。
+
+| 审计项 | 裁决 |
+| --- | --- |
+| U1_READ_ONLY_IMPLEMENTATION | **PASS WITH REVISE** |
+| U1_EVIDENCE_SUFFICIENCY | **REVISE** |
+| U1_SCOPE_COMPLIANCE | PASS（依据送审申报范围） |
+| CHANGE 13 文件提交线性化 | **PASS WITH REVISE** |
+| CHANGE 14 终态恢复语义 | **PASS**（本轮最明确改进） |
+| CHANGE 15 身份与幂等 | **PASS WITH REVISE** |
+| CHANGE 16 沙箱验证绑定 | **PASS WITH REVISE** |
+| A11 / A12 | **PASS WITH REVISE** |
+| SCOPE_HONESTY | **PASS** |
+
+机器裁决：**`PHASE3_U1_IMPLEMENTATION_CLOSED = NO`**、`PHASE3_A_U2_TO_U5_AUTHORIZED = NO`、
+`CHANGE_13_TO_16_ACCEPTED = YES_WITH_CONDITIONS`、`AUTONOMOUS_CODE_REPAIR = NO`、`EXTERNAL_WRITE = HOLD`、
+`AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN`、`PRODUCTION_READY = NO`；
+`NEXT_AUTHORIZED = PHASE3_A_U1_FINAL_R2_REPAIR_AND_EVIDENCE + DESIGN_ONLY_CHANGES_21_TO_23`、`NEXT_AUDIT = MSG-20261009-16`。
+
+**必需修订 · CHANGE 17–20（仅限 U1 代码与设计文档允许范围；P0/P0/P0/P1）**：
+
+| # | 级别 | 要求 | 验收 |
+| --- | --- | --- | --- |
+| 17 | **P0** | **授权选择唯一性**：绑定组织 + 主体 + 动作 + 资源范围 + 授权对象；多条有效或相互冲突的授权无法确定唯一权威记录 ⇒ fail-closed | 冲突、跨主体及越权记录均不能取得可信授权 |
+| 18 | **P0** | 金额**显式规则**：缺失 / 负数 / 非有限数 / 超精度 / 币种未确认的判定；不明确金额一律拒绝，**合法非金额动作单独验证** | 所有不明确金额输入拒绝 |
+| 19 | **P0** | **U1 来源边界与版本失效契约**：伪造调用上下文（organizationId / executionContext / actionType）必须被阻断；旧事实不得获得新的提交权限 | 伪造上下文被阻断；旧事实无新权限 |
+| 20 | P1 | **补强证据**：数据库只读权限或等效强验证；覆盖关键异常路径；增加伪造上下文、异常授权记录、并发授权变更等负向验证 | 强只读证据 + 异常路径覆盖 |
+
+审计同时指出（本轮未达标的证据短板，须在 CHANGE 20 中补齐）：正则检查不含写方法**不能**证明整条调用链无写入；
+三张 Autonomy 表计数不变**不能**证明其余业务表未变；只看最高授权版本**不能**覆盖多授权冲突；
+`updatedAt` 作为组织行修订信号**不应**未经验证就当作身份/授权变更的完整单调版本。
+建议采用：**数据库只读事务 / 写入权限受限的测试身份 / 全相关业务表前后状态比较**。
+
+**必需修订 · CHANGE 21–23（仅设计修订，不是实施许可）**：
+
+| # | 级别 | 要求 |
+| --- | --- | --- |
+| 21 | **P0·设计** | CHANGE 13 补「撤销 ↔ 文件发布」的**共同排序权威或拒绝公开**协议：无法证明顺序 ⇒ 仅 `staging-only`；摘要路径已存在须采用**无覆盖发布语义**（并发冲突不得覆盖原候选）；发布后须**校验实际内容与摘要一致**（目录只读不能证明内容不可篡改）。**在这些问题关闭前 `ISOLATED_WRITE` 不得授权实施。** |
+| 22 | P1·设计 | CHANGE 15–16 补齐：`fencingGeneration` 必须由**持久化原子机制**递增（不得依赖进程内计数）；`candidateDigest` / 租户 / 事实版本 / 目标身份的**规范化编码**必须确定（避免不同输入序列化为同一业务身份）；`identityVersion` 读取与提交检查之间须定义**事务或 fencing 边界**；TestRunner 必须位于 **Builder 无法修改的可信执行边界**；运行镜像 / 依赖 / 测试入口 / 环境变量 / 策略版本须参与**环境摘要**或等效不可变约束；**不得**把工作区内不可信 hook / 构建脚本 / 测试脚本直接当作可信执行入口；结果摘要必须绑定**完整测试执行身份与产物** |
+| 23 | P1·设计 | A11 / A12 增加**崩溃、重试、并发、文件系统持久化失败**的故障矩阵；每类失败均有明确成功/拒绝判定（A12：并发撤销与发布须有可验证线性化顺序，无法证明时**无候选进入公开可消费位置**） |
+
+**限制（照录）**：CHANGE 17–20 **不构成**对既有队列、Runtime、Prisma schema 或任何写路径的修改授权；CHANGE 21–23 仍为设计修订。
+
+**RISKS（原文）**：P0 授权时效竞态（事实解析成功 ≠ 后续操作仍有授权）/ P0 文件系统发布竞态（DB CAS 不能代替文件系统原子性与权限时序证明）/
+P0 调用来源可信性（不接收模型字段 ≠ 服务端上下文不可伪造）/ P1 版本与身份失效 / P1 测试证据覆盖 / P1 沙箱可信边界。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -820,7 +869,9 @@ PHASE3_U1_IMPLEMENTATION_CLOSED = NO（**本轮完成 U1 实施与自验，待�
 PHASE3_U1_ARTIFACTS = trusted-facts-adapter.ts + phase3a-u1-* 两个测试文件 + 设计文档 §15 规格（仅新增，未改既有文件）
 PHASE3_A_U1_EVIDENCE = 端口级 12/12 PASS、真实 PG 4/4 PASS（隔离库）、api tsc 0；只读副作用断言（零任务/零租约/零 Incident 变化）
 PHASE3_CHANGES_13_TO_16 = DESIGN_COMPLETED（设计文档 §16：文件提交四段协议与顺序不可证回退、CommitFact/TaskState/RecoveryControl 三维独立表达、attemptId/fencing 世代与去重冲突证据、验证产物五元绑定与安全句柄路径约束、A11/A12 定义；仍为只读设计）
-NEXT_UNIT = 整理并投递 MSG-20261009-15（① U1 实现与验证证据 ② CHANGE 13–16 设计修订 + A11/A12，两部分分别呈现）
+PHASE3_U1_MSG15_VERDICT = MSG-20261009-15 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A fa1509df；U1 未关闭）
+PHASE3_A_U1_FINAL_R2 = NOT_STARTED（需完成 CHANGE 17–20 代码/证据 + CHANGE 21–23 设计）
+NEXT_UNIT = ① CHANGE 17–20（U1 授权唯一性 / 金额显式规则 / 来源边界与版本失效 / 强只读与负向证据）② CHANGE 21–23（设计收口）→ 送 MSG-20261009-16
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
