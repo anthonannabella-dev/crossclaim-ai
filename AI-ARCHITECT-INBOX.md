@@ -170715,3 +170715,400 @@ NEXT_AUDIT=MSG-20261009-13
 
 不得把本轮 PASS WITH REVISE 解释为实施许可，也不得把设计通过解释为自主代码修复能力已经交付。
 ```
+
+### [MSG-20261009-13] PHASE 3 设计 FINAL-R2 裁决 = PASS WITH REVISE（设计附条件接受；PHASE3_IMPLEMENTATION_AUTHORIZED=NO；新增 CHANGE 9–12；NEXT=PHASE3_DESIGN_FINAL_R3_READ_ONLY / NEXT_AUDIT=MSG-20261009-14）reviewed ref 7dc8535e
+
+```text
+MSG-20261009-13 · SI/RSI INTERNAL CODE REPAIR V1 · PHASE 3 FINAL-R2 独立复审裁决
+FINAL VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 7dc8535e
+审计范围： PHASE 3 FINAL-R2 只读设计修订
+审计依据： 本轮提交的 CHANGE 1–8、失败矩阵、状态转移表及未实施声明
+审计方式： 设计契约独立复审；未访问仓库、未执行测试、未验证运行时。
+
+一、最终裁决
+
+本轮八项 CHANGE 已基本覆盖上一轮指出的主要安全缺口。尤其是授权撤销与副作用提交的线性化约束、内部故障与客户任务的身份隔离、Builder/Judge 权限隔离，以及补丁哈希不可变性，方向正确。
+
+PHASE 3 设计可有条件接受，但不能直接授权完整实施。
+
+原因是：设计已经提出正确的安全不变量，但其中部分约束仍缺少可直接实现、可独立验收的操作性定义。
+
+裁决项目
+
+	
+
+结果
+
+
+
+
+CHANGE 1 · 撤销与副作用竞态
+
+	
+
+PASS WITH REVISE
+
+
+
+
+CHANGE 2 · 候选身份隔离
+
+	
+
+PASS WITH REVISE
+
+
+
+
+CHANGE 3 · 修复权限端到端隔离
+
+	
+
+PASS WITH REVISE
+
+
+
+
+CHANGE 4–8 · P1 条款
+
+	
+
+PASS
+
+
+
+
+失败矩阵与状态转移表
+
+	
+
+PASS WITH REVISE
+
+
+
+
+DESIGN_ONLY_SCOPE_HONESTY
+
+	
+
+PASS
+
+
+
+
+PHASE3_DESIGN_FINAL_ACCEPTED
+
+	
+
+YES（有条件）
+
+
+
+
+PHASE3_IMPLEMENTATION_AUTHORIZED
+
+	
+
+NO
+
+以上 PASS 仅针对提交的设计描述，不表示相应安全机制已通过运行时验证。
+
+二、必须完成的四项修订
+CHANGE 9（P0）——明确副作用提交协议与线性化实现
+
+当前 CHANGE 1 已正确指出：最终授权门与 fenced settle 不能替代副作用提交边界的原子性保障。
+
+但设计还需明确执行动作的准入分类与实施协议。
+
+要求：
+
+将允许进入 PHASE 3 的动作逐一分类为 PURE_READ、ISOLATED_WRITE、REVERSIBLE_INTERNAL_COMMIT、IRREVERSIBLE_OR_EXTERNAL。
+
+每个允许写入的动作必须指定唯一提交点、授权版本校验点、幂等标识及持久化副作用登记。
+
+对同一 PostgreSQL 事务中的内部写入，明确如何通过行锁、条件更新或等效机制建立可证明的提交顺序。
+
+撤销与提交并发时，必须产生唯一胜者；提交成功后的撤销不得追溯宣称提交未发生。
+
+对跨事务或外部系统的副作用，不能仅凭本地 CAS 宣称原子性；缺乏协调协议的动作继续 BLOCK。
+
+SETTLE_REJECTED_BUT_EFFECT_POSSIBLE 必须进入持久化对账或人工处置，不得自动重复执行。
+
+关闭标准： 形成动作分类表及每类的提交协议。对无法证明安全性的动作明确标记 NOT_AUTHORIZED。
+
+CHANGE 10（P0）——补齐候选消费的权威身份与幂等契约
+
+CHANGE 2 的入队前、认领后双重身份解析值得保留，但还需要明确可信身份的来源。
+
+要求：
+
+incidentId 必须关联权威持久化 Incident，而非依赖候选载荷声明。
+
+持久化关联至少包含 incidentId、taskId、sourceKind、可信主体引用、身份解析版本、状态及去重键。
+
+明确单 Incident 产生多个候选的规则，去重键必须覆盖任务种类与修复目标，避免误合并不同故障。
+
+身份解析发生变化时，原任务必须失效并重新分流，不允许自动迁移租户或扩大权限。
+
+入队与认领的独立解析不能替代提交时的最终授权检查。
+
+明确认领租约、fencing token、重复消息及崩溃恢复的持久化关系。
+
+关闭标准： 给出 Incident → Candidate → Task → Attempt 的权威关系契约，以及重复、并发和身份漂移的拒绝规则。
+
+CHANGE 11（P1）——明确沙箱隔离和可信验证边界
+
+CHANGE 3 已建立严格的补丁权限限制，但仍需将隔离从原则转为可验证约束。
+
+要求：
+
+Builder、测试执行器、Judge 使用相互隔离的执行上下文和权限。
+
+候选工作区固定基线 commit、允许路径及内容摘要。
+
+测试输入、实际执行命令、环境约束、退出码和原始日志摘要必须形成不可由 Builder 单独伪造的验证记录。
+
+禁止 Builder 修改 Judge 策略、测试入口、权限策略或验证结果存储。
+
+路径检查必须覆盖文件解析后的真实目标，并防止检查后路径替换。
+
+必须明确隔离失败、资源耗尽、超时、恶意补丁和测试结果不确定时的 fail-closed 行为。
+
+Judge PASS 只意味着候选满足当前验证策略，不等于补丁安全、生产可发布或可自动合并。
+
+CHANGE 12（P1）——修订状态转移的提交语义
+
+当前 §9 状态表仍存在两处需要消歧的地方。
+
+第一，不能把所有状态中的撤销统一描述为最终进入 BLOCKED 或 CANCELED。已经发生的提交必须保留其不可变事实。
+
+第二，COMMITTED 不应仅表达执行器报告成功，应当具备可信提交证据。
+
+要求将状态语义拆分：
+
+状态
+
+	
+
+必须满足的不变量
+
+
+
+
+CANCELED_BEFORE_COMMIT
+
+	
+
+有取消证据，且未跨越提交点
+
+
+
+
+REJECTED_AT_COMMIT
+
+	
+
+提交被权威机制拒绝
+
+
+
+
+COMMITTED
+
+	
+
+存在可信提交凭证
+
+
+
+
+COMMIT_OUTCOME_UNKNOWN
+
+	
+
+提交结果不确定，禁止盲重试
+
+
+
+
+SETTLED
+
+	
+
+结果已持久化收敛
+
+
+
+
+SETTLE_REJECTED_BUT_EFFECT_POSSIBLE
+
+	
+
+收口失败但不能排除已发生副作用
+
+
+
+
+RECOVERING
+
+	
+
+依据权威事实恢复，不直接重放副作用
+
+还必须定义合法状态迁移、终态不可逆条件、恢复后的对账入口，以及并发恢复时的 fencing 约束。
+
+三、对 CHANGE 4–8 的裁决
+
+CHANGE 4–8：PASS（设计条款层面）。
+
+本轮已具备可信 provenance 生命周期、triagedAt 快照有效期、有限重试与成本限制、真实 PostgreSQL/运行时负向测试要求，以及崩溃恢复不重复提交原则。
+
+但这些条款仍然只是未来实施的验收契约，不代表当前已有安全验证证据。
+
+特别保留三条红线：
+
+快照过期或授权版本变化必须重新获取可信事实，不能简单延长 TTL。
+
+REVISE、重试、模型调用与测试执行都必须有持久化预算，不能通过崩溃恢复重置计数。
+
+真实 PostgreSQL 测试必须覆盖实际装配路径，不能只证明独立纯函数或模拟适配器行为。
+
+四、失败矩阵裁决
+
+FAILURE_MATRIX_AND_STATE_TABLE = PASS WITH REVISE。
+
+现有矩阵已覆盖关键 TOCTOU、路径逃逸、补丁篡改、身份漂移及崩溃重放风险。
+
+在下一版中再增加以下四项验收情景：
+
+场景
+
+	
+
+预期结果
+
+
+
+
+授权撤销与 DB COMMIT 同时竞争
+
+	
+
+唯一线性化胜者，提交事实与授权顺序一致
+
+
+
+
+提交成功后进程崩溃、确认丢失
+
+	
+
+UNKNOWN → 权威对账，不重复提交
+
+
+
+
+Judge PASS 后工作区发生变化
+
+	
+
+摘要不一致，拒绝应用
+
+
+
+
+身份版本变化后旧任务恢复
+
+	
+
+旧身份禁止继续执行，重新分流
+
+这些场景需与 CHANGE 9–12 的设计契约对应。
+
+五、下一步授权边界
+
+授权结果
+
+PHASE 3 设计最终接受
+
+YES · CONDITIONAL
+
+PHASE 3 完整实施
+
+NO
+
+下一步允许范围
+
+FINAL-R3 只读收口
+
+授权 Codex 仅执行：
+
+PHASE3_DESIGN_FINAL_R3_READ_ONLY
+
+具体范围为：完成 CHANGE 9–12 契约修订、补齐可执行验收矩阵、形成 PHASE 3 最小安全实施单元划分，并提交下一轮审计。
+
+不授权实现或接线：
+
+FaultTrustedFactsAdapter、候选消费通道。
+
+Builder、Judge、隔离沙箱或自动修复执行器。
+
+Runtime、队列、Action Guard、Prisma schema/migration 的修改。
+
+自动合并、发布、部署或生产数据库写入。
+
+Provider、支付、报关、物流及其他外部副作用。
+
+下一轮如全部设计门禁通过，可单独申请 PHASE 3-A 最小安全范围实施授权，但不得由本轮裁决自动推导授权。
+
+六、剩余风险
+
+主要残余风险包括生产环境凭据与沙箱隔离能力尚未验证、实际运行时来源隔离未实现、历史 P2E-DB5 与 broker hook 测试债未关闭、历史载荷敏感信息清理未完成，以及 Linux/systemd 和真实 Provider 链路尚无本轮证据。
+
+这些风险不阻止继续完善只读设计，但阻止将当前状态声明为可自主代码修复、可生产使用或可执行外部业务动作。
+
+七、可直接归档的机器可读裁决
+YAML
+
+AUDIT_ID: MSG-20261009-13
+REVIEWED_HEAD: 7dc8535e
+
+FINAL_VERDICT: PASS_WITH_REVISE
+
+CHANGE1_REVOCATION_SIDE_EFFECT_RACE_CLOSED: PASS_WITH_REVISE
+CHANGE2_CANDIDATE_IDENTITY_ISOLATION: PASS_WITH_REVISE
+CHANGE3_REPAIR_PERMISSION_END_TO_END: PASS_WITH_REVISE
+CHANGE4_TO_8_CLAUSES: PASS
+FAILURE_MATRIX_AND_STATE_TABLE: PASS_WITH_REVISE
+DESIGN_ONLY_SCOPE_HONESTY: PASS
+
+PHASE3_DESIGN_FINAL_ACCEPTED: YES_WITH_CONDITIONS
+PHASE3_IMPLEMENTATION_AUTHORIZED: NO
+AUTONOMOUS_CODE_REPAIR_AUTHORIZED: NO
+
+NEXT_AUTHORIZED: PHASE3_DESIGN_FINAL_R3_READ_ONLY
+NEXT_AUDIT: MSG-20261009-14
+
+REQUIRED_CHANGES:
+  - CHANGE_9_P0_SIDE_EFFECT_COMMIT_PROTOCOL
+  - CHANGE_10_P0_AUTHORITATIVE_IDENTITY_AND_IDEMPOTENCY
+  - CHANGE_11_P1_SANDBOX_AND_JUDGE_TRUST_BOUNDARY
+  - CHANGE_12_P1_STATE_TRANSITION_SEMANTICS
+
+EXTERNAL_WRITE: HOLD
+REAL_PROVIDER_EXECUTION: NOT_AUTHORIZED
+AUTO_MERGE: FORBIDDEN
+AUTO_DEPLOY: FORBIDDEN
+PRODUCTION_READY: NO
+
+REVIEW_BASIS: USER_SUPPLIED_DESIGN_ONLY
+REPOSITORY_VERIFIED: NO
+RUNTIME_TESTS_EXECUTED: NO
+
+
+最终结论： MSG-20261009-13 = PASS WITH REVISE。上一轮八项修订的核心设计方向已被接受，PHASE 3 可进入最后一轮只读契约收口；但 CHANGE 9–12 未完成前，不批准 PHASE 3 实施，更不批准 SI/RSI 自主修改代码、自动合并或自动发布。
+
+本裁决仅依据本会话提交材料作出，未修改仓库或访问外部系统。
+```

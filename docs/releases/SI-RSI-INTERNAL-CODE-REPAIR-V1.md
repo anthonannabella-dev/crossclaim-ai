@@ -601,6 +601,67 @@ CHANGE 8 崩溃后状态收敛与不可重复提交契约（恢复后不得重�
 实施 Builder/Judge；创建自动修复代理或开放自动提交；修改 Prisma / migration / 封板 RC·main；开启真实 Provider / 支付 / 报关或其他外写。
 审计明确：**不得**把本轮 PASS WITH REVISE 解释为实施许可。
 
+### 2.10 PHASE 3 设计 FINAL-R2 裁决（MSG-20261009-13 = PASS WITH REVISE；**实施仍未授权**）
+
+**裁决原文**：`AI-ARCHITECT-INBOX.md` → `### [MSG-20261009-13]`（逐字归档，FNV1A `e7b0fa2e`，`FULL_COPY_OK`：158 行 / 缺失 0 / 多出 0）。
+会话：`https://chatgpt.com/c/6ac8505c-f7cc-83ec-8faa-8cf55a75c15a`。
+
+| 审计项 | 裁决 |
+| --- | --- |
+| CHANGE 1 撤销与副作用竞态 | **PASS WITH REVISE** |
+| CHANGE 2 候选身份隔离 | **PASS WITH REVISE** |
+| CHANGE 3 修复权限端到端隔离 | **PASS WITH REVISE** |
+| CHANGE 4–8 P1 条款 | **PASS** |
+| 失败矩阵与状态转移表 | **PASS WITH REVISE** |
+| DESIGN_ONLY_SCOPE_HONESTY | **PASS** |
+
+机器裁决：`PHASE3_DESIGN_FINAL_ACCEPTED = YES_WITH_CONDITIONS`、**`PHASE3_IMPLEMENTATION_AUTHORIZED = NO`**、
+`AUTONOMOUS_CODE_REPAIR_AUTHORIZED = NO`、`EXTERNAL_WRITE = HOLD`、`REAL_PROVIDER_EXECUTION = NOT_AUTHORIZED`、
+`AUTO_MERGE = FORBIDDEN`、`AUTO_DEPLOY = FORBIDDEN`、`PRODUCTION_READY = NO`；
+`REVIEW_BASIS = USER_SUPPLIED_DESIGN_ONLY`、`REPOSITORY_VERIFIED = NO`、`RUNTIME_TESTS_EXECUTED = NO`。
+`NEXT_AUTHORIZED = PHASE3_DESIGN_FINAL_R3_READ_ONLY`、`NEXT_AUDIT = MSG-20261009-14`。
+
+**新增四项必修（本轮之后按此收口）**：
+
+1. **CHANGE 9（P0）副作用提交协议与线性化实现**：允许进入 PHASE 3 的动作逐一分类为
+   `PURE_READ` / `ISOLATED_WRITE` / `REVERSIBLE_INTERNAL_COMMIT` / `IRREVERSIBLE_OR_EXTERNAL`；
+   每个允许写入的动作必须指定**唯一提交点 + 授权版本校验点 + 幂等标识 + 持久化副作用登记**；
+   同事务内部写入须以行锁 / 条件更新（或等效机制）建立可证明提交顺序；撤销与提交并发时**必须产生唯一胜者**，
+   且提交成功后的撤销**不得追溯宣称提交未发生**；跨事务 / 外部系统副作用**不得**仅凭本地 CAS 宣称原子性（缺协调协议继续 BLOCK）；
+   `SETTLE_REJECTED_BUT_EFFECT_POSSIBLE` 必须进入持久化对账或人工处置，**不得自动重复执行**。
+   关闭标准：动作分类表 + 每类提交协议；无法证明安全性的动作标记 `NOT_AUTHORIZED`。
+2. **CHANGE 10（P0）候选消费的权威身份与幂等契约**：`incidentId` 必须关联**权威持久化 Incident**（非载荷声明）；
+   持久化关联至少含 `incidentId` / `taskId` / `sourceKind` / 可信主体引用 / 身份解析版本 / 状态 / 去重键；
+   明确「单 Incident 产生多候选」的规则，去重键须覆盖任务种类与修复目标（避免误合并不同故障）；
+   身份解析变化 ⇒ **原任务失效并重新分流**（不允许自动迁移租户或扩大权限）；
+   入队与认领的独立解析**不能替代**提交时的最终授权检查；明确租约 / fencing token / 重复消息 / 崩溃恢复的持久化关系。
+   关闭标准：给出 `Incident → Candidate → Task → Attempt` 的权威关系契约，以及重复、并发与身份漂移的拒绝规则。
+3. **CHANGE 11（P1）沙箱隔离与可信验证边界**：Builder / 测试执行器 / Judge 使用**相互隔离**的执行上下文与权限；
+   候选工作区固定基线 commit、允许路径与内容摘要；测试输入、实际执行命令、环境约束、退出码与原始日志摘要
+   必须形成**不可由 Builder 单独伪造**的验证记录；**禁止** Builder 修改 Judge 策略、测试入口、权限策略或验证结果存储；
+   路径检查必须覆盖**解析后的真实目标**并防止检查后替换（TOCTOU）；明确隔离失败 / 资源耗尽 / 超时 / 恶意补丁 / 结果不确定时的 fail-closed。
+   `Judge PASS` 仅意味着候选满足**当前验证策略**，不等于补丁安全或可发布 / 可自动合并。
+4. **CHANGE 12（P1）状态转移的提交语义**：撤销**不得**统一描述为 `BLOCKED` / `CANCELED`（已发生的提交必须保留不可变事实）；
+   `COMMITTED` 必须带**可信提交凭证**。状态语义拆分：`CANCELED_BEFORE_COMMIT`（有取消证据且未跨提交点）/
+   `REJECTED_AT_COMMIT`（提交被权威机制拒绝）/ `COMMITTED`（存在可信提交凭证）/ `COMMIT_OUTCOME_UNKNOWN`（结果不确定，禁止盲重试）/
+   `SETTLED`（结果已持久化收敛）/ `SETTLE_REJECTED_BUT_EFFECT_POSSIBLE` / `RECOVERING`（依据权威事实恢复，不直接重放副作用）；
+   并定义合法状态迁移、终态不可逆条件、恢复后的对账入口与并发恢复时的 fencing 约束。
+
+**失败矩阵追加四项验收情景**：① 授权撤销与 DB COMMIT 同时竞争 ⇒ 唯一线性化胜者且提交事实与授权顺序一致；
+② 提交成功后进程崩溃、确认丢失 ⇒ `UNKNOWN` → 权威对账、不重复提交；③ Judge PASS 后工作区发生变化 ⇒ 摘要不一致、拒绝应用；
+④ 身份版本变化后旧任务恢复 ⇒ 旧身份禁止继续执行并重新分流。
+
+**CHANGE 4–8 三条红线（保留）**：快照过期或授权版本变化必须**重新获取**可信事实（不得简单延长 TTL）；
+REVISE / 重试 / 模型调用 / 测试执行必须有**持久化预算**（崩溃恢复不得重置计数）；
+真实 PostgreSQL 测试必须覆盖**实际装配路径**（不能只证明独立纯函数或模拟适配器行为）。
+
+**授权边界**：`NEXT_AUTHORIZED = PHASE3_DESIGN_FINAL_R3_READ_ONLY` —— 仅允许完成 CHANGE 9–12 契约修订、
+补齐可执行验收矩阵、形成 PHASE 3 **最小安全实施单元划分**并提交下一轮审计（MSG-20261009-14）。
+**不授权**：实现或接线（适配器、候选消费通道、Builder/Judge、隔离沙箱、自动修复执行器）、
+修改 Runtime / 队列 / Action Guard / Prisma schema·migration、自动合并 / 发布 / 部署 / 生产库写入、
+Provider / 支付 / 报关 / 物流及其他外部副作用。
+下一轮若全部设计门禁通过，可**单独**申请 PHASE 3-A 最小安全范围实施授权，**不得**由本轮裁决自动推导。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -703,8 +764,11 @@ PHASE3_IMPLEMENTATION_PREREQUISITE = TRUSTED_ADAPTER_SOURCE_PROVENANCE_EXECUTION
 PHASE3_DESIGN_REVIEW_VERDICT = MSG-20261009-12 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A d95eeb78）
 PHASE3_DESIGN_ACCEPTED = YES_WITH_CONDITIONS
 PHASE3_IMPLEMENTATION_AUTHORIZED = NO（禁止实施适配器/接线/Builder/Judge/自动修复）
-PHASE3_DESIGN_FINAL_R2 = DESIGN_REVISION_COMPLETED（§8 三项 P0 与五项 P1 条款 + §9 状态转移表 + §10 未实施声明；仍未实施任何能力）
-NEXT_UNIT = 送 PHASE 3 设计 FINAL-R2 复审（MSG-20261009-13）
+PHASE3_DESIGN_FINAL_R2_VERDICT = MSG-20261009-13 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A e7b0fa2e）
+PHASE3_DESIGN_FINAL_ACCEPTED = YES_WITH_CONDITIONS
+PHASE3_IMPLEMENTATION_AUTHORIZED = NO（AUTONOMOUS_CODE_REPAIR / AUTO_MERGE / AUTO_DEPLOY 一律禁止）
+PHASE3_DESIGN_FINAL_R3 = NOT_STARTED（需完成 CHANGE 9–12 + 可执行验收矩阵 + 最小安全实施单元划分）
+NEXT_UNIT = PHASE 3 设计 FINAL-R3（只读收口：CHANGE 9–12 + 验收矩阵 + 最小安全实施单元）→ 送 MSG-20261009-14
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
