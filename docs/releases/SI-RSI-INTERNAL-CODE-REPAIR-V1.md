@@ -259,6 +259,20 @@ Linux 路径 / Windows 路径 / 邮箱 / 长数字）逐例断言**密钥原文�
 （真实落库行的 A 路径、外部写对账、修复候选、未分类、终态行不可分流；全程零任务零租约）；
 PHASE 1 + PHASE 2 合并定向回归 **7 文件 / 123 tests 全绿**；`apps/api tsc --noEmit` **0 error**。
 
+**PHASE 2 第二单元 —— 分流扫描（只读 + 只登记，零执行）**：
+`apps/api/src/services/self-repair/fault-triage-sweep.ts`（+ 真实 PG 套件 `internal-code-repair-phase2-triage-sweep-db.test.ts`）。
+
+- 只读扫描 `kind = INTERNAL_FAULT` 且 `status = DIAGNOSED` 的行；
+- **可信事实必须注入**（`resolveTrustedFacts`，服务端来源）；缺省即 **fail-closed**（无法确认 ⇒ BLOCK，拿不到 A 路径）；
+- 只把**固定 3 个服务端字段**登记回 `sourceRefs`：`triageDecision` / `triageReason` / `triagedAt`（均非自由文本），
+  登记语句带 `kind`/`status` 前置条件（并发中转终态的行不会被登记）；
+- **绝不**建任务 / 租约、绝不调用 ONE SI Runtime、绝不做外部写：返回值恒为
+  `tasksCreated = 0` / `leasesCreated = 0` / `runtimeInvocations = 0`（并有静态断言：模块不 import `../runtime/`、源码不含 `autonomyTask`/`autonomyLease`/`console.`）。
+
+验收（真实 PostgreSQL）：DB-S1 注入可信事实 ⇒ A 路径候选与修复候选各得其所且**只登记不执行**（零任务零租约）；
+DB-S2 未注入 ⇒ 全部 BLOCK（`TENANT_CONTEXT_NOT_TRUSTED`）；DB-S3 只扫 `DIAGNOSED`（`OPEN`/`CLOSED` 不进入）；
+DB-S4 登记仅固定三项且值为稳定码 / ISO 时间；DB-S5 静态证据。PHASE 2 三套件 **30/30 PASS**。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -345,7 +359,7 @@ PHASE1_REVIEW_VERDICT = MSG-20261009-08 = PASS WITH REVISE（逐字归档 FULL_C
 **全过程门禁**：纯函数 61 用例 + 真实 PostgreSQL 14 用例（隔离库 `crossclaim_p3r2_iso`）；
 定向回归 5 文件 / **98 tests 全绿**；`apps/api tsc --noEmit` **0 error**；未跑全量回归（如实登记）。
 
-PHASE2_PROGRESS = TRIAGE_MODULE_IMPLEMENTED（5 路径确定性分流 + 真实 PG 往返；A 路径仅交回既有运行时）
+PHASE2_PROGRESS = TRIAGE_MODULE_IMPLEMENTED + SWEEP_IMPLEMENTED（只读扫描 + 只登记三项；A 路径仅为候选登记，零执行）
 NEXT_UNIT = PHASE 2 收口（接线到既有运行时入口的**只读候选登记**）→ GATE-1 全量 API 回归 → PHASE 2 独立复审
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
