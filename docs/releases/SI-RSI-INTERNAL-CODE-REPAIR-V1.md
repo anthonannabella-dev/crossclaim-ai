@@ -3594,3 +3594,49 @@ SCHEMA_MIGRATION=HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL=FORBIDDEN
 EXTERNAL_WRITE=HOLD · AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.55 R3 只读收口交付（授权 `PHASE3_A_U2_PRECONDITION_R3_READ_ONLY_CHANGES_91_TO_93`）
+
+> 交付物：`docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-PRECONDITION-R3-READONLY-CONSOLIDATION.md`
+> （SHA-256 `62026a604e89c157abad332c7a21b6c825baa8871f01377e765c3be835eeea70`，11,936 字节）
+> 基线 `0ffad444`；U1 封板 `9ee36837` 未改动；`P3_EXPERIMENT_AUTHORIZED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`PRODUCTION_WRITE_AUTHORIZED=NO` 不变。
+> 本轮**仅**文档修订：未实施产品代码、未连接任何数据库（含未执行只读查询）、未运行实验、未恢复心跳或 OS 定时任务、未新增 schema/migration。
+
+**三项修订**
+
+1. **CHANGE 91（P0）`FENCE_CONTRACT` 收紧**：明确 **CAS 仅用于接管侧原子递增**；
+   写入侧**禁止**只做 CAS，必须在**同一事务**内取得**可验证栅栏保护**并**持续到 `COMMIT`/`ROLLBACK`**
+   （W-A 行锁 `SELECT ... FOR UPDATE` 首选；W-B `SERIALIZABLE` 须证明序列化依赖并正确处理 `40001`，重试须重新校验 generation）；
+   校验字段集合扩展为 **`resourceKey / ownerRef / fenceGeneration / state / leaseValidity / authorizationScope`**；
+   写入 **`INV-1`~`INV-5`**（所有入口同协议；同事务且覆盖到提交/回滚；接管与校验在同一保护对象上全序；**不得**因 CAS 返回一行即认定安全提交；任一校验失败不得声称提交成功）；
+   并澄清 **`AutonomyLease` 不等于可直接作为 `FENCE_CONTRACT` 载体**（须先完成资源身份/行锁或序列化/版本单调性/事务边界/权限五项只读评审）。
+2. **CHANGE 92（P0）S3 修订**：撤销「四阶段全部成功」的前提，拆为 **S3a**（旧事务先取得栅栏行锁 ⇒ **接管必须等待**，不得插入旧事务"校验→提交"之间）
+   与 **S3b**（新持有者先完成接管 ⇒ 旧事务**不得**以旧 generation 成功提交受保护写入）；
+   区分四状态 `ST-1`（已开始未取得栅栏）/`ST-2`（已取得栅栏未提交）/`ST-3`（校验时 token 已失效）/`ST-4`（**旧事务先合法提交、随后合法接管 = 合规，不属违规**）；
+   写死违例判定口径（**接管已提交后仍出现带旧 generation 的受保护写入成功提交 = FAIL**），并明确**测试目标是证明非法提交不会发生**，而非要求所有事务按人为顺序成功推进。
+3. **CHANGE 93（P1）取证修订**：E-08（补 role membership/schema 权限/对象所有者/继承角色/`SECURITY DEFINER`/RLS）、
+   E-09（补故障切换仲裁、fencing、同步/异步复制、**防旧主继续写入**机制）、E-10（状态计数不足以证明事务边界，须结合代码路径与数据库语义）、
+   E-11（**脱敏**，仅回传键名与"是否设置"）、E-12（须补角色与连接池配置、实际触发器生效状态）、
+   E-13（仅重启比对不足以证明运行期不可替换）、**E-14（改用 `pg_current_xact_id_if_assigned()`；不得把事务 ID 存在当提交证据）**、
+   E-15（须同时核验实际进程身份/unit 覆盖/生效属性）、E-16（增加**阻断传播时间上限 / 阻断确认信号 / 失效默认停止写入**）；
+   并新增纪律 **`READ_ONLY_EVIDENCE_DISCIPLINE`**：**只读 SQL ≠ 可在生产随意执行**——须先取得宿主只读取证授权、限制权限与 `statement_timeout` 与输出内容（白名单字段化、禁行级业务数据与凭据）、全程留痕；
+   宿主顺序更新为：①E-01/E-02/E-03/E-08/E-10/E-11/E-12 只读事实 → ②**选择 fencing 方案前**必须核验 E-09/E-14 → ③其余证据后续补齐 → ④之后才能申请**单独的隔离 PG16 实验授权**。
+
+**追加**：路线 A 增加 **A-7**（主节点切换后 generation 单调性不受异步复制回退影响）与 **A-8**（角色/所有权/特权入口构成可审计权限闭环、无未受控应用旁路）。
+
+```text
+F01_STATUS = OPEN_P0（未关闭；完成 91–93 不代表关闭）
+PREFERRED_LOCK_ROUTE = LEASE_REVIEW_FIRST · A-7/A-8 已追加
+LOCK_PROTOCOL_UNIFORMITY = NOT_PROVEN
+DEDUPE_PROOF = DESIGN_EVIDENCE_ONLY · EXCLUSION_PROOF_STATUS = NOT_PROVEN
+COMMIT_ATTRIBUTION_PROOF = NOT_AVAILABLE_IN_CURRENT_CONFIGURATION
+MULTI_INSTANCE_AUTOMATED_WRITE = NOT_AUTHORIZED
+P3_EXPERIMENT_AUTHORIZED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · PRODUCTION_WRITE_AUTHORIZED = NO
+U1_CODE_CLOSURE = UNCHANGED（9ee36837）· U2_DESIGN_R21 = 未重开
+SCHEMA_MIGRATION = HOLD / RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD / AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN / PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+HEARTBEAT_RESTORED = NO / OS_TIMER_RESTORED = NO
+```
