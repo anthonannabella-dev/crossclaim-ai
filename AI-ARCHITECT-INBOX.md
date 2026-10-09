@@ -184484,3 +184484,227 @@ V2-01 至 V2-09 的代码与文档基线可以保留，不需要整体推倒重�
 
 本次审计仅进行了 GitHub 只读核验，未修改仓库、Issue 或任何追踪系统。
 ```
+
+### [MSG-20261010-54] CrossClaim AI V2 第二轮独立审计裁决：PASS_WITH_REVISE（reviewed ref 955a1cb6）
+
+```text
+MSG-20261010-54｜CrossClaim AI V2 第二轮独立审计裁决
+DECISION：PASS_WITH_REVISE
+
+审计仓库： anthonannabella-dev/crossclaim-ai
+审计分支： feat/customs-opportunity-unlock-v2
+REVIEW_HEAD（上一轮）： 1caad401
+ARCHIVE_HEAD： bfa109ca
+CODE_HEAD / EVIDENCE_HEAD： 955a1cb6
+审计方式： GitHub 只读源码核验，不修改仓库或 Issue。
+
+一、审计结论
+
+本轮修复有效，主要安全边界明显收紧，但尚不能无条件 PASS。
+
+GitHub 比较结果确认 1caad401 → 955a1cb6 前进 9 个提交，包含审计归档、修复代码、测试和文档更新。用户所述“7 个修复提交”可以与总计 9 个提交并存，但不应将两者当作同一统计口径。
+
+根据固定 HEAD 源码：
+
+上轮 CHANGE 01、02、05 的核心缺陷已实质修复。
+
+CHANGE 03、04、07、08 已有针对性实现，但本次发现进一步需要收紧的信任边界。
+
+CHANGE 06 仍因缺少 PostgreSQL 环境而阻断。
+
+CHANGE 09 的审计矩阵分层已改进。
+
+已提交验收矩阵记录 9 个测试套件、186 项测试通过，双端 TypeScript 0 error。本次没有独立运行这些测试，因此其级别是仓库记录的测试证据，而不是审计方现场执行通过。
+
+二、九项逐条复审
+
+CHANGE	上轮严重度	本轮裁决	说明
+01	P0	PASS / CLOSED	C4 和 C5 双条件已约束金额披露，新增原因码及组合测试
+02	P0	PASS_SCOPED	私有 Symbol 品牌及运行时检查已落地；真实支付事实链仍待 E2E
+03	P0	REVISE	VerifiedFeeCollectionFact 已引入，但可信来源证明仍不足
+04	P1	REVISE	原型逃逸已修复，仍存在复制原始数据属性的能力泄露风险
+05	P1	PASS / CLOSED	报价有效期、机会 ID、归属未知已改为 fail-closed
+06	P1	BLOCKED	缺少数据库级幂等及并发事务验证
+07	P1	PASS_WITH_FINDINGS	费率改为 FeePolicy、部分到账语义已修正；策略来源及历史金额仍需增强
+08	P1	PASS_WITH_FINDINGS	四重身份比较已实现；机会归属为 null 时仍可进入后续判定
+09	P1	PASS / CLOSED	审计锚点及测试级、系统级状态已经分开
+
+三、本轮剩余 REQUIRED_CHANGES
+CHANGE 10 — P0｜收款可信事实存在自我认证路径
+
+文件： apps/api/src/services/customs/customs-success-fee-collection.ts
+函数： verifyFeeCollectionFact()、isVerifiedFeeCollectionFact()
+
+实际检查确认 verifyFeeCollectionFact() 接收普通事实对象，只核查交易号、receivableId、merchantAccountId 和声明的来源枚举，之后生成私有 Symbol 品牌。
+
+问题在于：
+
+TypeScript
+source: 'PAYMENT_PROVIDER_WEBHOOK'
+
+只是输入对象自己声明的字符串，并不构成实际经过支付平台验签或对账的证明。
+
+同时，当 expectedMerchantAccountId === null 时，商户账户一致性校验被跳过。
+
+因此，即使已经使用 Symbol 品牌，也不能证明输入来自可信外部渠道。
+
+REQUIRED： 可信支付事件必须在独立的认证边界完成签名或对账验证；商户身份缺失必须 HOLD；认证后的支付凭据须绑定交易、应收、商户、金额、币种和事件身份，并保留可审计来源。
+
+此问题不意味着目前已有真实扣款漏洞，但禁止将当前实现判定为可信真实收款链路。
+
+CHANGE 11 — P1｜Provider 包装仍复制非函数属性
+
+文件： customs-paid-api-gate.ts
+函数： wrapPaidCustomsProvider()、collectProviderDataPropertyNames()
+
+已确认包装对象不再使用 Object.create(provider)，原始 Provider 不能直接通过包装对象的原型取得。
+
+但新包装仍复制原始 Provider 的非函数属性：
+
+TypeScript
+wrapped[name] = provider[name];
+
+风险包括：
+
+暴露内部 HTTP client、transport 或其他嵌套对象；
+
+复制引用对象导致调用方绕过受控方法；
+
+读取 getter 时产生意外副作用。
+
+REQUIRED： 仅允许明确列出的安全、不可调用元数据；禁止自动复制未知对象属性和 getter。加入嵌套 client、getter、符号属性及动态代理测试。
+
+CHANGE 12 — P1｜Pack 对未知归属未完全 fail-closed
+
+文件： customs-unlock-si-pack.ts
+函数： createCustomsUnlockSiPack()
+
+当前代码检查：
+
+TypeScript
+facts.opportunity.ownerOrganizationId !== null &&
+facts.opportunity.ownerOrganizationId !== facts.organizationId
+
+因此，机会归属为 null 时不会产生归属不匹配原因。
+
+虽然执行链另有身份检查，但 Pack 自身尚未满足“归属无法确定立即 BLOCK”的强要求。
+
+REQUIRED： ownerOrganizationId === null 明确返回 OPPORTUNITY_OWNERSHIP_UNKNOWN，不得继续进入执行链。补充 null、空字符串和不匹配归属的负向测试。
+
+CHANGE 13 — P1｜成功费策略与历史账目进一步收紧
+
+文件： customs-success-fee-collection.ts
+
+FeePolicy 注入已修复任意 rateBps 参数覆盖问题，但在所核对函数中尚未看到完整的合同版本、有效期与费率合法性验证。
+
+此外，historicalCollectedAmount 目前来自外部传入的 history.collectedAmount，尚未证明它是经过验证的持久收款台账合计。
+
+REQUIRED： 绑定生效中的可信合同策略，验证费率范围、币种和有效期；历史收款金额必须来自可信账目，避免把传入的汇总数当成已收事实。
+
+CHANGE 06 — P1｜继续 BLOCKED
+
+保留上一轮要求，不新增重复设计任务。
+
+解锁条件：
+
+提供隔离 PostgreSQL 16 实例；
+
+建立必要的唯一约束和原子写入；
+
+完成重复事件、并发领取、重复应收及冲正的数据库级验证。
+
+不可用进程内 Set 或纯函数测试替代。
+
+四、NEXT_AUTHORIZED
+纯文本
+NEXT_AUTHORIZED =
+  V2_R2_SCOPED_TRUST_BOUNDARY_REPAIR
+
+REQUIRED_CHANGES =
+  CHANGE_10_P0
+  CHANGE_11_P1
+  CHANGE_12_P1
+  CHANGE_13_P1
+
+EXISTING_BLOCKER =
+  CHANGE_06_P1_POSTGRESQL_IT
+
+AUTHORIZED =
+  READ_ONLY_INSPECTION
+  MINIMAL_CODE_REPAIR
+  NEGATIVE_UNIT_TESTS
+  LOCAL_TYPECHECK
+  DOCUMENTATION_UPDATE
+  COMMIT_AND_PUSH_CURRENT_BRANCH
+
+NOT_AUTHORIZED =
+  PACK_REGISTRATION
+  REAL_PROVIDER_EXECUTION
+  REAL_PAYMENT_COLLECTION
+  PRODUCTION_MIGRATION
+  PRODUCTION_DEPLOYMENT
+
+下一轮只处理上述四项安全边界缺陷，并准备 CHANGE 06 的数据库执行方案。
+
+不要求重开已关闭的 CHANGE 01、02、05、09，也不要求重复设计 V2-01 至 V2-09 的整体商业化架构。
+
+五、HOLD 边界
+
+项目	状态
+REAL_PAYMENT_WEBHOOK_E2E	NOT_VERIFIED
+POSTGRESQL_IT	NOT_RUN
+REAL_PROVIDER	NOT_VERIFIED
+BROWSER_E2E	NOT_VERIFIED
+MULTI_DEVICE_VISUAL	NOT_VERIFIED
+PACK_REGISTRATION	NOT_WIRED
+ENTITLEMENT_AWARE_CTA	NOT_IMPLEMENTED
+CHECKOUT_REDIRECT	NOT_IMPLEMENTED
+AUTO_COLLECTION	HOLD
+REAL_PROVIDER_WRITE	HOLD
+PRODUCTION_READY	NO
+
+六、最终机器可读裁决
+纯文本
+AUDIT_ID=MSG-20261010-54
+DECISION=PASS_WITH_REVISE
+
+BASE_HEAD=21e49891
+PREVIOUS_REVIEW_HEAD=1caad401
+ARCHIVE_HEAD=bfa109ca
+CODE_HEAD=955a1cb6
+EVIDENCE_HEAD=955a1cb6
+
+PREVIOUS_CHANGES=9
+CLOSED=01,05,09
+PASS_SCOPED=02
+REVISE=03,04
+PASS_WITH_FINDINGS=07,08
+BLOCKED=06
+
+NEW_REQUIRED_CHANGES=10,11,12,13
+NEW_P0=1
+NEW_P1=3
+EXISTING_BLOCKED_P1=1
+
+UNIT_TESTS=186_REPORTED_PASS
+TYPECHECK=REPORTED_PASS
+POSTGRESQL_IT=NOT_RUN
+BROWSER_E2E=NOT_VERIFIED
+
+NEXT_AUTHORIZED=V2_R2_SCOPED_TRUST_BOUNDARY_REPAIR
+
+U1_REOPEN=NO
+U2_DESIGN_R21_REOPEN=NO
+SECOND_RUNTIME=NOT_FOUND_IN_REVIEWED_PACK
+
+PACK_REGISTRATION=HOLD
+REAL_PROVIDER_WRITE=HOLD
+AUTO_COLLECTION=HOLD
+PRODUCTION_READY=NO
+
+正式结论：PASS_WITH_REVISE。
+
+本轮不需要重新设计 V2 架构。应优先收口 CHANGE 10 的支付事实信任边界，再修复 Provider 包装、Pack 归属及成功费账目问题。数据库级并发保证继续作为独立阻断项，不得被标记为已通过。
+
+本裁决仅在当前对话生效，没有向仓库、Issue 或追踪系统写入任何内容。
+```
