@@ -103,6 +103,10 @@ jobs:
       - name: Audit coverage (audit actions ↔ OPERATIONS.md)
         run: node tools/audit-coverage/check-audit-actions.mjs --root .
 
+      - name: Build API artifacts (dist) — required by runtime startup parity test
+        working-directory: apps/api
+        run: npm run build
+
       - name: TypeScript typecheck
         working-directory: apps/api
         run: npx tsc --noEmit

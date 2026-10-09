@@ -132,13 +132,25 @@ describe('PHASE 2 / CHANGE 3 可信事实来源契约', () => {
   /**
    * MSG-20261009-10 / CHANGE 5 —— **声明不是运行时授权**（强制条款）。
    */
-  it('CHANGE 5：契约明确「声明只约束解析器配置；执行前必须重新读取与校验」', () => {
+  it('CHANGE 5：契约明确「声明只约束解析器配置；执行前必须重新读取与校验」', async () => {
     expect(TRIAGE_TRUSTED_FACT_CONTRACT).toMatchObject({
       declarationIsNotAuthorization: true,
       snapshotNotAuthorization: true,
     });
-    const doc = readFileSync(
-      'D:/crossclaim-ai/docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE2-TRUSTED-FACTS-CONTRACT.md',
+    // CI-R1：跨平台仓库相对路径（Windows 绝对路径在 Linux runner 上 ENOENT）
+    const { readFileSync: readContractDoc } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const doc = readContractDoc(
+      resolve(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        '..',
+        'docs',
+        'releases',
+        'SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE2-TRUSTED-FACTS-CONTRACT.md',
+      ),
       'utf8',
     );
     expect(doc).toContain('来源声明只约束解析器');

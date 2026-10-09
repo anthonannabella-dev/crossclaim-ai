@@ -123,8 +123,10 @@ describe('SA-3b — HITL 提交边界（真实入口）', () => {
 describe('SA-3b — Action Pack runtime（RSI 执行链）接线存在性', () => {
   it('runActionPack 的类型契约包含可选 standingAuthorization，并把它透传给既有 approval verifier', async () => {
     const fs = await import('node:fs');
+    const { resolve } = await import('node:path');
+    // CI-R1：跨平台仓库相对路径（Windows 绝对路径在 Linux runner 上 ENOENT）
     const source = fs.readFileSync(
-      'D:/crossclaim-ai/apps/api/src/services/action-runtime/action-pack-runtime.ts',
+      resolve(__dirname, '..', 'services', 'action-runtime', 'action-pack-runtime.ts'),
       'utf8',
     );
     expect(source).toContain('standingAuthorization?: {');
