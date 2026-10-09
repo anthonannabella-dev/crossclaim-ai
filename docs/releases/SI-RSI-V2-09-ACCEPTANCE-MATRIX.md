@@ -1,80 +1,82 @@
-# SI-RSI V2-09 — V2 验收矩阵（V2-01 → V2-08）
+# SI-RSI V2-09 — 验收矩阵 v2（修复后重述，锚点分离）
 
-> 授权：HOST DIRECTIVE 2026-10-10「V2-AUTONOMOUS-20261010-01」§五。
-> 分支：`feat/customs-opportunity-unlock-v2`；基准 `V2_BASE_HEAD=21e49891`；本矩阵锚点 `V2_FINAL_HEAD=f47ba314`。
+> 授权：审计 `MSG-20261010-53`（`PASS_WITH_REVISE`，`NEXT_AUTHORIZED=V2_R1_SCOPED_SECURITY_AND_CONTRACT_REPAIR`）。
+> 本版替代 v1；**v1 的问题正是"把测试级 PASS 写成总体 PASS、且只有一个 HEAD 锚点"**，本版逐条改正。
 
-## 0. 证据快照（本机真实执行，可复现）
+## 0. 三个锚点必须分开（CHANGE 09）
+
+| 锚点 | 含义 | 取值 |
+| --- | --- | --- |
+| `REVIEW_HEAD` | 第一轮送审、被审计方核验过的版本 | `1caad401` |
+| `ARCHIVE_HEAD` | 裁决逐字归档（`FULL_COPY_OK` 235/235） | `bfa109ca` |
+| `CODE_HEAD` | 本轮 CHANGE 01–08 修复后的代码版本 | `acd05d16` |
+| `EVIDENCE_HEAD` | 本矩阵与测试证据采集时的版本（= 文档提交父提交） | `acd05d16` |
+
+**注意**：`REVIEW_HEAD ≠ CODE_HEAD`。第二轮送审应以 `CODE_HEAD` 之后的固定提交为准，且必须重新采集证据，不得沿用第一轮的测试数字。
+
+## 1. CHANGE 01–09 修复状态
+
+| 编号 | 严重度 | 状态 | 证据 |
+| --- | --- | --- | --- |
+| 01 C4 非 ELIGIBLE 时金额泄露 | P0 | **FIXED** | 披露条件改为 `C4=ELIGIBLE && C5=ESTIMATED`；`AMOUNT_WITHHELD_PENDING_ELIGIBILITY`；C4 三态 × C5 全状态组合矩阵 9 组 |
+| 02 权益发放未绑定验签证据 | P0 | **FIXED** | 新增 `VerifiedPaymentEvidence`（私有 Symbol 品牌 + 运行时兜底）；发放拒绝裸对象；发放前复核报价有效期 |
+| 03 COLLECTED 缺可信交易事实 | P0 | **FIXED** | 新增 `VerifiedFeeCollectionFact`（交易号+应收归属+商户+可信来源四项核验）；`historicalCollectedAmount` / `collectionAuthorizedForFuture` 分离历史与未来授权 |
+| 04 全出口覆盖非结构性封闭 | P1 | **FIXED** | 包装弃用 `Object.create(provider)`（原型逃逸），改最小权限对象；`collectProviderFunctionExits` 遍历实例/原型/符号出口；未声明出口抛 `CustomsProviderUndeclaredExitError`；静态扫描补方括号动态访问 |
+| 05 Gate 空值放行 | P1 | **FIXED** | `quoteValidUntil` 缺失 → `PROVIDER_QUOTE_VALIDITY_REQUIRED`；`opportunityId` 缺失 → `OPPORTUNITY_REFERENCE_REQUIRED`；归属未知 → `OPPORTUNITY_OWNERSHIP_UNKNOWN` |
+| 06 幂等无事务级保证 | P1 | **BLOCKED** | 见 §3：需 PostgreSQL 实例；**不假装完成** |
+| 07 部分到账语义 + 费率可覆盖 | P1 | **FIXED** | 部分到账改用 `PARTIAL_COLLECTION`（不再冒充冲正）；移除 `rateBps` 输入，改为注入版本化 `FeePolicy`，缺失/无费率/币种不符一律不产生应收 |
+| 08 Pack 租户与身份未交叉验证 | P1 | **FIXED** | 强制四重一致：事实租户=任务租户、机会归属=事实租户、案件身份=任务声明（`TASK_OPPORTUNITY_REF_MISSING` / `CASE_IDENTITY_MISMATCH` 等独立原因码） |
+| 09 矩阵与完成状态未对齐 | P1 | **FIXED** | 本文件即修复产物：三锚点分离 + 测试级/系统级分行 + BLOCKED 单列 |
+
+## 2. 验收矩阵 v2（测试级 / 系统级分列）
+
+**测试级 PASS = 在本机对纯函数与断言执行的单元测试通过。它不等于系统集成级通过。**
+
+| # | 验收项 | 测试级 | 系统集成级 | 证据 |
+| --- | --- | --- | --- | --- |
+| 1 | 免费发现与六态投影 | PASS | NOT_VERIFIED | `customs-opportunity-unlock-state.test.ts` 20 项（含组合矩阵） |
+| 2 | 无真实金额时付费入口不可见 | PASS | NOT_VERIFIED | 同上：`unlockEntryVisible=false` 且金额为空 |
+| 3 | 五语言文案一致性 | PASS（类型级） | NOT_VERIFIED | `Record<Locale,…>`；`apps/web tsc --noEmit` 0 error |
+| 4 | 报价/付款/权益/授权状态 | PASS | BLOCKED（真实 webhook） | `customs-unlock-payment.test.ts` 26 项（全部走真实验签路径构造证据） |
+| 5 | 账户隔离与越权访问 | PASS | NOT_RUN（DB 级） | Gate/投影/Pack 跨租户拒绝；DB 租户隔离套件需 PostgreSQL |
+| 6 | Profit Gate 正确阻断 | PASS | NOT_VERIFIED | `customs-profit-gate.test.ts` 21 项 |
+| 7 | ONE SI Runtime 唯一路径 | PASS | NOT_WIRED | Pack 复用既有合同；`createsRuntime=false` |
+| 8 | 任务幂等 / 并发领取 | PASS（幂等判定） | **BLOCKED**（并发） | 见 §3 |
+| 9 | Provider 失败/超时/重试/对账 | PASS（判定层） | NOT_VERIFIED | 执行链 19 项 |
+| 10 | 证据可信性与结算事实 | PASS（判定层） | NOT_VERIFIED | 执行链 + 成功费 22 项 |
+| 11 | 15% 准确性与重复计费保护 | PASS | NOT_VERIFIED | 成功费 22 项 + 既有 guard 18 项 |
+| 12 | Kill Switch / 审批门禁 / 外写 HOLD | PASS | NOT_VERIFIED | 四处独立分支 + 双门禁 |
+| 13 | 前后端集成与浏览器断点 | **BLOCKED** | BLOCKED | 无 PostgreSQL / 未起链路 |
+| 14 | 迁移兼容与回滚 | **NOT_APPLICABLE** | NOT_APPLICABLE | `git diff --name-only c6e03c51..CODE_HEAD` 中 prisma/migration 命中 0 |
+
+## 3. BLOCKED 项与解锁条件（CHANGE 06 / 08 并发 / 13）
+
+| BLOCKED 项 | 为什么不能在本机完成 | 解锁条件 |
+| --- | --- | --- |
+| CHANGE 06 事务级幂等 | 现有实现用集合判定重复,无法证明"两个并发请求同时读到旧集合后分别通过" | 提供 PostgreSQL 16 实例 → 用唯一约束/原子事务实现并以并发重放测试验证(相同支付事件/报价/结算/交易各一组) |
+| 并发领取 | 租约 CAS 需要真实数据库事务 | 同上 |
+| 浏览器 E2E / 多设备视觉 | 无 DB、未起前后端链路 | 隔离环境 + PostgreSQL + 允许启动本地服务 |
+
+**纪律**：以上三项在解锁前一律保持 `BLOCKED`,不得以内存集合模拟或截图缺失代替。
+
+## 4. 证据采集（`EVIDENCE_HEAD=acd05d16`，本机真实执行）
 
 ```powershell
-# 提交
-git -C D:/crossclaim-ai rev-parse HEAD
-# → f47ba3146e690c2a2d7d75db5d35624114afcbce
-
-# 单元回归（apps/api）
 cd D:/crossclaim-ai/apps/api
 npx vitest run src/__tests__/customs-paid-api-gate.test.ts src/__tests__/customs-paid-provider-composition.test.ts `
   src/__tests__/customs-opportunity-unlock-state.test.ts src/__tests__/customs-profit-gate.test.ts `
   src/__tests__/customs-unlock-payment.test.ts src/__tests__/customs-execution-chain.test.ts `
   src/__tests__/customs-unlock-si-pack.test.ts src/__tests__/customs-success-fee-collection.test.ts `
   src/__tests__/customs-success-fee-guard.test.ts
-# → Test Files  9 passed (9)      Tests  165 passed (165)
-
-# 类型检查
+# → Test Files 9 passed (9) · Tests 186 passed (186)
 npx tsc --noEmit          # apps/api → 0 error
 cd ../web; npx tsc --noEmit   # apps/web → 0 error
 ```
 
-各套件明细：paid-api-gate 33 · unlock-payment 23 · success-fee-guard 18 · opportunity-unlock-state 19 ·
-execution-chain 19 · profit-gate 21 · paid-provider-composition 10 · success-fee-collection 15 · unlock-si-pack 7。
-
-## 1. 验收矩阵
-
-| # | 验收项 | 状态 | 证据 | 级别 |
-| --- | --- | --- | --- | --- |
-| 1 | 免费发现与六态投影 | **PASS** | `customs-opportunity-unlock-state.ts` + 19 单测（六态顺序、跨租户不泄露） | 代码通过 |
-| 2 | 真实金额缺失时付费入口不可见 | **PASS**（代码）/ **NOT_VERIFIED**（浏览器） | 投影 `unlockEntryVisible` 仅 `READY_TO_UNLOCK`；页面仅在后端给出金额时渲染付费面板 | 代码通过 / 模拟未做 |
-| 3 | 五语言文案一致性 | **PASS**（类型级） | `CUSTOMS_UNLOCK_COPY: Record<Locale, …>`，缺任一语言编译失败；`apps/web tsc --noEmit` 0 error | 代码通过 |
-| 4 | 报价、付款、权益与授权状态 | **PASS** | `customs-unlock-payment.ts` + 23 单测（报价有效期、四要素、HMAC 验签、幂等、生命周期） | 代码通过 |
-| 5 | 账户隔离与越权访问 | **PASS**（应用层）/ **NOT_RUN**（DB 层） | Gate `OPPORTUNITY_NOT_OWNED`；投影 `CROSS_TENANT_REJECTED`；pack 缺租户绑定即 BLOCK；DB 级租户隔离套件需 PostgreSQL | 代码通过 / DB 未跑 |
-| 6 | Profit Gate 正确阻断 | **PASS** | `customs-profit-gate.ts` + 21 单测（缺报价/超预算/政策失效/毛利下限/概率越界） | 代码通过 |
-| 7 | ONE SI Runtime 唯一路径 | **PASS**（未新增运行时）/ **NOT_WIRED**（pack 未注册） | `customs-unlock-si-pack.ts` 实现既有 `RsiDomainCapabilityPack`；`createsRuntime=false`、`createsScheduler=false`；未消费保留命名空间 | 设计+代码通过 |
-| 8 | 任务幂等、并发领取与重复执行保护 | **部分 PASS** | 幂等已证：支付事件 `eventId`、成功费 `settlementId`、执行链 `billedSettlementIds`；保留命名空间互斥。**真实并发领取（租约 CAS）未验证** | 代码通过 / 并发未跑 |
-| 9 | Provider 失败、超时、重试及对账 | **部分 PASS** | 执行链在 Provider 不可用 / 缺报价 / 超时 / Kill Switch 时停在明确 HOLD；真实 Provider 失败重试与对账未验证 | 代码通过 / 真实未跑 |
-| 10 | 证据可信性和结算事实验证 | **PASS**（判定层）/ **NOT_VERIFIED**（真实证据） | 未证实结算 → 成功费 `NONE`；`verifiedActualRecovery` 为唯一计费前提 | 代码通过 / 真实未跑 |
-| 11 | 15% 成功费准确性与重复计费保护 | **PASS** | `customs-success-fee-collection.ts` 15 单测 + 既有 `customs-success-fee-guard` 18 单测；分批 2000/3000/5000 → 300/450/750；重复结算抑制 | 代码通过 |
-| 12 | Kill Switch、审批门禁及外写 HOLD | **PASS** | Gate/执行链/pack/成功费四处 Kill Switch 分支；外写需 Action Guard 审批 + 外写授权双门禁 | 代码通过 |
-| 13 | 前后端集成与主要浏览器断点 | **BLOCKED** | 无 PostgreSQL（`127.0.0.1:5432` 不可达、Docker 未运行），前后端链路未起；未做多断点截图 | 未验证 |
-| 14 | 数据迁移兼容性与回滚准备 | **NOT_APPLICABLE** | `git diff --name-only c6e03c51..HEAD` 中 `prisma`/`migration` 命中数 = **0**：本阶段未新增任何 schema 变更，因此无迁移/回滚对象 | 不适用 |
-
-## 2. 五个层级必须分开读（防止"设计通过"被当成"生产可用"）
-
-| 层级 | 本阶段结论 |
-| --- | --- |
-| 设计通过 | V2-01…V2-08 设计均已实现为可测代码并留档（8 份 release 文档） |
-| 代码通过 | **是**：165 单测 + 双端 tsc 0 error（本机真实执行） |
-| 模拟环境通过 | **否（未做）**：未搭本地/隔离环境跑端到端；浏览器断言为 BLOCKED |
-| 真实 Provider 验证通过 | **否**：Provider 未接线（`HOLD_EXTERNAL`），无沙箱凭据 |
-| 生产授权通过 | **否**：`PRODUCTION_READY=NO`、`PRODUCTION_PAYMENT_ENABLED=NO`、`AUTO_COLLECTION=HOLD` |
-
-## 3. 本轮**未**完成的 V2-06 遗留项（如实列出，不报 PASS）
-
-| 项 | 状态 | 原因 |
-| --- | --- | --- |
-| `ENTITLEMENT_AWARE_CTA` | 未实现 | 需要权益读取端点；当前 API 未暴露该读取面，页面以 `alreadyCovered=false` 渲染并已在代码注释中标注 |
-| `CHECKOUT_REDIRECT` | NOT_IMPLEMENTED | 未接收银台；购买按钮保持禁用（Payment HOLD） |
-| `BROWSER_E2E` | BLOCKED | 无 DB / 未起链路 |
-| `MULTI_DEVICE_VISUAL` | BLOCKED | 同上；未实际执行故不标记 PASS |
-
-## 4. HOST_ACTION_REQUIRED
+## 5. 仍需 HOLD 的边界（不得因修复而松动）
 
 ```text
-1. PostgreSQL 16 实例（或启动 Docker）→ 才能跑 DB 级租户隔离、并发领取、收费台账持久化验收
-2. 支付服务商测试商户 + Webhook 签名密钥 → 才能验证真实验签链路（当前仅本机 HMAC 向量）
-3. Customs Provider 沙箱凭据 + 价目表（含 RATE_LOOKUP 是否计费）→ 才能验证真实外部执行
-4. 批准 customs-unlock-si pack 注册进生产 composition（注册即激活该域任务的运行时消费）
+AUTO_COLLECTION=HOLD · REAL_PROVIDER_WRITE=HOLD · PACK_REGISTRATION=NOT_AUTHORIZED
+ENTITLEMENT_AWARE_CTA=NOT_IMPLEMENTED · CHECKOUT_REDIRECT=NOT_IMPLEMENTED
+PRODUCTION_READY=NO · U1_REOPEN=NO · U2_DESIGN_R21=NOT_REOPENED · SECOND_RUNTIME=NO
 ```
-
-## 5. 边界自证
-
-未新增 Runtime / 调度器 / 第二套 Policy Engine；未触碰 `main` / `release/rc-20261008-linux-deploy-v1` / U1 封板；
-未重开 U2 Design R21；未连接生产数据库；未执行真实扣款、真实 Provider 写、生产迁移或部署。
