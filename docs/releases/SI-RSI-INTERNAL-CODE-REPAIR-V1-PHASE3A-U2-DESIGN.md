@@ -1,13 +1,13 @@
-# PHASE 3-A · U2 设计 R20（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R21（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-42 = REVISE` → `MSG-20261009-43 = REVISE` → `MSG-20261009-44 = REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R20_READ_ONLY_CHANGES_79_TO_82`。
-> 本文件是 **U2 设计 R20** 送审材料（MSG-20261009-45），**不含任何产品代码改动**。
-> **R20 的修订集中在 §28**（最终 `P2`→`COMMIT` 的**排他保证**（预防性 vs 事后检出）/
-> M1 **跨实例恢复阻断权威** / `XID`·`xmin` 的**证明边界**（降为辅助证据）/
-> `U2-50j`·`U2-51b` 的**验收语义修正**），含本仓库范围内的只读证据核验；
-> §1–§27 保留历史；凡冲突者以 §28 为准（**R13–R20 优先于 §20.4.1**）。
+> `MSG-20261009-43 = REVISE` → `MSG-20261009-44 = REVISE` → `MSG-20261009-45 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R21_READ_ONLY_CHANGES_83_TO_85`。
+> 本文件是 **U2 设计 R21** 送审材料（MSG-20261009-46），**不含任何产品代码改动**。
+> **R21 的修订集中在 §29**（提交窗口的**失败模型**与排他证明的可执行判据 /
+> **恢复强制范围**与多实例自动化写入的**显式不授权声明** / `U2-51b` 的数据库结果验收断言 /
+> 按审计方要求**收敛到两个可执行问题**），含本仓库范围内的只读证据核验；
+> §1–§28 保留历史；凡冲突者以 §29 为准（**R13–R21 优先于 §20.4.1**）。
 
 | 锚点 | 值 |
 | --- | --- |
@@ -31,7 +31,8 @@
 | U2 设计 R17 | `c9ec3eca` |
 | U2 设计 R18 | `c391245e` |
 | U2 设计 R19 | `824ac886` |
-| U2 设计 R20 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R20 | `b396dc99` |
+| U2 设计 R21 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -2939,5 +2940,190 @@ R20_NOT_VERIFIED = SAFETY_PREMISE_PREVENTIVE_IMPLEMENTATION（①~④ 未实现/
 ```
 
 本文件仍为**纯设计 R20**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+本轮只读核验**仅**读取 `apps/api/prisma/schema.prisma`、既有迁移文件与 `apps/api/src` 中的只读检索结果，
+**未**连接任何数据库、**未**执行任何写入。
+---
+
+## 29. R21 修订（对应 MSG-20261009-45 的 CHANGE 83–85；并按审计方要求收敛）
+
+> 授权来源：`MSG-20261009-45 = REVISE` ⇒ `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R21_READ_ONLY_CHANGES_83_TO_85`。
+> 本轮**不扩展** `xmin`/epoch/`P2` 探针方案（遵循审计方收敛要求），只处理**两个可执行问题**与一项验收补强。
+> `U2_DESIGN_R20_ACCEPTED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`U1_REOPEN=NO` **不变**。
+
+```text
+AUDIT_SCOPE   = 914dcda7..<本轮设计提交> = 2 commits / 3 files（含上一轮裁决归档提交）
+SINGLE_COMMIT = 914dcda7..<本轮设计提交> = 1 commit / 1 file
+PRODUCT_CODE  = 0
+```
+
+| CHANGE | R20 位置 | R21 修订位置 | 变更性质 |
+| --- | --- | --- | --- |
+| **CHANGE 83（P0）** | §28.1.2–§28.1.6 | **§29.1** | **失败模型**（进程终止/在途 `COMMIT`）+ 排他证明的**可执行判据**与**显式不成立结论** |
+| **CHANGE 84（P0）** | §28.2.1–§28.2.2 | **§29.2** | 恢复**强制范围**的可执行门禁 + `MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED` |
+| **CHANGE 85（P1）** | §28.4.2 | **§29.3** | `U2-51b` 的**数据库结果验收断言** |
+| 收敛声明 | — | **§29.4** | 按审计方要求把结论收敛为**两个可执行问题** |
+
+### 29.1 CHANGE 83（P0）—— 提交窗口的**失败模型**与排他证明的**可执行判据**
+
+**承认审计方的判断**：R20 §28.1 的四项预防性条件只能防止**部分应用代码主动释放**的行为，
+**不能证明提交窗口内锁不会意外释放**。审计方反例（「**进程退出，但数据库提交仍可能成功**」）成立：
+提交请求送达数据库后，客户端失效与事务最终结果之间存在**不确定区间**；`flock` 由**操作系统**管理，
+进程异常终止**可能导致锁释放**；而 PostgreSQL 对**已收到的 `COMMIT`** 是否完成，**不能**凭客户端进程存活状态推断。
+
+**R21 规则**
+
+1. **失败模型（必须逐项纳入，不得省略）**：
+
+| 编号 | 失效 | 锁是否可能被释放 | 是否可能有**成功写入**违反排他 |
+| --- | --- | --- | --- |
+| `F1` | 应用代码主动 `LOCK_UN`/`close`（缺陷） | 是 | 是（§27.3 已按 fail-stop 处理） |
+| `F2` | 进程崩溃（`SIGSEGV`/`abort`）、`SIGKILL`、OOM-Kill | **是**（内核回收该 OFD） | **是**（`COMMIT` 可能已在途） |
+| `F3` | 容器/宿主重启、锁持有者整体失效 | 是 | **是** |
+| `F4` | 客户端连接中断（`COMMIT` 已发出、结果未知） | 是（会话结束） | **是** |
+| `F5` | 数据库在途提交（服务端仍在处理我们已发出的 `COMMIT`） | 与客户端无关 | **是** |
+| `F6` | 文件系统/网络文件系统的锁语义差异（`NFS`/`SMB`） | 视环境 | **是** |
+2. **可执行判据（唯一放行条件）**：
+
+```text
+EXCLUSION_PROOF_STATUS ∈ { PROVEN, NOT_PROVEN }
+
+PROVEN  要求满足下列【之一】，并附目标环境证据：
+  (P1) 数据库端强制机制（fence / 行级条件写入 / 服务端串行化）：
+       陈旧持有者的写入在【数据库侧】被拒绝 —— 需额外表、函数或权限；
+  (P2) 环境级证明：在【目标文件系统 + 挂载方式 + 协议一致性 + 无未登记写入者】下，
+       证明从「COMMIT 已发出」到「COMMIT 结果确认」期间【不存在】任何可进入的第二个写入者，
+       且该期间的锁状态与提交结果由【非客户端存活】的证据支撑。
+
+NOT_PROVEN = 上述均不成立或无法举证
+  ⇒ EXCLUSIVE_WINDOW_UNAVAILABLE = YES
+  ⇒ 不得写入（零候选写入）
+  ⇒ 【静态规则检查通过】【计数器为 0】【提交后探针通过】均【不得】作为实施许可
+```
+
+3. **当前状态的显式结论（不掩饰）**：`(P1)` 需要的能力**当前不可用**（`SCHEMA_MIGRATION=HOLD`、数据库权限未核验）；
+   `(P2)` 需要**目标环境证据**（文件系统/挂载/协议一致性/无未登记写入者），**当前全部 `NOT_VERIFIED`**。
+   ⇒ 本轮**明确给出**：**`EXCLUSION_PROOF_STATUS = NOT_PROVEN`**、**`SAFETY_PREMISE = NOT_PROVEN`**、
+   **`EXCLUSIVE_WINDOW_UNAVAILABLE = YES`**；因此 **U2 候选写入在本配置下不可授权**。
+4. **可执行的不变量（供未来实施，非当前许可）**：若未来取得 `(P1)` 能力，须以**数据库侧**判定取代客户端判定，
+   即：写入语句**只在栅栏令牌仍有效时**成功；令牌失效 ⇒ 数据库拒绝写入（客户端"以为"仍持锁**不**构成写入成功条件）。
+5. **负面验收（必须定义，未来在目标环境执行）**：
+
+| 编号 | 场景 | 期望 |
+| --- | --- | --- |
+| **U2-52a** | `COMMIT` 已发出后**立即 `SIGKILL`** 写入进程，另一实例同时尝试写入 | 在 `(P1)` 能力下：**陈旧方写入被数据库拒绝**；在无 `(P1)` 时：**记录该风险**并保持 `EXCLUSIVE_WINDOW_UNAVAILABLE`（**不得**以"窗口很小"通过） |
+| **U2-52b** | 客户端连接中断（`COMMIT` 结果未知）后另一实例写入 | 同 U2-52a；且**禁止**自动重放同一业务 `INSERT` |
+| **U2-52c** | 容器重启/宿主重启期间的写入竞争 | 同 U2-52a |
+6. **禁止的替代物（再次写死）**：静态规则、计数器、提交后探针、缩小窗口、更频繁探测——
+   **一律不得**用于替代 `EXCLUSION_PROOF_STATUS=PROVEN`。
+
+### 29.2 CHANGE 84（P0）—— 恢复的**强制范围**与**多实例自动化写入的显式不授权**
+
+**承认审计方的判断**：共用同一把锁只解决**受控参与者之间**的部分并发协调，
+**不能**得出「所有实例都受同一权威约束」的结论；**日志与工单本身不能构成分布式强制阻断机制**。
+
+**R21 规则（可执行门禁）**
+
+1. **共享前置条件（四项全部必需，逐项需证据）**：
+   ①所有参与实例使用**同一个可提供可靠互斥语义的文件系统、锁键（同一绝对路径）与锁协议**（`flock:whole-file:LOCK_EX`）；
+   ②不存在**绕过协调者的独立任务或历史服务**（须以 `DEPLOYMENT_INVENTORY` + 数据库写入主体清单举证）；
+   ③**人工解除阻断与自动恢复共用同一强制门禁**（不允许"人工绕过"路径）；
+   ④存在**跨实例可见且可强制**的阻断状态（否则见第 3 条）。
+2. **fail-closed 强制不变量（可直接编码为门禁）**：
+
+```text
+R84-INVARIANT（任何实例在任一时刻必须满足）
+  若 【无法证明与其他实例共享同一阻断状态】
+     或 出现 ATTRIBUTION_UNRECOVERABLE
+     或 跨实例阻断状态不确定
+  ⇒ 禁止 INSERT（候选写入）
+  ⇒ 禁止执行恢复写入
+  ⇒ 禁止推进任何下游自动化（downstreamAutomation = BLOCKED）
+
+R84-UNBLOCK
+  解除阻断【只能】由受控人工授权触发，且必须重新走验收（不得自动解除、不得超时自动恢复）
+```
+
+3. **当前能力的显式声明（关键）**：在**不新增 schema** 的约束下，**不存在**满足第 1 条 ④ 的**跨实例强制阻断**载体
+   ⇒ 本设计**明确声明**：
+
+```text
+MULTI_INSTANCE_AUTOMATED_WRITE = NOT_AUTHORIZED
+SINGLE_INSTANCE_CONTROLLED_EXPERIMENT = 未来独立验收范围（须单独授权；
+    且【不得】据此推导跨实例生产安全）
+```
+
+4. **分支 B 的定位（收窄并加严）**：R20 §28.2 的分支 B 仍可作为**人工恢复**的处置流程，
+   但其证据（意图记录 + 日志 + 工单）**只用于人工决策**，**不构成**分布式强制阻断机制；
+   任何实例在无法证明共享阻断状态时，**必须**执行第 2 条的不变量（禁写 + 禁止自动化）。
+5. **可执行的不变量（供未来实施）**：若未来取得跨实例共享的可强制阻断载体（新表/外部控制面），
+   则 `R84-INVARIANT` 的第一条件由该载体**查询结果**判定；**判定失败即视为"无法证明"**（保守）。
+
+### 29.3 CHANGE 85（P1）—— `U2-51b` 的**数据库结果验收断言**
+
+1. **三条必须写入验收规范的断言**：
+
+```text
+A1  若 dbCommitOutcome = COMMITTED 且 safetyOutcome = REJECTED
+    ⇒ 报告中【禁止】出现「已回滚」「零持久化写入」等结论；
+    ⇒ 该行按【已持久化】对待，归因至多 candidateExists=YES / thisExecutionCommitted=UNKNOWN
+
+A2  若 dbCommitOutcome = UNKNOWN
+    ⇒ 【禁止】对同一 dedupeKey 自动重放相同业务 INSERT；
+    ⇒ 只能按 §29.2 的 fail-closed 不变量处置（禁写 + 禁止下游自动化 + 人工）
+
+A3  「安全状态恢复正常」（例如重新取得锁）【不得】被记录为
+    「提交归因已完成」；两者是【不同维度】，必须分列
+```
+
+2. **报告字段语义（固定）**：`safetyOutcome ∈ {ACCEPTED, REJECTED}`（**安全验收**维度）；
+   `dbCommitOutcome ∈ {COMMITTED, NOT_COMMITTED, UNKNOWN}`（**数据库事实**维度）；
+   `exclusiveWindowViolated ∈ {true,false}`（**排他窗口**维度）；`downstreamAutomation ∈ {ALLOWED, BLOCKED}`。
+   四者**互不推导**；`A1`~`A3` 为**验收断言**（未来实施阶段执行），**本轮未运行**。
+
+### 29.4 收敛声明（按审计方要求，把结论压到**两个可执行问题**）
+
+| 问题 | 可执行判据 | 当前状态 |
+| --- | --- | --- |
+| **Q1 数据库事务提交期间能否证明排他权仍有效？** | `EXCLUSION_PROOF_STATUS ∈ {PROVEN, NOT_PROVEN}`，`PROVEN` 仅当 `(P1)` 数据库端强制 或 `(P2)` 环境级证明成立（含目标环境证据） | **`NOT_PROVEN`** ⇒ `EXCLUSIVE_WINDOW_UNAVAILABLE=YES` ⇒ **不可写入** |
+| **Q2 提交归因未知时，所有参与实例能否被强制停止自动化？** | `R84-INVARIANT` 可被所有实例强制执行，且存在**跨实例可强制**的阻断载体；判定失败即视为"无法证明" | **未实现** ⇒ 已声明 **`MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED`** |
+
+**结论（如实）**：在上述两项**未达成**之前，本设计**不再增加**描述性检查，也不再扩展 `xmin`/epoch/`P2` 方案；
+U2 候选写入子集**不可授权**。若后续授权**数据库端能力**（栅栏/串行化/共享阻断载体）或提供**目标环境证据**，
+则按 §29.1 的 `(P1)`/`(P2)` 与 §29.2 的第 1 条重新举证，再评估最小实施授权。
+
+### 29.5 R21 未变部分与未验证项
+
+§12 候选键 v2 与 digest 概念、§13.1 接口、§13.2 矩阵（另加 U2-52a~c）、§16.1 `CONTROLLED_FIXED_WORKTREE`、
+§17.1 隔离证明框架、§17.2 U2-20A/B/C、§17.3 零行冲突复用路径、§18.1 释放全链校验、§18.2 行锁与重试边界、
+§19.4 通道/签发者分离、§20.3（CHANGE 42）状态语义、§21.2（CHANGE 45）方向、§21.3.4 验证时机与有效期、
+§22.2 `flock` 释放/继承修正、§22.4 四条件、§22.6 字节级契约、§22.7 原子占用、
+§23.1 `T0`/`T1`/`T2` 分阶段条件、§23.3 检测 vs 保证、§23.4 归因四类、§23.5 证据范围纪律、§23.6 字节编码三断言、
+§23.7 消费持久化、§24.1 `P2` 必要非充分与错误分类、§24.2 存在性/提交归因区分、§24.3 `CONSUMPTION_UNKNOWN`、
+§25.2 统一锁 FD 边界与全窗口覆盖、§25.3 M1~M4 候选、§26.1 `O3-CONTRADICTED` 边界、§26.2 唯一生产锁协议、
+§26.3 威胁模型与构建期规则、§26.4 意图记录契约、§26.6 U2-50a~f、§27.1 `P2` 独立性契约（**CLOSED**）、
+§27.2 部署清单与负面验收（**CLOSED_SCOPED**）、§27.3.1–§27.3.2 写入进程隔离与 fail-stop、§27.4.1 意图记录五态、
+§28.3 证据分级与 `xmin` 降级（**CHANGE 81 = PASS**）、§28.4 `U2-50j` 两时序与 `U2-51b` 分离语义（**CHANGE 82 = PASS_SCOPED**）、
+`builderRef` 固定常量、**U2 路径仅 INSERT**、U2 路径无 `UPDATE`/`DELETE`、不新增 schema/migration、
+不接 Runtime/Queue、不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
+`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+
+```text
+R21_NOT_VERIFIED = EXCLUSION_PROOF_STATUS=NOT_PROVEN ; SAFETY_PREMISE=NOT_PROVEN ;
+                   EXCLUSIVE_WINDOW_UNAVAILABLE=YES ; MULTI_INSTANCE_AUTOMATED_WRITE=NOT_AUTHORIZED ;
+                   DB_SIDE_FENCING_CAPABILITY=NOT_AVAILABLE ; TARGET_ENVIRONMENT_EVIDENCE=NOT_VERIFIED ;
+                   COMMIT_ATTRIBUTION_PROOF=NOT_AVAILABLE_IN_CURRENT_CONFIGURATION ;
+                   CROSS_INSTANCE_RECOVERY_BLOCKING=NOT_VERIFIED ;
+                   P2_INDEPENDENCE_ENFORCEMENT ; DEPLOYMENT_INVENTORY_EVIDENCE ;
+                   FILESYSTEM_AND_MOUNT_PREREQUISITES ; WRITE_PROCESS_ISOLATION ;
+                   M1_RECOVERY_STATE_MACHINE ; ATTRIBUTION_MAX_WINDOW_EVIDENCE ;
+                   LOCKFD_BOUNDARY_STATIC_RULES ; U2_LINUX_MULTIPROCESS_TESTS ;
+                   DB_PRIVILEGE_VERIFICATION ; GLOBAL_IMMUTABILITY_PROOF ;
+                   DB_RUNTIME_PRIVILEGES ; DB_TRIGGERS_ACTUAL ; DB_ROLES ; DB_WRITER_SET_ACTUAL ;
+                   OBSERVATION_WINDOW_IMMUTABILITY ; U2_NONCE_CONSUMPTION_STORE ;
+                   POSTGRESQL_INTEGRATION_TEST ; VITEST ; TSC ; LINUX_SYSTEMD ; CI ; PRODUCTION ;
+                   U2_DESIGN_DOC_SHA256（送审方报告）
+```
+
+本文件仍为**纯设计 R21**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
 本轮只读核验**仅**读取 `apps/api/prisma/schema.prisma`、既有迁移文件与 `apps/api/src` 中的只读检索结果，
 **未**连接任何数据库、**未**执行任何写入。
