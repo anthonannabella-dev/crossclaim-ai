@@ -2260,3 +2260,69 @@ ACCOUNT_SCOPE = NOT_AUTHORIZED · SCHEMA_MIGRATION = HOLD
 RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.36 MSG-20261009-32 裁决归档 = **REVISE**（CHANGE 21 关闭；CHANGE 19 仍 P0，新增 CHANGE 22–25）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-32] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（151/151，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=5280 / NORM_LINES=151 / FNV=576300bf`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R6=a12a9f36`、`REVIEWED_HEAD=f6c6d677`。
+
+**审计方独立核实的 Git 证据（本次被接受）**：R6→R7 = **2 提交 / 3 文件**
+（`AI-ARCHITECT-INBOX.md`、U2 设计文档、checkpoint 文档）、**产品代码零变更**；
+文档 **Git blob SHA = `37fdd4704c14bfbf3c1248584f962e28b25a3700`**，
+与文档 SHA-256（`56cd7930…1d2f`，仍 `NOT_INDEPENDENTLY_VERIFIED`）分别记录。
+`CHANGE 21 = PASS`（**已关闭**）。
+
+**九项**：`CHANGE19 = REVISE · P0`、`CHANGE20 = PASS WITH REVISE · P1`、`CHANGE21 = PASS`、
+`U2_INPUT_OUTPUT_CONTRACT = PASS WITH REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED = REVISE`、
+`U2_IMPLEMENTATION_BOUNDARY = PASS · DESIGN ONLY`、`SCOPE_HONESTY = PASS`、
+`U2_DESIGN_APPROVED = NO`、`U2_IMPLEMENTATION_AUTHORIZED = NO`。
+
+**核心裁决**：`.u2-exclusive.lock` 只能排除**遵守同一锁协议的协作进程**，
+**不能**阻止其他进程 `git reset` / 改 refs / 直接写工作树 ⇒ CHANGE 19 的 P0 缺口**仍未关闭**。
+
+**REQUIRED_CHANGES（下一轮 MSG-20261009-33 只做这四项；`R8`）**
+
+- **CHANGE 22（P0）排他锁不等于不可绕过的写入排他**：必须区分
+  **协作式锁互斥** 与 **操作系统级写入隔离**；执行环境须能**证明**外部写入者无法修改受保护的 Git 基线
+  （可用受限权限隔离工作树 / 文件系统权限边界等**既有**基础设施，**不新增 Runtime**）；
+  隔离能力不可证明 ⇒ 直接 `EXCLUSIVE_WINDOW_UNAVAILABLE`，**不得 INSERT**；
+  U2-20 必须**真实覆盖检查③之后至 COMMIT 完成**的竞争窗口（**不得**以对抗进程主动遵守锁代替证明），
+  并同时验证**候选行零新增**与**无 candidate ID 泄露**。
+- **CHANGE 23（P0）锁文件生命周期 vs 工作树洁净性冲突**：在工作树内创建 `.u2-exclusive.lock` 会使
+  `git status --porcelain` 变脏 ⇒ **可能拒绝全部正常 INSERT**；且 `ttlMs` 到期**不能**作为安全接管依据
+  （旧持有者可能仍在事务中）。须明确：锁不影响产品代码洁净性检查的实现方式；
+  **不得**用忽略整个目录/扩大 `.gitignore` 掩盖产品文件变更；创建/持有/释放/崩溃恢复规则；
+  **禁止**仅因 TTL 到期删除可能仍被活跃持有的锁；释放须校验 `ownerToken`；
+  进程异常/锁损坏/归属不明/旧持有者状态不可判定 ⇒ **一律 fail-closed**；新增 **U2-21**
+  （锁生命周期、过期竞争与工作树洁净性联合负向验收）。
+- **CHANGE 24（P1）拒绝优先级须与实际 DB 读取顺序一致**：L10 `INPUT_KEY_MISMATCH` 依赖
+  **已解析的候选与可信 Task/Incident 身份**，必须排在**可信身份构造之后**（L11–L15 之前）；
+  所有拒绝只返回**一个稳定 reason**；已有候选仅在**完整身份与 digest 一致**时才可复用；
+  补 **symbol 键 / 访问器属性 / 代理对象**等非普通输入的拒绝或安全处理口径（避免运行时异常或
+  校验期间执行非预期行为）；R8 须给出新的「**执行顺序—reason—数据库副作用**」对应表。
+- **CHANGE 25（P1）运行模式唯一化**：`CONTROLLED_FIXED_WORKTREE` 是**唯一允许**的 U2 执行环境；
+  §14.1 的历史基线概念只能作为**受控工作树内部的基线校验策略**，**不构成独立运行模式或自动授权**；
+  `auditAnchor=9ee36837` 仅溯源、`baselineRef` 为受控运行时权威基线；
+  **任何可选冻结基线策略不得因 R8 通过而自动启用**。
+
+**R8 最小送审证据**：R8 固定提交 + 完整变更文件清单 + 修订后的 **§16** +
+U2-20/U2-21 验收规格 + **锁持有与释放状态表** + **拒绝原因执行顺序表**（产品代码零变更）。
+
+```text
+MSG-20261009-32_FINAL_VERDICT = REVISE
+MSG-20261009-32_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 151/151；FNV1A 576300bf）
+CHANGE_21 = CLOSED（证据与变更范围纠正通过，blob SHA 独立核实）
+CHANGE_19 = P0 未关闭（协作锁 ≠ OS 级写入隔离）
+U2_DESIGN_APPROVED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · U3–U5 = NO
+REQUIRED_CHANGES = CHANGE_22_P0_OS_LEVEL_WRITE_ISOLATION ; CHANGE_23_P0_LOCK_LIFECYCLE_VS_CLEANLINESS ;
+                   CHANGE_24_P1_REJECTION_ORDER_VS_DB_READ_ORDER ; CHANGE_25_P1_SINGLE_RUNTIME_MODE
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R8_READ_ONLY_CHANGES_22_TO_25
+NEXT_AUDIT = MSG-20261009-33
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+```

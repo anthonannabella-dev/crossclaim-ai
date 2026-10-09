@@ -175728,3 +175728,266 @@ PRODUCTION=NOT_VERIFIED
 
 本裁决仅在当前会话给出，未修改或写入 GitHub 仓库。
 ```
+
+### [MSG-20261009-32] U2 设计 R7 = **REVISE**（CHANGE 21 关闭；CHANGE 19 仍 P0 未关，新增 CHANGE 22–25）—— 九项：`CHANGE21 证据与变更范围纠正=PASS`（审计方以 GitHub compare **独立核实** R6→R7 = 2 提交/3 文件并支持「产品代码零变更」；文档区分 Git blob SHA `37fdd4704c14bfbf3c1248584f962e28b25a3700` 与文档 SHA-256，后者继续 `NOT_INDEPENDENTLY_VERIFIED`）、`CHANGE19 Git/DB 排他写入窗口=REVISE·P0`（`.u2-exclusive.lock` 只能排除遵守同一锁协议的协作进程，**不能**阻止他人 `git reset`/改 refs/写工作树；且 U2-20 的对抗点发生在检查③之后、无第四次检查）、`CHANGE20 确定性拒绝与复用契约=PASS_WITH_REVISE·P1`、`U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE`、`U2_IMPLEMENTATION_BOUNDARY=PASS·DESIGN_ONLY`、`SCOPE_HONESTY=PASS`、`U2_DESIGN_APPROVED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`；**新增 REQUIRED_CHANGES（R8）**：**CHANGE 22（P0）** 须区分「协作式锁互斥」与「操作系统级写入隔离」——执行环境必须**证明**外部写入者无法修改受保护 Git 基线（可用受限权限隔离工作树/文件系统权限边界等既有基础设施，不新增 Runtime），无法证明隔离即返回 `EXCLUSIVE_WINDOW_UNAVAILABLE` 且不得 INSERT；U2-20 须真实覆盖检查③→COMMIT 竞争窗口（不得以对抗进程主动遵守锁代替证明），并验证候选行零新增与无 candidate ID 泄露；**CHANGE 23（P0）** 锁文件生命周期与工作树洁净性冲突——在工作树内创建 `.u2-exclusive.lock` 会使 `git status --porcelain` 变脏从而**拒绝所有正常 INSERT**，且 `ttlMs` 到期不能作为安全接管依据：须明确锁不影响产品洁净性检查的实现、不得靠扩大 .gitignore 掩盖产品改动、明确创建/持有/释放/崩溃恢复规则、禁止仅凭 TTL 删除可能仍活跃的锁、释放须校验 `ownerToken`、异常/损坏/归属不明一律 fail-closed，并新增 U2-21 联合负向验收；**CHANGE 24（P1）** 拒绝优先级须与真实 DB 读取顺序一致——L10 `INPUT_KEY_MISMATCH` 依赖已解析的候选与权威身份，必须移到可信身份构造之后；补 symbol 键/访问器/代理对象等非普通输入口径；R8 须给「执行顺序—reason—数据库副作用」对应表；**CHANGE 25（P1）** 运行模式唯一化——`CONTROLLED_FIXED_WORKTREE` 为唯一允许环境，§14.1 的历史基线概念只能作为受控工作树内部的校验策略、不构成独立运行模式或自动授权，`auditAnchor=9ee36837` 仅溯源、可选冻结基线不因 R8 通过而自动启用；R8 最小送审证据 = 固定提交 + 完整变更文件清单 + 修订后 §16 + U2-20/U2-21 规格 + 锁持有/释放状态表 + 拒绝原因执行顺序表；NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R8_READ_ONLY_CHANGES_22_TO_25 / NEXT_AUDIT=MSG-20261009-33；`POSTGRESQL_INTEGRATION_TEST/VITEST/TSC/LINUX_SYSTEMD/CI/PRODUCTION = NOT_VERIFIED`；reviewed ref f6c6d677
+
+```text
+MSG-20261009-32｜U2 设计 R7 独立审计裁决
+FINAL VERDICT：REVISE
+审计对象： CrossClaim AI · SI/RSI INTERNAL CODE REPAIR V1
+审计范围： PHASE 3-A / U2 设计 R7 / CHANGE 19–21
+审计提交： f6c6d67781de9b8cae041b4977cb42e249c7fd50
+
+本轮已通过 GitHub 连接器读取固定提交的设计文档 §15，取得 Git blob SHA，并独立核对 R6→R7 的提交数量和变更文件清单。没有修改仓库。
+
+一、九项裁决
+
+审计项目
+
+裁决
+
+1. CHANGE19 Git/DB 排他写入窗口
+
+REVISE · P0
+
+2. CHANGE20 确定性拒绝与复用契约
+
+PASS WITH REVISE · P1
+
+3. CHANGE21 证据与变更范围纠正
+
+PASS
+
+4. U2 输入输出契约
+
+PASS WITH REVISE
+
+5. U2 验收矩阵与 Fail-closed
+
+REVISE
+
+6. U2 实施边界
+
+PASS · DESIGN ONLY
+
+7. SCOPE_HONESTY
+
+PASS
+
+8. U2_DESIGN_APPROVED
+
+NO
+
+9. U2_IMPLEMENTATION_AUTHORIZED
+
+NO
+
+核心裁决： R7 已解决部分 R6 的契约表达问题，但 .u2-exclusive.lock 只能排除遵守同一锁协议的协作进程，不能阻止其他进程直接修改 Git 工作树、HEAD 或 refs。因此，CHANGE 19 的 P0 安全缺口尚未关闭。
+
+U2 不允许开始 INSERT 实施。下一步只授权 R8 最小设计修订，不要求重新设计 U2，也不开放 U3–U5。
+
+二、已独立核实的 Git 证据
+
+GitHub compare 返回：
+
+R6 基线：a12a9f36572cb1134100d58adb6174620457e106
+
+R7 HEAD：f6c6d67781de9b8cae041b4977cb42e249c7fd50
+
+提交数量：2
+
+变更文件数量：3
+
+文档 Git blob SHA：37fdd4704c14bfbf3c1248584f962e28b25a3700
+
+三份变更文件分别为：
+
+AI-ARCHITECT-INBOX.md
+
+docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md
+
+docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1.md
+
+GitHub compare 显示的变更范围不包含 apps/api 产品代码文件，因此 R6→R7 区间产品代码零变更这一声明得到支持。
+
+但文档 SHA-256 56cd793027cf0c9e27f8f33a2aab4f255acc1c82604000b24d71d1ec7a261d2f 尚未独立进行原始字节复算，继续保持 NOT_INDEPENDENTLY_VERIFIED。
+
+证据入口：
+
+R7 固定提交
+
+。
+
+三、REQUIRED CHANGES（R8）
+
+CHANGE 22（P0）：排他锁不构成不可绕过的 Git 写入排他
+
+R7 §15.1 使用 O_CREAT|O_EXCL 创建锁文件，只能确保锁文件创建本身具有原子排他语义。
+
+它不能阻止另一个不检查该锁的进程执行 git reset、修改 refs 或直接写入工作树。
+
+尤其是 U2-20 要求在检查③后、COMMIT 前进行对抗写入，此时已经没有第四次检查。
+
+要求修订：
+
+明确区分“协作式锁互斥”和“操作系统级写入隔离”。
+
+U2 执行环境必须能够证明外部写入者无法修改受保护的 Git 基线；不能仅凭锁文件证明这一点。
+
+可以通过独立受限权限的隔离工作树、文件系统权限边界等既有基础设施实现，不要求新增 Runtime。
+
+如果隔离能力不可证明，直接返回 EXCLUSIVE_WINDOW_UNAVAILABLE，不得 INSERT。
+
+U2-20 必须真实覆盖检查③之后至 COMMIT 完成的竞争窗口；不能以对抗进程主动遵守 .u2-exclusive.lock 代替证明。
+
+同时验证候选行零新增以及无候选 ID 泄露。
+
+验收原则： 未经 U2 锁协议授权的进程也必须无法破坏受保护的 Git 基线，否则不能宣称排他成立。
+
+CHANGE 23（P0）：锁文件生命周期与工作树洁净性存在冲突
+
+R7 同时要求：
+
+在工作树内创建 .u2-exclusive.lock；
+
+创建后执行 git status --porcelain；
+
+要求 worktreeClean=true。
+
+如果该锁文件是未跟踪且未被忽略的文件，那么获取锁后工作树就会被判定为不干净，正常 INSERT 路径可能全部被拒绝。
+
+另外，ttlMs 不能直接视为租约失效后的安全接管依据。旧持有者可能仍在执行数据库事务。
+
+要求修订：
+
+明确锁文件不影响产品代码洁净性检查的实现方式。
+
+不允许通过忽略整个工作目录或扩大 Git ignore 范围，掩盖产品文件变更。
+
+明确锁的创建、持有、释放和进程崩溃后的恢复规则。
+
+不允许仅因 TTL 到期就删除可能仍被活跃进程持有的锁。
+
+释放锁时必须校验 ownerToken，防止删除其他所有者的锁。
+
+进程异常、锁损坏、归属不明和旧持有者状态不可判定时一律 fail-closed。
+
+建议增加 U2-21：锁生命周期、过期竞争和工作树洁净性联合负向验收。
+
+CHANGE 24（P1）：拒绝优先级必须与实际数据库读取顺序一致
+
+R7 L1–L16 已经形成单一 reason 的优先级表，这是正确的方向。
+
+但仍有一个实现矛盾：
+
+L10 INPUT_KEY_MISMATCH 依赖已经存在的候选和可信 Task/Incident 身份，而 L11–L15 才开始检查 Incident、Task、故障上下文和基线。
+
+如果权威身份尚未解析，L10 无法可靠判定。
+
+要求修订：
+
+L1–L9 保持原有顺序，其中 L9 只在完成输入校验后进入。
+
+先解析 Incident、Task、故障上下文和基线，完成可信身份构造。
+
+在具备权威身份后，才允许查询和比较已有候选。
+
+L10 的逻辑优先级应置于必要的可信身份检查之后。
+
+所有拒绝必须只返回一个稳定 reason。
+
+已有候选只有在完整身份和 digest 一致时才允许复用。
+
+补充 symbol 键、访问器属性、代理对象等非普通输入的拒绝或安全处理口径，避免运行时异常或校验期间执行非预期行为。
+
+建议 R8 提供一份新的“执行顺序—reason—数据库副作用”对应表，避免设计顺序与代码顺序分离。
+
+CHANGE 25（P1）：运行模式必须建立唯一有效契约
+
+R7 §15.1 宣称只有 CONTROLLED_FIXED_WORKTREE 模式，但 §15.4 又保留 §14.1 的 SELF_CONSISTENT_HEAD 和 AUTHORIZED_FIXED_BASELINE 两种运行模式。
+
+这仍容易导致不同实现者理解不一致。
+
+要求修订：
+
+明确：
+
+CONTROLLED_FIXED_WORKTREE 是唯一允许的 U2 执行环境。
+
+如仍需保留历史的基线选择概念，必须说明其只作为受控工作树内部的基线校验策略，不构成独立运行模式或自动授权。
+
+同时保留：
+
+auditAnchor = 9ee36837，仅用于溯源；
+
+baselineRef 为受控运行时权威基线；
+
+任何可选冻结基线策略不得因 R8 设计通过而自动启用。
+
+四、已通过项目的审计意见
+
+CHANGE 21：PASS。 本轮提交范围已通过 GitHub compare 独立核实；设计文档区分 Git blob SHA 与文档 SHA-256，且不虚报独立哈希复算。u1SealRef 仅保存在现有证据工件中的设计也符合不新增 schema 的边界。
+
+U2 实施边界：PASS。 目前保持 PLATFORM-only 范围、不新增 schema、不接 Runtime/Queue、不开放外部写入和自动部署，是适当的最小边界。即使后续 R8 通过，也应当只授权独立的 PLATFORM 候选 INSERT 子集，而不是整个自治代码修复系统。
+
+SCOPE_HONESTY：PASS。 本轮明确承认没有执行 PostgreSQL、Vitest、tsc、Linux-systemd、CI 或生产验证，没有将设计通过冒充实际运行验证。
+
+五、MSG-20261009-33 送审要求
+
+下一轮仅修订 CHANGE 22–25，提交 U2 设计 R8，保持产品代码零变更。
+
+最小送审证据为 R8 固定提交、完整变更文件清单、修订后的 §16、U2-20/U2-21 验收规格、锁持有与释放状态表，以及拒绝原因执行顺序表。
+
+在 R8 通过之前，不授权 U2 INSERT 代码实现。 即使设计获得批准，后续 PostgreSQL 并发、失败回滚、幂等复用与基线隔离仍须在实施阶段实际验证。
+
+六、机器可读审计裁决
+
+MSG-20261009-32
+
+复制裁决
+
+INI
+
+AUDIT_ID=MSG-20261009-32
+REPO=anthonannabella-dev/crossclaim-ai
+BRANCH=feat/si-rsi-internal-code-repair-v1
+U1_CODE_HEAD=9ee36837
+U2_DESIGN_COMMIT_R6=a12a9f36
+U2_DESIGN_COMMIT_R7=f6c6d677
+U2_DESIGN_GIT_BLOB_SHA=37fdd4704c14bfbf3c1248584f962e28b25a3700
+U2_DESIGN_DOC_SHA256=56cd793027cf0c9e27f8f33a2aab4f255acc1c82604000b24d71d1ec7a261d2f
+U2_DESIGN_DOC_SHA256_VERIFICATION=NOT_INDEPENDENTLY_VERIFIED
+R6_TO_R7_COMMITS=2
+R6_TO_R7_FILES=3
+R6_TO_R7_PRODUCT_CODE_CHANGES=0
+FINAL_VERDICT=REVISE
+CHANGE19_GIT_DB_EXCLUSIVE_WRITE_WINDOW_FIXED=NO
+CHANGE20_DETERMINISTIC_REJECTION_AND_REUSE_CONTRACT_FIXED=PASS_WITH_REVISE
+CHANGE21_EVIDENCE_AND_CHANGE_SCOPE_CORRECTION_FIXED=YES
+U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE
+U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE
+U2_IMPLEMENTATION_BOUNDARY=PASS_DESIGN_ONLY
+SCOPE_HONESTY=PASS
+U2_DESIGN_APPROVED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PHASE3_A_U3_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE22_P0,CHANGE23_P0,CHANGE24_P1,CHANGE25_P1
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R8_READ_ONLY_CHANGES_22_TO_25
+NEXT_AUDIT=MSG-20261009-33
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+POSTGRESQL_INTEGRATION_TEST=NOT_VERIFIED
+VITEST=NOT_VERIFIED
+TSC=NOT_VERIFIED
+LINUX_SYSTEMD=NOT_VERIFIED
+CI=NOT_VERIFIED
+PRODUCTION=NOT_VERIFIED
+
+最终裁决：REVISE。 CHANGE 21 已关闭；CHANGE 19 尚有 P0 阻断，CHANGE 20 需要执行顺序修订。下一轮只允许 R8 设计收口，不授权实施或放宽任何生产安全门禁。
+```
