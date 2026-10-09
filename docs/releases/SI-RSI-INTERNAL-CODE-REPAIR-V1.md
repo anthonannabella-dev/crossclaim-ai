@@ -1045,3 +1045,59 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.16 MSG-20261009-17 裁决（U1 FINAL-R3 / CHANGE 24–25）= **REVISE**；**U1 仍未关闭**（新增 CHANGE 26–28）
+
+> 归档：`AI-ARCHITECT-INBOX.md`（逐字，**FULL_COPY_OK**：原文 92 行 / 归档 92 行，缺失 0、多出 0）
+> 源文件（页面提取）：`work/self-repair/verdict-msg-20261009-17.txt`，规范化指纹 FNV1A=1b776bf3
+> REVIEWED_HEAD = `612f687d`；审计会话：https://chatgpt.com/c/6ac85bba-b45c-83ec-a026-3b43d0424652
+
+**裁决理由（关键）**：本轮提交的是**证据包的文字摘要**，而非可直接检查的原始材料 ——
+审计方未取得固定 HEAD 的实际源码 diff、证据 JSON 原文与原始 Vitest/TSC 输出，
+因此 55/55 PASS 的声明不足以签署 U1 关闭。**这不否定 CHANGE 24–25 的设计方向。**
+
+| 审计项 | 裁决 |
+| --- | --- |
+| CHANGE24_REQUIRED_SCOPE_TRUST_BOUNDARY | REVISE（机制合理，缺独立核验） |
+| CHANGE25_INDEPENDENT_EVIDENCE_PACKAGE | REVISE（证据结构完整性未核验） |
+| U1_READ_ONLY_BOUNDARY_PRESERVED | REVISE（未查源码前不提升为已核实事实） |
+| SCOPE_HONESTY | PASS |
+| PHASE3_U1_IMPLEMENTATION_CLOSED | NO |
+| PHASE3_A_U2_TO_U5_AUTHORIZED | NO |
+
+**新增必须执行的修订**（明确**不要求**重新实施 CHANGE 24–25，只处理证据可复核性）
+
+- **CHANGE 26（P0）**：提供固定 `612f687d` 的**实际源码 diff、证据 JSON 原文、原始 Vitest/TSC 输出**
+  或可读取的仓库文件引用，支持独立复核。
+- **CHANGE 27（P0）**：从源码与用例验证 `executionContext.resourceScope` 的**可信构造链**、
+  必需维度拒绝逻辑，以及 `optional` 维度（`domain` / `jurisdiction`）**不会因异常省略而错误放大授权范围**
+  （「字段存在于可信对象中」不等于安全）。
+- **CHANGE 28（P1）**：复核证据 JSON 的逐项测试状态、退出码、只读事务独立性、公共入口探针与七张表快照，
+  并确认全部对应固定 HEAD。
+
+审计并指出：下一轮若证据可独立核验且未发现实现缺陷，**可直接**签署 `PHASE3_U1_IMPLEMENTATION_CLOSED=YES`，
+无需再增加一轮功能开发；关闭 U1 不等于授权 U2–U5、外部写入或上线。
+
+**通道约束（下一轮必须先解决，否则会被再次判 REVISE）**：ChatGPT 网页侧评审**无法读取本仓库**，
+因此 CHANGE 26 中「可读取的仓库文件引用」在本通道不可用。下一轮送审必须**在消息正文内内联**：
+固定 HEAD 的源码 diff（至少 U1 三个文件的关键段落）、证据 JSON 的关键字段与取值、
+原始 Vitest/TSC 输出的关键行（含逐项用例名称与退出码）。若超出单条消息长度，则给出**可复核的最小充分子集**
+并附明确的行号 / 字段路径，而不是仅给仓库路径。
+
+```text
+MSG17_VERDICT = REVISE（逐字归档 FULL_COPY_OK 92/92；规范化 FNV1A 1b776bf3）
+CHANGE24_REQUIRED_SCOPE_TRUST_BOUNDARY = REVISE
+CHANGE25_INDEPENDENT_EVIDENCE_PACKAGE = REVISE
+U1_READ_ONLY_BOUNDARY_PRESERVED = REVISE
+SCOPE_HONESTY = PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+REQUIRED_CHANGES = CHANGE26_P0 + CHANGE27_P0 + CHANGE28_P1
+NEXT_UNIT = PHASE3_A_U1_FINAL_R4_EVIDENCE_VERIFICATION_ONLY（内联固定 HEAD 的原始材料 + 可信构造链验证）
+NEXT_AUDIT = MSG-20261009-18
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```

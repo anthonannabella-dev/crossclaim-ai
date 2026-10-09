@@ -172603,3 +172603,119 @@ PRODUCTION_READY=NO
 
 本轮未修改仓库、未触发外部系统写入，也未授予任何生产权限。
 ```
+
+### [MSG-20261009-17] U1 FINAL-R3（CHANGE 24–25）= REVISE（证据可复核性不足：审计方未取得源码 diff / 证据 JSON 原文 / 原始测试输出，故 55/55 声明不足以关闭）；U1 仍未关闭；新增 CHANGE 26（P0 可独立复核的原始材料）、CHANGE 27（P0 executionContext.resourceScope 可信构造链与 optional 维度不得因省略而放大范围）、CHANGE 28（P1 逐项复核证据 JSON 状态/退出码/探针独立性与七张表快照并对应固定 HEAD）；NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R4_EVIDENCE_VERIFICATION_ONLY / NEXT_AUDIT=MSG-20261009-18；reviewed ref 612f687d
+
+```text
+MSG-20261009-17｜SI/RSI INTERNAL CODE REPAIR V1 独立审计裁决
+FINAL VERDICT：REVISE
+
+REVIEWED_HEAD： 612f687d
+审计范围： PHASE 3-A · U1 FINAL-R3 · CHANGE 24–25
+审计原则： 不扩大授权、不重复打开已通过的金额规则、不以测试通过声明代替独立证据核验。
+
+一、总体裁决
+
+本轮提交的修复方向正确，且相较上一轮解决了两个关键问题：
+
+CHANGE 24 将必需资源维度的决定权从调用者转移到服务端动作策略，并将资源值限制为可信执行上下文提供。
+
+CHANGE 25 建立固定 HEAD 的证据结构，补充独立只读事务拒写探针、公共入口事务证明和七张表前后状态快照。
+
+但本轮提供的是证据包的文字摘要，而不是可直接检查的原始证据内容。本次未取得 612f687d 的源码 diff、证据 JSON 原文和原始测试输出，因此无法独立核对其真实性、完整性及与固定提交的对应关系。
+
+这意味着不能依据摘要中的 55/55 PASS 直接签署 U1 关闭。
+
+CHANGE 24
+REVISE — 机制合理，缺独立核验
+CHANGE 25
+REVISE — 证据结构完整性未核验
+U1 只读边界
+条件符合，待源码确认
+SCOPE HONESTY
+PASS
+U1 IMPLEMENTATION CLOSED
+NO
+U2–U5 实施授权
+NO
+
+二、CHANGE 24：可信资源范围边界
+
+裁决：REVISE（不要求重新设计已描述的策略）。
+送审方案满足上一轮要求的核心设计：
+服务端固定策略决定必需维度。
+resolve() 不再接收调用者传入的 resourceScope。
+必需维度缺失时拒绝授权。
+单授权条件下覆盖账户、Provider、domain 和 jurisdiction 的错误匹配测试。
+provenance 记录策略来源及实际参与匹配的维度。
+还需要复核一个关键实现细节：
+executionContext.resourceScope 是否真的由可信服务端构造，而不是将客户端参数原样复制到所谓可信上下文。
+同时检查 domain、jurisdiction 被定义为 optional 时，未提供的原因是否会产生资源范围意外扩大；不能仅凭字段存在于可信对象中就认定其安全。
+本轮不要求改变已经批准的动作策略，但必须通过源码或测试证据确认上述边界。
+
+三、CHANGE 25：固定 HEAD 的独立证据
+
+裁决：REVISE。
+根据送审描述，证据包已经包含所要求的五类材料，结构上没有明显遗漏。
+其中以下证据具有较强的验证价值：
+DELETE 与 CREATE TABLE 分别在独立只读事务执行。
+PostgreSQL 返回 SQLSTATE 25006。
+公共 U1 入口读取 transaction_read_only=on。
+七张相关表前后快照一致。
+48 项端口测试及 7 项真实 PostgreSQL 测试均声明通过。
+但是，审计方尚未核验 JSON 的实际字段和值，也未检查原始输出中是否存在跳过的测试、预期之外的异常或掩盖失败的处理。
+因此，证据类型充分的声明不等于证据真实性已经通过审核。
+
+四、U1 只读边界与范围诚实性
+
+U1_READ_ONLY_BOUNDARY_PRESERVED：REVISE
+现有描述没有显示新增执行权限、调度器、控制器、Runtime、Provider 写入或数据库迁移。但未检查源码前，不能将这些声明提升为已核实事实。
+SCOPE_HONESTY：PASS
+本轮明确承认：
+runtimeSourceIsolationImplemented=false
+U2–U5 未实施
+Linux/systemd、CI、生产环境与真实 Provider 未验证
+外部写入、自动合并、自动部署全部禁止
+这些声明与 U1 的受限实施范围一致，没有将局部测试通过冒充生产就绪。
+
+五、必须执行的最小修订
+
+不要求重新实施 CHANGE 24–25。下一轮只处理证据可复核性。
+修订编号
+优先级
+必须完成
+CHANGE 26
+P0
+提供固定 612f687d 的实际源码 diff、证据 JSON 原文、原始 Vitest/TSC 输出或可读取的仓库文件引用，支持独立复核
+CHANGE 27
+P0
+从源码与用例验证 executionContext.resourceScope 的可信构造链、必需维度拒绝逻辑，以及 optional 维度不会因异常省略而错误放大授权范围
+CHANGE 28
+P1
+复核证据 JSON 的测试逐项状态、退出码、只读事务独立性、公共入口探针和七张表快照，并确认全部对应固定 HEAD
+下一轮如果上述证据能够独立核验且没有发现实现缺陷，可以直接签署 PHASE3_U1_IMPLEMENTATION_CLOSED=YES，无需再增加一轮功能开发。
+关闭 U1 不意味着批准 U2–U5，也不意味着批准任何外部写入或上线。
+
+六、机器可读最终裁决
+
+MSG-20261009-17 / FINAL
+复制裁决
+<text preserveWhitespace size="xs">{`AUDIT_ID=MSG-20261009-17
+REVIEWED_HEAD=612f687d
+FINAL_VERDICT=REVISE
+CHANGE24_REQUIRED_SCOPE_TRUST_BOUNDARY=REVISE
+CHANGE25_INDEPENDENT_EVIDENCE_PACKAGE=REVISE
+U1_READ_ONLY_BOUNDARY_PRESERVED=REVISE
+SCOPE_HONESTY=PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED=NO
+PHASE3_A_U2_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE26_P0+CHANGE27_P0+CHANGE28_P1
+NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R4_EVIDENCE_VERIFICATION_ONLY
+NEXT_AUDIT=MSG-20261009-18
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO`}</text>
+
+最终结论： CHANGE 24–25 的设计与证据组织方式已经接近 U1 关闭标准，但本轮缺少可实际检查的原始材料。维持 U1 未关闭，只授权下一轮进行固定 HEAD 的证据核验；不扩大任何执行权限。
+```
