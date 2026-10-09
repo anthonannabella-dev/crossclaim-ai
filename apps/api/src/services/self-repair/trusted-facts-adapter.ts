@@ -193,6 +193,7 @@ export type TrustedFactsFailureReason =
   | 'REQUIRED_SCOPE_MISSING'
   | 'OPTIONAL_SCOPE_UNDECLARED'
   | 'SCOPE_DECLARATION_CONFLICT'
+  | 'SCOPE_DIMENSION_NOT_DECLARED'
   | 'MONETARY_INPUT_INVALID'
   | 'MONETARY_LIMIT_EXCEEDED'
   | 'STALE_FACT_VERSION'
@@ -296,7 +297,11 @@ export type ScopeDeclarationCheck =
     }
   | {
       ok: false;
-      reason: 'REQUIRED_SCOPE_MISSING' | 'OPTIONAL_SCOPE_UNDECLARED' | 'SCOPE_DECLARATION_CONFLICT';
+      reason:
+        | 'REQUIRED_SCOPE_MISSING'
+        | 'OPTIONAL_SCOPE_UNDECLARED'
+        | 'SCOPE_DECLARATION_CONFLICT'
+        | 'SCOPE_DIMENSION_NOT_DECLARED';
     };
 
 export function checkScopeDeclaration(
@@ -310,6 +315,14 @@ export function checkScopeDeclaration(
   };
   const isNotApplicable = (dimension: TrustedFactsScopeDimension): boolean =>
     (notApplicable ?? []).includes(dimension);
+
+  // CHANGE 27 残留项：策略未覆盖的维度不得被隐式使用（既不能提供取值、也不能声明不适用）—— fail-closed
+  const declared = new Set<TrustedFactsScopeDimension>([...policy.required, ...policy.optional]);
+  for (const dimension of TRUSTED_FACTS_SCOPE_DIMENSIONS) {
+    if ((isProvided(dimension) || isNotApplicable(dimension)) && !declared.has(dimension)) {
+      return { ok: false, reason: 'SCOPE_DIMENSION_NOT_DECLARED' };
+    }
+  }
 
   for (const dimension of TRUSTED_FACTS_SCOPE_DIMENSIONS) {
     if (isProvided(dimension) && isNotApplicable(dimension)) {
@@ -328,6 +341,7 @@ export function checkScopeDeclaration(
   }
   return {
     ok: true,
+    // 去重（Set 语义）：重复声明与单次声明等价；返回值按固定维度顺序给出
     providedDimensions: TRUSTED_FACTS_SCOPE_DIMENSIONS.filter((dimension) => isProvided(dimension)),
     notApplicableDimensions: TRUSTED_FACTS_SCOPE_DIMENSIONS.filter((dimension) => isNotApplicable(dimension)),
   };
@@ -622,4 +636,5 @@ export const TRUSTED_FACTS_ADAPTER_BOUNDARY = {
   /** CHANGE 27 */
   requiresExplicitNotApplicableDeclaration: true,
   scopeOmissionCannotWidenMatch: true,
+  rejectsUndeclaredScopeDimensions: true,
 } as const;

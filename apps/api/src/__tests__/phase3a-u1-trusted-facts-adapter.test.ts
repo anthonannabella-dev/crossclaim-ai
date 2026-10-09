@@ -419,6 +419,32 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）
         ['jurisdiction'],
       ),
     ).toEqual({ ok: false, reason: 'SCOPE_DECLARATION_CONFLICT' });
+    // CHANGE 27 残留项：策略未覆盖的维度不得被隐式使用
+    expect(
+      checkScopeDeclaration(
+        { required: ['platformAccountId'], optional: [] },
+        { platformAccountId: 'acct-1', provider: 'AMAZON' },
+        undefined,
+      ),
+    ).toEqual({ ok: false, reason: 'SCOPE_DIMENSION_NOT_DECLARED' });
+    expect(
+      checkScopeDeclaration({ required: ['platformAccountId'], optional: [] }, { platformAccountId: 'acct-1' }, [
+        'provider',
+      ]),
+    ).toEqual({ ok: false, reason: 'SCOPE_DIMENSION_NOT_DECLARED' });
+    // 重复声明与单次声明等价（Set 语义，不改变结果）
+    expect(
+      checkScopeDeclaration(policy, { platformAccountId: 'acct-1', provider: 'AMAZON' }, [
+        'domain',
+        'domain',
+        'jurisdiction',
+        'jurisdiction',
+      ]),
+    ).toEqual({
+      ok: true,
+      providedDimensions: ['provider', 'platformAccountId'],
+      notApplicableDimensions: ['domain', 'jurisdiction'],
+    });
   });
 
   it('接口不接受候选载荷 / 模型输出；唯一原生 SQL 是只读事务语句', () => {
@@ -455,6 +481,7 @@ describe('PHASE 3-A / U1 可信事实适配器（只读、CHANGE 17–20 + 24）
       scopeValuesFromTrustedContextOnly: true,
       requiresExplicitNotApplicableDeclaration: true,
       scopeOmissionCannotWidenMatch: true,
+      rejectsUndeclaredScopeDimensions: true,
     });
   });
 });

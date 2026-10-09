@@ -113,6 +113,33 @@ async function seedAuthorization(
 }
 
 /** CHANGE 25：七张相关表计数 + 关键记录摘要（内容级证据，不止计数） */
+const CONTENT_TABLES = [
+  'Organization',
+  'StandingAuthorization',
+  'AuditLog',
+  'RecoveryOpportunity',
+  'AutonomyTask',
+  'AutonomyLease',
+  'AutonomyIncident',
+] as const;
+
+/**
+ * CHANGE 31：整表**内容级**摘要 —— 对每张表的全部行做 canonical JSON 排序后取 md5，
+ * 因此「计数相同」不再是唯一证据：任何行的任何字段变化都会改变该摘要。
+ * 仅在本测试（隔离库）内使用；产品代码不含任何原生查询。
+ */
+async function tableContentDigests(): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const table of CONTENT_TABLES) {
+    const rows = await prisma.$queryRawUnsafe<{ n: bigint; digest: string }[]>(
+      `SELECT count(*)::bigint AS n, coalesce(md5(string_agg(row_to_json(t)::text, chr(10) ORDER BY row_to_json(t)::text)), 'empty') AS digest FROM "${table}" t`,
+    );
+    const row = rows[0];
+    out[table] = `${String(row === undefined ? 0 : Number(row.n))}:${String(row === undefined ? '' : row.digest)}`;
+  }
+  return out;
+}
+
 async function snapshot(): Promise<Record<string, unknown>> {
   const organization = await prisma.organization.findUnique({
     where: { id: ORG },
@@ -133,6 +160,7 @@ async function snapshot(): Promise<Record<string, unknown>> {
       autonomyLease: await prisma.autonomyLease.count(),
       autonomyIncident: await prisma.autonomyIncident.count(),
     },
+    tableContent: await tableContentDigests(),
     organization: organization === null ? null : { id: organization.id, updatedAt: organization.updatedAt.toISOString() },
     authorizationDigests: authorizations.map(
       (row) => `${row.id}:${row.authorizationVersion}:${row.revocationState}:${row.scopeDigest}`,
@@ -331,14 +359,20 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat
     expect(!untrustedCaller.ok && untrustedCaller.reason).toBe('CALLER_NOT_TRUSTED');
   });
 
-  it('U1-DB7（CHANGE 20/25）解析前后七张相关表计数与关键记录摘要一致', async () => {
+  it('U1-DB7（CHANGE 20/25/31）解析前后七张相关表**内容级**摘要与关键记录摘要一致', async () => {
     await seedAuthorization();
     const before = await snapshot();
     const resolved = await adapter().resolve({ organizationId: ORG, actionType: 'recovery.read', monetaryAction: false });
     expect(resolved.ok).toBe(true);
     const after = await snapshot();
     expect(after).toEqual(before);
-    evidence({ kind: 'TABLE_SNAPSHOT', before, after, identical: JSON.stringify(before) === JSON.stringify(after) });
+    evidence({
+      kind: 'TABLE_SNAPSHOT',
+      method: 'per-table canonical row-JSON md5 (count:digest) via SELECT md5(string_agg(row_to_json(t)::text, chr(10) ORDER BY row_to_json(t)::text))',
+      before,
+      after,
+      identical: JSON.stringify(before) === JSON.stringify(after),
+    });
   });
 
   it('U1-DB8（CHANGE 27）范围声明链：省略可选维度必须显式声明不适用；请求侧夹带 resourceScope 无效', async () => {
