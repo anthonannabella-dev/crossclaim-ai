@@ -1147,3 +1147,52 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.18 MSG-20261009-18 裁决（U1 FINAL-R4）= **REVISE**；**U1 仍未关闭**（新增 CHANGE 29–31，均为证据核验）
+
+> 归档：`AI-ARCHITECT-INBOX.md`（逐字，**FULL_COPY_OK**：原文 92 行 / 归档 92 行，缺失 0、多出 0）
+> 源文件（页面提取）：`work/self-repair/verdict-msg-20261009-18.txt`，规范化指纹 FNV1A=d54ceeac
+> REVIEWED_HEAD = `68f8f5a9`；审计会话：https://chatgpt.com/c/6ac85dd2-d924-83ec-8fc9-897018eb03bd
+
+**进展**：内联证据「较上一轮有实质改进」；**CHANGE 27 范围声明链 = PASS_SCOPED**（机制获认可：
+必需维度缺失/被声明不适用 ⇒ `REQUIRED_SCOPE_MISSING`、可选维度未提供也未声明 ⇒ `OPTIONAL_SCOPE_UNDECLARED`、
+冲突 ⇒ `SCOPE_DECLARATION_CONFLICT`、`resolve()` 只从 `executionContext.resourceScope` 取值、
+provenance 记录参与匹配与显式排除的维度）。`SCOPE_HONESTY = PASS`。
+`U1_READ_ONLY_BOUNDARY_PRESERVED = PASS_WITH_REVISE`（25006 拒写证据支持所测路径的只读性质）。
+
+**未关闭原因（全部是证据层，不是机制缺陷）**：
+
+- `CHANGE26_RAW_EVIDENCE_INLINE = REVISE`：内联的是摘要式摘录（关键源码片段 + 用例名 + 探针字段），
+  不是**完整原始文件内容**，评审方无法独立计算指纹、无法确认 `68f8f5a9` 确为材料来源。
+- `CHANGE28_EVIDENCE_JSON_BINDING = REVISE`：无 `evidence.json` 原文、无完整测试执行记录，
+  `[passed]` 标记不能替代实际运行记录。
+- 七张表快照**大部分表只有计数**（仅授权行有摘要），计数相等无法排除记录内容变化。
+
+**新增必须执行的最小修订**（明确「属于证据修订，不是重新授权代码修复」，如现有文件已含所需内容可直接提交原文）
+
+- **CHANGE 29（P0）**：提供可独立核对的**固定 HEAD 文件内容或可访问的 Git blob**、文件指纹**计算过程/结果**与关键调用链。
+- **CHANGE 30（P0）**：提供 `evidence.json` **实际内容**、**完整测试执行记录**与退出码，证明逐项状态与当前 HEAD 一致。
+- **CHANGE 31（P1）**：补齐**七张表快照的实现与比较方式**，证明**内容级**一致性；并核对独立事务探针与公共入口探针的实际执行路径。
+
+**通道结构性观察（下一轮必须正面处理）**：网页评审**读不到本仓库**（且远端为私有库，Git blob URL 亦不可读），
+因此 CHANGE 29 的「可访问 Git blob」在本通道不可用。可行路径只有：在送审正文内**逐文件/分片内联完整文件内容或完整 diff**
+（适配器约 25 KB + 端口测试约 18 KB + DB 测试约 16 KB，需拆分为多条消息），并附**指纹计算的可复核过程**。
+
+```text
+MSG18_VERDICT = REVISE（逐字归档 FULL_COPY_OK 92/92；规范化 FNV1A d54ceeac）
+CHANGE26_RAW_EVIDENCE_INLINE = REVISE
+CHANGE27_SCOPE_DECLARATION_CHAIN = PASS_SCOPED
+CHANGE28_EVIDENCE_JSON_BINDING = REVISE
+U1_READ_ONLY_BOUNDARY_PRESERVED = PASS_WITH_REVISE
+SCOPE_HONESTY = PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+REQUIRED_CHANGES = CHANGE29_P0 + CHANGE30_P0 + CHANGE31_P1（均为证据核验）
+NEXT_UNIT = PHASE3_A_U1_FINAL_R5_EVIDENCE_VERIFICATION_ONLY（逐文件内联完整内容/完整 diff + 七张表内容级快照 + 范围维度未声明值处理）
+NEXT_AUDIT = MSG-20261009-19
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```

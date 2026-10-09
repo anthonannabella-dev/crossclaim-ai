@@ -172719,3 +172719,116 @@ PRODUCTION_READY=NO`}</text>
 
 最终结论： CHANGE 24–25 的设计与证据组织方式已经接近 U1 关闭标准，但本轮缺少可实际检查的原始材料。维持 U1 未关闭，只授权下一轮进行固定 HEAD 的证据核验；不扩大任何执行权限。
 ```
+
+### [MSG-20261009-18] U1 FINAL-R4（CHANGE 26–28）= REVISE（CHANGE 27 范围声明链 = PASS_SCOPED，机制获认可；但证据层仍无法独立核验：无固定 HEAD 文件内容/Git blob、无 evidence.json 原文与实际执行记录、七张表仅计数级对比）；U1 仍未关闭；新增 CHANGE 29（P0 可独立核对的固定 HEAD 文件内容或 Git blob + 指纹计算 + 关键调用链）、CHANGE 30（P0 evidence.json 实际内容 + 完整测试执行记录与退出码）、CHANGE 31（P1 七张表内容级快照实现与比较方式 + 探针执行路径核对）；NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R5_EVIDENCE_VERIFICATION_ONLY / NEXT_AUDIT=MSG-20261009-19；reviewed ref 68f8f5a9
+
+```text
+MSG-20261009-18｜SI/RSI INTERNAL CODE REPAIR V1 · U1 FINAL-R4 独立审计裁决
+FINAL VERDICT：REVISE
+
+REVIEWED_HEAD： 68f8f5a9
+审计范围： CHANGE 26–28
+证据范围： MSG-20261009-18 主送审材料及本条 INLINE-RAW-EVIDENCE
+
+本轮内联证据较上一轮有实质改进。范围声明机制、请求侧夹带隔离、PostgreSQL 只读事务拒写，以及测试覆盖均提供了具体、可检查的材料。
+
+但仍有两个证据层面的缺口：固定 HEAD 与文件指纹尚无法独立校验；证据 JSON、原始测试文件与实际执行结果尚无法逐项交叉核对。
+
+因此，本轮认可 CHANGE 27 的局部设计和所展示的关键实现逻辑，但暂不签署 U1 实施关闭。
+
+一、逐项裁决
+
+审计项
+裁决
+说明
+CHANGE 26
+REVISE
+已提供关键源码、测试名称、探针记录；但非完整原始文件和可复核输出
+CHANGE 27
+PASS（局部）
+范围声明检查逻辑符合 fail-closed 要求；不代表生产可信装配完成
+CHANGE 28
+REVISE
+已提供 SHA-256 和证据摘要，但无法独立核对实际 JSON、Git 文件内容与执行记录
+U1 只读边界
+PASS WITH REVISE
+PostgreSQL 25006 拒写证据支持所测试路径的只读性质；完整边界仍待校验
+SCOPE HONESTY
+PASS
+明确承认 U1 未接生产调用点，未将 U2–U5 声称为完成
+U1 IMPLEMENTATION CLOSED
+NO
+关键机制基本成立，但证据真实性和完整性门禁未关闭
+
+二、CHANGE 27：范围声明链审查
+
+已展示的 checkScopeDeclaration() 逻辑满足以下关键要求：
+必需维度缺失或被声明不适用，返回 REQUIRED_SCOPE_MISSING。
+可选维度既未提供也未显式声明不适用，返回 OPTIONAL_SCOPE_UNDECLARED。
+同一维度同时提供和声明不适用，返回 SCOPE_DECLARATION_CONFLICT。
+resolve() 从 executionContext.resourceScope 取值，而非请求侧 resourceScope。
+provenance.scopePolicy 记录参与匹配与显式排除的维度。
+53 项端口级用例中，所列第 3、4、11–18、25、52 项直接覆盖了上述机制。U1-DB8 进一步提供数据库级验证声明。
+CHANGE 27 的核心规则可以接受。
+但还存在一个需要在原始源码中确认的细节：notApplicableScopeDimensions 是否存在未知值、重复值及策略未覆盖维度的处理约束，以及授权匹配查询是否确实使用经过校验的范围。
+这些不要求改变已经批准的范围策略，也不需要重新实施 CHANGE 27；只需展示现有实现并证明不存在绕过路径。
+另外，服务端上下文真正由谁构造、租户身份如何绑定、能否被不可信调用方覆盖，仍必须留在 U2 的可信装配审计中。
+
+三、CHANGE 26、28：剩余证据缺口
+
+本轮提供的证据支持以下有限结论：
+PostgreSQL 拒写探针显示 SQLSTATE 25006，符合只读事务拒绝 DELETE 和 CREATE TABLE 的行为。
+两个探针标记为独立事务，公共入口探针标记为同一事务，分类口径合理。
+七张表的前后计数和摘要被报告为一致。
+61 项端口级测试与数据库测试合计、2 项额外测试的摘要均报告通过，且 Vitest、TypeScript 退出码被报告为 0。
+但测试名称及 [passed] 标记不能替代实际测试运行记录，identical=true 也不能单独证明七张表的全部状态确实相同。
+尤其需要注意：目前只展示了部分表的关键记录摘要，其余表主要是计数。仅比较计数无法排除记录内容发生变化。因此，七张表的内容级一致性必须通过快照实现代码及其原始证据核实。
+SHA-256 虽然已提供，但在没有取得对应文件内容的情况下，无法独立计算并核对指纹，也无法确认 68f8f5a9 确为这些材料的来源。
+
+下一轮仅需完成三项证据修订
+
+编号
+优先级
+最小修订要求
+CHANGE 29
+P0
+提供能够独立核对的固定 HEAD 文件内容或可访问的 Git blob、文件指纹计算结果及关键调用链；无需修改业务逻辑
+CHANGE 30
+P0
+提供 evidence.json 的实际内容、完整测试执行记录及退出码，证明逐项状态与当前 HEAD 一致
+CHANGE 31
+P1
+补齐七张表快照的实现与比较方式，证明内容级一致性；同时核对独立事务探针与公共入口事务的实际执行路径
+以上属于证据修订，不是重新授权代码修复。如现有证据文件已经完整包含这些内容，可以直接提交可核验原文，无需重新跑测试，也不要求修改代码。
+
+四、阶段关闭和权限裁决
+
+本轮不批准进入 U2–U5 实施。
+即便下一轮 U1 证据核验通过，也应先单独裁决是否开启 U2 的最小实施单元，不应将 U1 关闭自动解释为 U2–U5 全部获准。
+目前继续保持：
+U1：实现已报告完成，独立验收尚未关闭。
+U2–U5：未获实施授权。
+真实 Provider、外部写入、自动合并、自动部署：全部保持原门禁。
+
+MSG-20261009-18 / FINAL
+纯文本
+AUDIT_ID=MSG-20261009-18
+REVIEWED_HEAD=68f8f5a9
+FINAL_VERDICT=REVISE
+CHANGE26_RAW_EVIDENCE_INLINE=REVISE
+CHANGE27_SCOPE_DECLARATION_CHAIN=PASS_SCOPED
+CHANGE28_EVIDENCE_JSON_BINDING=REVISE
+U1_READ_ONLY_BOUNDARY_PRESERVED=PASS_WITH_REVISE
+SCOPE_HONESTY=PASS
+PHASE3_U1_IMPLEMENTATION_CLOSED=NO
+PHASE3_A_U2_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE29,CHANGE30,CHANGE31
+NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R5_EVIDENCE_VERIFICATION_ONLY
+NEXT_AUDIT=MSG-20261009-19
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终审计意见： U1 当前未发现足以直接否定其关键范围声明机制的证据，但也尚未达到可以独立签署关闭的证据充分性标准。下一轮严格限于 CHANGE 29–31 的核验，不得借此扩大运行时、自动修复、数据库写入或生产部署权限。
+```
