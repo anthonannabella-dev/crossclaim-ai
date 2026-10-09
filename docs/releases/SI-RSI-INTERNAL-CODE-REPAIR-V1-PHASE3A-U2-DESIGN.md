@@ -1,17 +1,18 @@
-# PHASE 3-A · U2 设计 R3（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R4（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-26 = REVISE` → `MSG-20261009-27 = REVISE` →
-> `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R3_READ_ONLY_CHANGES_5_TO_8`。
-> 本文件是 **U2 设计 R3** 送审材料（MSG-20261009-28），**不含任何产品代码改动**。
-> **R3 的全部修订集中在 §11；§1–§10 为 R2 原文（保留历史），凡与 §11 冲突者以 §11 为准。**
+> `MSG-20261009-26 = REVISE` → `MSG-20261009-27 = REVISE` → `MSG-20261009-28 = REVISE` →
+> `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R4_READ_ONLY_CHANGES_9_TO_12`。
+> 本文件是 **U2 设计 R4** 送审材料（MSG-20261009-29），**不含任何产品代码改动**。
+> **R4 的修订集中在 §12；§1–§10 为 R2 原文、§11 为 R3 修订（保留历史）；凡冲突者以 §12 为准。**
 
 | 锚点 | 值 |
 | --- | --- |
 | U1 关闭锚点（封板代码，未被改动） | `9ee36837` |
 | U2 设计 R1 | `065f950e` |
 | U2 设计 R2 | `5ae09e37` |
-| U2 设计 R3 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R3 | `ac94ef8e` |
+| U2 设计 R4 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -376,3 +377,132 @@ factsDigest=<由 U2 自行取回的事实按同一规范化计算>
 §5 四项声明（持久化=复用既有 `AutonomyCandidate`；写入=**仅 INSERT**；Runtime 接线=否；模型调用=否）、
 §8 隔离与审批边界、§9 回滚（停用入口 + 保留历史 + 禁止批量删除）、§10 未实施声明 —— **全部保持**；
 U1 封板锚点 `9ee36837` 不变。
+
+---
+
+## 12. R4 修订（对应 MSG-20261009-28 的 CHANGE 9–12）
+
+> 本节是 R4 的正式修订内容。§1–§11 保留以维持历史；**凡与本节冲突的，一律以本节为准。**
+
+### 12.1 R3 → R4 修订记录
+
+| 变更 | R3 遗留问题 | R4 处置 |
+| --- | --- | --- |
+| **CHANGE 9（P0）** | 候选键不含故障身份，两个不同 Incident 在同 scope/baseline 下碰撞 | §12.2：候选键升级为 **v2**，纳入由**已验证 Incident 行**派生的 `signalKey`，所有可变长字段用 **base64url** 无歧义编码；新增 U2-14 / U2-15 |
+| **CHANGE 10（P0）** | 要求 U1 事实绑定 PLATFORM 故障，与 U1 实际契约不匹配 | §12.3：给出 U1 真实契约与**逐字段兼容性矩阵**；**解除 PLATFORM 路径的 U1 事实依赖**；携带 U1 字段 ⇒ `TRUSTED_FACTS_CONTRACT_UNSUPPORTED`；如需扩展 U1 契约须单独送审 |
+| **CHANGE 11（P0）** | 身份版本「当前性」无可信裁决、`READ COMMITTED` 下二次读不足 | §12.4：**采用审计方允许的路径 —— ACCOUNT 作用域标记 `NOT_AUTHORIZED`，R4 只保留 PLATFORM 设计**；不新增身份管理表/迁移、不改 U1 契约；并写明未来解除条件 |
+| **CHANGE 12（P1）** | 测试向量为占位符；U2-13 断言与规范化语义相反；`factsDigest` 规范缺失 | §12.5：给出**已由两种独立实现交叉复算**的固定向量；更正 U2-13 为规范化**等价性**断言；`factsDigest` 随 U1 依赖解除而移除 |
+
+### 12.2 CHANGE 9 —— 候选键 v2（含故障身份 + 无歧义编码）
+
+```text
+candidate:v2:<scopeKind>:<b64url(scopeRef)>:<b64url(signalKey)>:<identityVersion|NONE>:<b64url(baselineRef)>
+```
+
+- `b64url` = RFC 4648 §5 base64url（字母表 `A-Za-z0-9-_`，**省略** `=` 填充）。
+  该字母表**不含** `:`、`#`、`/`，因此字段间**不存在分隔符碰撞**；所有可变长字段一律经此编码（等价于无歧义编码/长度前缀）。
+- `signalKey` **必须**取自**已读取并验证的 `AutonomyIncident` 行**：由该行 `dedupeKey` 去掉既有前缀得到
+  （`incident:<signalKey>` → `<signalKey>`）。**不得**信任调用方自行提供的字符串；
+  输入与 Incident 行不一致 ⇒ `REJECTED`，`reason='INPUT_KEY_MISMATCH'`。
+- PLATFORM 时 `identityVersion` 固定为字面量 `NONE`（随 §12.4 的 ACCOUNT 不授权一并简化）。
+- **新增验收**：**U2-14**（同一平台、同一 `baselineRef` 下两个**不同** Incident ⇒ 两个**不同**候选键、两行候选）；
+  **U2-15**（同一 Incident 重放 ⇒ 仅一行候选，且复用前校验链通过）。
+
+### 12.3 CHANGE 10 —— U1 真实契约与兼容性矩阵（并解除 PLATFORM 的 U1 依赖）
+
+**R4 只读取证（`apps/api/src/services/self-repair/trusted-facts-adapter.ts`）**：
+
+| U1 契约要素 | 实际值 |
+| --- | --- |
+| 调用方白名单 | `TRUSTED_FACTS_CALLERS = ['SERVER_REQUEST_GATE', 'RUNTIME_MEMBER']` |
+| 作用域维度 | `TRUSTED_FACTS_SCOPE_DIMENSIONS = ['provider','platformAccountId','domain','jurisdiction']` |
+| 动作策略 `internal.repair.propose` | required = `['platformAccountId','provider']`；optional = `['domain','jurisdiction']` |
+| 返回 | `TrustedFactsResolution` / `TrustedFactsProvenance`（面向**客户动作授权**） |
+
+**结论**：U1 事实面向**客户动作授权**（组织/账户/资源作用域），与**平台内部故障**
+（`CI_FAIL:<head>:<runId>`、`TYPECHECK_FAILURE:<summary>`、`BACKLOG_STALL:<headNow>`，无租户/账户维度）
+**不存在对应的 action type** ⇒ **不能**把组织授权事实解释为平台故障事实。
+
+**逐字段兼容性矩阵（R4）**
+
+| U1 输入/输出字段 | PLATFORM 内部故障 | ACCOUNT |
+| --- | --- | --- |
+| `caller`（白名单） | NOT_APPLICABLE（R4 解除依赖） | NOT_AUTHORIZED |
+| `platformAccountId` / `provider` | NOT_APPLICABLE | NOT_AUTHORIZED |
+| `domain` / `jurisdiction`（optional） | NOT_APPLICABLE | NOT_AUTHORIZED |
+| `TrustedFactsResolution` / `TrustedFactsProvenance` | NOT_APPLICABLE | NOT_AUTHORIZED |
+| `factsSnapshotRef` / `factsDigest` / `issuedAt` | **已移除**（R4 起 PLATFORM 不再要求） | NOT_AUTHORIZED |
+
+**R4 处置**：
+
+1. **解除 PLATFORM 路径的 U1 事实依赖**。PLATFORM 候选的可信输入仅限：
+   (a) 已验证的 `AutonomyIncident` 行（`kind='INTERNAL_FAULT'`、`status='DIAGNOSED'`）；
+   (b) 关联的 `AutonomyTask` 行；(c) `baselineRef`（来自可信基线解析）；(d) 用于校验的当前 `HEAD`；
+2. 调用方若传入任何 U1 事实字段（`factsSnapshotRef`/`factsDigest`/`issuedAt`/组织身份）⇒
+   `REJECTED`，`reason='TRUSTED_FACTS_CONTRACT_UNSUPPORTED'`（**不使用、不解释、不补齐**）；
+3. **不**绕过 U1 的调用方白名单与作用域策略（本设计根本不再调用 U1）；
+4. 若将来要为平台内部故障引入独立可信事实来源或扩展 U1 契约，**必须单独送审**；
+   不得在 U2 实施中隐式修改封板代码。
+
+### 12.4 CHANGE 11 —— 身份版本当前性：ACCOUNT 作用域标记 NOT_AUTHORIZED
+
+**R4 只读取证（`apps/api/src/services/connectors/platform-identity-verifier.ts`）**：
+`PlatformIdentityVerification` = `{ source; evidenceRef; verifiedAt; identity }`，且
+`VerifiedPlatformIdentity.identityVersion` 为**可选**。该结构只证明**一次验证结果**，并不证明：
+① 哪个版本当前有效；② 旧版本是否已撤销；③ 两次验证谁优先；④ 是否发生版本回退。
+此外在 PostgreSQL `READ COMMITTED` 下，同一事务内**二次读取**并不能阻止另一事务在第二次读取**之后**提交版本变更。
+
+**R4 决定（采用审计方明确允许的路径）**：
+
+1. **ACCOUNT 作用域候选自 R4 起标记 `NOT_AUTHORIZED`**，U2 **只保留 PLATFORM 设计**；
+   任何 ACCOUNT 输入 ⇒ `REJECTED`，`reason='SCOPE_NOT_AUTHORIZED'`；
+2. **不新增**身份管理表、**不新增**迁移、**不改** U1 契约；
+3. **未来解除条件（须单独送审）**：存在可信的「当前版本」裁决来源（含优先级与冲突拒绝规则），
+   且具备「版本切换操作」与「候选 INSERT」共享的锁或串行化机制，并能给出覆盖
+   「第二次读取之后、INSERT 提交之前」竞争窗口的并发时序证明；在具备该机制之前，ACCOUNT 保持 NOT_AUTHORIZED；
+4. 该决定是**承认现有系统不具备该能力**，而不是假定其存在（与审计方要求一致）。
+
+### 12.5 CHANGE 12 —— digest 契约与固定测试向量（两种独立实现交叉复算）
+
+**字段集（R4，PLATFORM）**：`scopeKind, scopeRef, signalKey, baselineRef, faultClass, faultDetectedAtUtc`
+（移除 `identityVersion` 与 `factsDigest`：前者随 ACCOUNT 一同不授权，后者随 U1 依赖解除而移除）。
+
+```text
+candidateDigest = sha256( utf8( "u2cd:v2" + "\n" + canonicalJson(fields) ) )
+
+canonicalJson: 固定键序为上述字段顺序；紧凑输出（无多余空白）；NFC 规范化；UTF-8；
+               字符串按 JSON 转义；时间统一 UTC 毫秒 ISO-8601（YYYY-MM-DDTHH:MM:SS.sssZ）
+```
+
+**规范化等价性断言（更正 R3 U2-13 的反向表述）**：
+
+1. 输入对象**键序**变化 ⇒ 规范化后 **相同** digest；
+2. 无意义**空白**差异 ⇒ **相同** digest；
+3. 同一时刻的**等价时间表示**（如 `+00:00` 与 `Z`、或更高精度按规范截断到毫秒）⇒ **相同** digest；
+4. **只有规范化后的语义字段发生变化** ⇒ 不同 digest。
+
+**固定测试向量（已由两种独立实现交叉复算，结果一致）**：
+
+```text
+canon = {"scopeKind":"PLATFORM","scopeRef":"platform","signalKey":"CI_FAIL:abc:100","baselineRef":"refs/heads/main@9ee36837","faultClass":"DATABASE_TRANSACTION_ERROR","faultDetectedAtUtc":"2026-10-09T05:00:00.000Z"}
+input = "u2cd:v2\n" + canon          （UTF-8，215 字节）
+sha256 = fa8ed0617c3db797a9e4e8d85b7403c697b0352291ad846e4a6a79ac010db0b8
+
+复算实现 ① Node.js : crypto.createHash('sha256').update(Buffer.from(input,'utf8')).digest('hex')
+                    ⇒ fa8ed0617c3db797a9e4e8d85b7403c697b0352291ad846e4a6a79ac010db0b8
+复算实现 ② .NET    : PowerShell Get-FileHash -Algorithm SHA256（对同一字节序列）
+                    ⇒ fa8ed0617c3db797a9e4e8d85b7403c697b0352291ad846e4a6a79ac010db0b8
+两种独立实现一致 ⇒ 该向量可作为独立复算基准
+```
+
+**验收用例调整**：**U2-13** 更正为 §12.5 的四条等价性断言；新增 **U2-14 / U2-15**（§12.2）；
+**U2-16**（PLATFORM 输入携带 U1 事实字段 ⇒ `TRUSTED_FACTS_CONTRACT_UNSUPPORTED` 且**零写入**）；
+**U2-17**（ACCOUNT 输入 ⇒ `SCOPE_NOT_AUTHORIZED` 且**零写入**）。
+
+### 12.6 R4 未变部分与边界
+
+未变：§1 范围与非目标、§3 调用关系（不新增 Runtime/Scheduler/Controller/Queue、不触发执行）、
+§5 四项声明（**仅 INSERT**、无 UPDATE/DELETE、无 Runtime 接线、无模型调用）、§8 隔离与审批边界、
+§9 回滚（停用入口 + 保留历史 + 禁止批量删除）、§10 未实施声明；
+`SCHEMA_MIGRATION=HOLD`；U1 封板锚点 `9ee36837` **不变**。
+本文件仍为**纯设计 R4**：未新增产品代码、未新增表、未执行迁移、未接线运行时、未调用模型。
