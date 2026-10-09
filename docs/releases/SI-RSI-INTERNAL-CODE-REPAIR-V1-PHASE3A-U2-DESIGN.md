@@ -1,12 +1,12 @@
-# PHASE 3-A · U2 设计 R18（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R19（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-40 = REVISE` → `MSG-20261009-41 = REVISE` → `MSG-20261009-42 = REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R18_READ_ONLY_CHANGES_67_TO_72`。
-> 本文件是 **U2 设计 R18** 送审材料（MSG-20261009-43），**不含任何产品代码改动**。
-> **R18 的修订集中在 §26**（`O3-CONTRADICTED` 的证据边界 / **唯一生产锁协议**与禁止混用锁族 /
-> 静态约束覆盖可执行调用路径 / M1 的事务归属与提交持久证明 / `xmin` 的 epoch 与行版本语义 / U2-50a~f），
-> 含本仓库范围内的只读证据核验；§1–§25 保留历史；凡冲突者以 §26 为准（**R13–R18 优先于 §20.4.1**）。
+> `MSG-20261009-41 = REVISE` → `MSG-20261009-42 = REVISE` → `MSG-20261009-43 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R19_READ_ONLY_CHANGES_73_TO_78`。
+> 本文件是 **U2 设计 R19** 送审材料（MSG-20261009-44），**不含任何产品代码改动**。
+> **R19 的修订集中在 §27**（`P2` 探针独立性契约 / 协议边界与负面验收 / FD 边界失效时的**写入保证**与内核语义勘误 /
+> M1 **恢复状态机**与去重权威 / 行版本身份与**有效期限** / U2-50g~j），含本仓库范围内的只读证据核验；
+> §1–§26 保留历史；凡冲突者以 §27 为准（**R13–R19 优先于 §20.4.1**）。
 
 | 锚点 | 值 |
 | --- | --- |
@@ -28,7 +28,8 @@
 | U2 设计 R15 | `52308673` |
 | U2 设计 R16 | `97dee91e` |
 | U2 设计 R17 | `c9ec3eca` |
-| U2 设计 R18 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R18 | `c391245e` |
+| U2 设计 R19 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -2520,5 +2521,223 @@ R18_NOT_VERIFIED = LOCK_PROTOCOL_UNIFORMITY_ATTESTATION（协议声明门禁未�
 ```
 
 本文件仍为**纯设计 R18**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+本轮只读核验**仅**读取 `apps/api/prisma/schema.prisma`、既有迁移文件与 `apps/api/src` 中的只读检索结果，
+**未**连接任何数据库、**未**执行任何写入。
+
+---
+
+## 27. R19 修订（对应 MSG-20261009-43 的 CHANGE 73–78）
+
+> 授权来源：`MSG-20261009-43 = REVISE` ⇒ `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R19_READ_ONLY_CHANGES_73_TO_78`。
+> 本轮只处理这六项；**不重复**已接受的条款，也**不重开** U1。
+> `U2_DESIGN_R18_ACCEPTED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`U1_REOPEN=NO` **不变**。
+
+```text
+AUDIT_SCOPE   = f7dbce54..<本轮设计提交> = 2 commits / 3 files（含上一轮裁决归档提交）
+SINGLE_COMMIT = f7dbce54..<本轮设计提交> = 1 commit / 1 file
+PRODUCT_CODE  = 0
+```
+
+| CHANGE | R18 位置 | R19 修订位置 | 变更性质 |
+| --- | --- | --- | --- |
+| **CHANGE 73（P1）** | §25.1 / §24.1.7 | **§27.1** | `P2` 探针**独立性契约**（不得共享 `T1` 的 OFD） |
+| **CHANGE 74（P1）** | §26.2.4 | **§27.2** | 部署清单/文件系统前提 + **负面验收 = ADMISSION DENIED** |
+| **CHANGE 75（P0）** | §26.3.3 | **§27.3** | **写入保证**（可能失效即禁止提交）+ 提交期覆盖 + **内核语义勘误** |
+| **CHANGE 76（P0）** | §26.4 | **§27.4** | M1 **恢复状态机** + **去重权威** |
+| **CHANGE 77（P0）** | §26.5 | **§27.5** | **行版本身份**（冻结语义更正）+ **有效期限契约** |
+| **CHANGE 78（P1）** | §26.6 | **§27.6** | 新增反例 **U2-50g ~ U2-50j** |
+
+### 27.1 CHANGE 73（P1）—— `P2` 探针**独立性契约**
+
+**承认审计方的判断**：`flock` 锁属于**打开文件描述**；经 `dup()`/`fork()` 共享同一描述得到的 FD
+可能操作**同一把锁**，而**不构成独立竞争**。因此 `P2` 必须证明自己是**独立打开**的。
+
+**R19 契约（逐字固定）**
+
+```text
+P2_PROBE:
+  lock_family      = flock
+  file_identity    = T1.(st_dev, st_ino)
+  acquisition      = independent_open          # 由 P2 自行 open()，不使用 T1 的 FD
+  shares_T1_OFD    = false                     # 不得 dup/fork/SCM_RIGHTS 复用 T1 的打开文件描述
+  lock_request     = LOCK_EX | LOCK_NB
+
+P2_ACQUIRED = true  => EXCLUSIVE_WINDOW_CONTRADICTED => T2_DENIED
+```
+
+1. **独立性判定（可执行、fail-closed）**：`P2` **自行** `open()` 锁文件（`O_CLOEXEC`，且**不得**经任何 FD 传递方式获得）；
+   实现**必须**记录该 FD 的创建路径（`open` 调用点）与号码，并在证据中声明 `shares_T1_OFD=false`。
+   **无法证明独立性 ⇒ `O3`/`P2` 一律按 `INCONCLUSIVE` 处理**（不得当作有效互斥证据）。
+2. **共享 OFD 的反证（关键）**：若探针**错误地**复用了 `T1` 的 OFD，则其 `flock` 请求**会在同一描述上"成功"**
+   ⇒ 结果**恰好**是 `P2_ACQUIRED=true` ⇒ 按上表判为 `EXCLUSIVE_WINDOW_CONTRADICTED` ⇒ **`T2` 被拒**。
+   即：**该实现缺陷会以"误报冲突"的方式被 fail-closed 捕获**，而**不会**被误当作"互斥成立"的正面证据。
+3. **每个 `T1A`/`P2` 探针**均须遵守本契约（§23.1 的 `T1A` 与 §23.2 的 `P2` 同规则）；
+   探针 FD 必须在探针结束前 **`close()`**，若意外取得锁须**同流程内** `LOCK_UN` + `close()`（§24.1.7）。
+4. **负面测试（必须存在）**：以 `dup(T1.fd)` 构造**伪独立探针**，断言其**不得**被当作有效 `P2` 证据
+   （期望：`P2_ACQUIRED=true` ⇒ `EXCLUSIVE_WINDOW_CONTRADICTED` ⇒ `T2_DENIED`；或实现直接拒绝该探针构造）——见 **U2-51a**。
+
+### 27.2 CHANGE 74（P1）—— 协议边界与**负面验收**
+
+**承认审计方的判断**：①协议声明只能证明**已纳入管理的参与者**自称同协议，**不能**证明不存在**未登记进程/旧版本进程/拥有数据库写权限的其他组件**；
+②混合锁族测试**不能**以「两个进程都获得锁 ⇒ 测试失败」收尾 —— 那在本地文件系统上是**预期现象**；
+真正的验收是：**系统识别该环境或参与者组合不符合自身契约，然后拒绝 U2 写入**。
+
+**R19 规则**
+
+1. **`DEPLOYMENT_INVENTORY`（`CONFIG_VERIFIED` 的证据扩展，必须逐项给出）**：
+   ①**真实部署清单**（参与排他写入的进程/单元、其版本或构建标识）；②**数据库写入主体**（应用角色、迁移角色、运维/DBA 访问路径、后台作业）；
+   ③**目标 Linux 环境**（发行版/内核版本）；④**文件系统类型与挂载方式**（本地 vs `NFS`/`SMB` 等语义不同的网络文件系统；挂载选项）；
+   ⑤**锁文件生命周期**（创建者、路径、权限、是否可被替换/清理）；⑥各参与者声明的**锁协议标识**（期望恒为 `flock:whole-file:LOCK_EX`）。
+   **任一缺失或不可核验 ⇒ `U2_ADMISSION=DENIED`（fail-closed）**。
+2. **文件系统前提（明确写下）**：Linux 上 `flock` 与 `fcntl` 记录锁在**本地文件系统**通常互不冲突；
+   **`NFS`/`SMB` 等网络文件系统语义不同** ⇒ **必须**把「文件系统类型 + 挂载方式」作为**部署前提**固定并核验；
+   网络文件系统或无法确认的挂载 ⇒ `U2_ADMISSION=DENIED`（除非另有在该环境上完成的、可复现的互斥验证证据）。
+3. **负面验收（改写）**：混合锁族反例的正确验收是 —— 测试**成功重现**「`flock` 与 OFD 记录锁并存」，
+   并且系统（依据第 1 条清单中**声明不一致**的参与者，或**注入的未登记写入主体**）
+   判定 **`U2_ADMISSION=DENIED`** 并**拒绝 U2 写入**。**仅证明"两把锁可并存"不构成验收**。
+4. **三灰区一律 fail-closed**：**未登记的写入主体**、**未经验证的部署拓扑**、**不受控的锁文件替换** ⇒ `U2_ADMISSION=DENIED`。
+5. **如实声明的残余风险**：对**完全不声明、也不受清单覆盖**的进程，U2 **无法**在运行时识别其锁族；
+   该残余风险**只能**由**部署隔离前提**（§20.1.3 专用账户/无旁路启动）与**数据库侧写入权限隔离**共同压制
+   —— 二者当前均 `NOT_VERIFIED`（见 §27.4.4 与 §27.7）。
+
+### 27.3 CHANGE 75（P0）—— FD 边界失效时的**写入保证**（含内核语义勘误）
+
+**承认审计方的判断**：**监测到 FD 被释放 ≠ 能在另一进程取得锁并写入之前阻止危险行为**；
+若检测依赖后续扫描、计数器或异步回调，则**检测与数据库写入之间存在 TOCTOU 竞争窗口**。
+
+**R19 规则**
+
+1. **架构层保证：写入进程隔离（首选）**。U2 的排他写入必须运行在**专用写入进程**（"U2 write worker"）内：
+   该进程**只**包含 ①`LockFdBoundary` 模块 ②最小数据库客户端 ③本次写入的顺序控制逻辑；
+   **不得**加载用户代码/插件、**不得**引入原生扩展或 FFI、**不得**创建 worker 线程、**不得**在写入窗口内派生任何子进程。
+   这样「无法证明受统一管理」的路径**根本不进入写入进程**（直接满足 §26.3 的禁止条款）。
+2. **失败即停止（fail-stop，不只是记录）**：任何一处检出边界可能失效（不变量被触发、`P2` 现场取锁成功、探针对象/身份不匹配、
+   授权复验失败等）⇒ **必须禁止启动或继续 `COMMIT`**：
+   - 若尚未发出 `COMMIT` ⇒ **`ROLLBACK`** 并零写入；
+   - 若 `COMMIT` 已发出但结果未知 ⇒ 按 §22.4/§26.4 归因；**不得**继续任何后续自动化动作。
+3. **提交期覆盖（明确）**：持锁证明必须覆盖**实际数据库提交期间**，而**不只是 `INSERT` 调用期间**：
+   `T2` 门禁 → 事务内 `INSERT` → 事务外意图记录持久化（§27.4）→ **`COMMIT` 请求与确认** → 对账 → `T3` 释放。
+   其中**紧邻 `COMMIT` 之前**必须再执行一次 `P2`（同一协议、独立打开、§27.1），且**检查与 `COMMIT` 发送之间不得插入任何其他 I/O**。
+4. **残余窗口与更强机制（如实说明）**：用户态检查**无法**消除「最终 `P2` 与 `COMMIT` 之间」的微观窗口。
+   因此：①**必须**把该窗口压到最小（第 3 条）；②**推荐**引入**数据库端 fencing**——
+   即写入语句携带**栅栏令牌**（fence token），由数据库侧判定其**仍然有效**，令牌失效则写入失败
+   ——这是唯一能把「锁已失效」与「写入被拒绝」在数据库侧绑定的机制。**fencing 需要的数据库能力（额外表/函数/权限）当前不可用**（`SCHEMA_MIGRATION=HOLD`，权限未核验）⇒ 在获得之前，本设计**只能**声明「残余窗口存在」，并保持**不自动推进后续动作**。
+5. **提交后复核（新增强制步骤）**：`COMMIT` 返回后（无论成功或未知），**必须**再执行一次 `P2`；
+   若此时 `P2` **成功取锁**（`P2_ACQUIRED=true`）⇒ 说明**写入窗口内曾失去锁** ⇒
+   置 `exclusiveWindowViolated=true`、`outcome='REJECTED'`、**禁止任何后续自动化动作**、保留全部证据并**上报控制面**；
+   对可能已提交的行按 §27.4/§27.5 归因（不得凭此判 `THIS_EXECUTION_COMMITTED=YES`）。
+   见 **U2-51b**。
+6. **内核语义勘误（必须更正 R18 的威胁表述）**：**`fcntl(F_UNLCK)` 不能无条件解除一个独立的 `flock` 锁**——
+   记录锁（POSIX/OFD）与 `flock` 是不同族；因此威胁列表必须**分列**：
+   ①**直接解除本协议锁的路径**：`flock(LOCK_UN)`、关闭该 OFD 的**最后一个**引用；
+   ②**其他锁族的干扰路径**：`fcntl` 记录锁的加解锁（可能与本协议**不互斥**，属 §27.2 的协议一致性问题，而非"解除"）。
+   R18 §26.3.1 中把 `fcntl` 解锁并列为"解除路径"的表述**作废**，按本条重写。
+7. **不可证明时的处置（审计方指定）**：若在所用技术栈中**无法**证明第 2~3 条的保证，
+   应选择 **①隔离写入进程（第 1 条）、②缩小可信执行边界、③引入数据库端 fencing**（第 4 条），
+   **而不是**继续增加扫描规则；三者均不可行 ⇒ `EXCLUSIVE_WINDOW_UNAVAILABLE`，零写入。
+
+### 27.4 CHANGE 76（P0）—— M1 **恢复状态机**与**去重权威**
+
+**承认审计方的判断**：①「`COMMIT` 前 `fsync` 成功」只证明**意图**记录已持久化，**不能**证明数据库提交与文件系统落盘构成**原子事务**；
+②`ATTRIBUTION_UNRECOVERABLE` 若只存于执行进程内部，崩溃后**不能**作为跨实例的阻断依据。
+
+**R19 规则**
+
+1. **意图记录（intent record）契约**：内容 `{executionRef, returnedCandidateId, dedupeKey, attemptNo, capturedXid8, state, hmac}`；
+   **原子写入**：写临时文件 → **`fsync` 文件** → `rename` → **`fsync` 父目录**；
+   **文件身份绑定**：记录中保存该文件的 `(st_dev, st_ino)` 与大小/摘要，读取时校验（防替换）；
+   **密钥可用性**：`hmac` 使用本执行专属密钥；**崩溃后密钥必须可从受信存储取回**，否则**无法验证** ⇒ 按 `UNKNOWN` 处理（不得凭内容相似接受）；
+   **`state ∈ {PREPARED, COMMIT_UNKNOWN, COMMITTED, NOT_COMMITTED, ATTRIBUTION_UNRECOVERABLE}`**。
+2. **恢复状态机（逐行按表执行）**：
+
+| 恢复状态 | 主库观察 | **允许行为** |
+| --- | --- | --- |
+| `PREPARED` | 无目标行 | **不得**推断已提交；进入**受控恢复**（重新走对账流程；**不得**直接重放 `INSERT`） |
+| `PREPARED` | 目标行匹配且**因果证据有效**（§27.5） | 可以确认**对应提交**（`thisExecutionCommitted=YES`） |
+| `COMMIT_UNKNOWN` | 因果证据**不可验证** | `UNKNOWN`；**禁止自动重试 `INSERT`** |
+| 任意 | 存在目标行但**执行归因不可恢复** | `ATTRIBUTION_UNRECOVERABLE` ⇒ **人工处置**（见第 3 条） |
+| `PREPARED` + 另一执行 | 两个执行竞争**相同 `dedupeKey`** | **只能有一个权威创建结果**（第 3 条） |
+3. **去重权威（本仓库已有事实，可直接引用）**：**权威仲裁者是数据库本身** ——
+   `AutonomyCandidate` 上有 `@@unique([dedupeKey])`（`apps/api/prisma/schema.prisma:3325`），
+   迁移中对应 `CREATE UNIQUE INDEX "AutonomyCandidate_dedupeKey_key"`（`migrations/20261005000000_rsi_autonomy_state_persistence/migration.sql:146`），
+   且 schema 注释明确「Incident / Task / Candidate / Promotion 各带 `UNIQUE(dedupeKey)`，reboot 后同因不重复创建」（同文件 `:3257`）。
+   ⇒ 「两执行竞争同一 `dedupeKey` 只能有一个创建结果」由**唯一索引 + `INSERT ... ON CONFLICT DO NOTHING`** 结构性保证
+   （第二方返回**零行** ⇒ 走 §17.3 零行冲突路径 ⇒ **永不重建**），**不需要新增 schema**。
+   **`ATTRIBUTION_UNRECOVERABLE` 的跨实例**呈现仍需一个**所有写入者共同遵守**的持久登记处；
+   在不新建表的约束下，本设计**只能**：①以意图记录 + 日志作为**本地**证据；②在**控制面**（人工/工单）登记该状态；
+   **并明确**：该状态的**跨实例自动互认**当前 `NOT_VERIFIED`（若未来允许新增表，应以其为唯一登记处）。
+4. **主库查询失败的处理**：恢复期的对账查询失败 ⇒ **有界重试**；重试耗尽 ⇒ 保持 `UNKNOWN`（**不得**假定"无行即未提交"，也不得假定"已提交"）。
+5. **禁止项（重申）**：任何路径**不得**对已存在的 `dedupeKey` **重新创建**候选；
+   任何路径**不得**把 `PREPARED` 记录本身当作提交证明；任何路径**不得**在 `UNKNOWN` 下推进自动化后续动作。
+
+### 27.5 CHANGE 77（P0）—— **行版本身份**与**有效期限**（含冻结语义更正）
+
+**接受审计方对我方事实的更正**（见 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1.md` §2.47.0）：
+现代 PostgreSQL **通常以标记位实现冻结并保留原始 `xmin` 数值**（9.4 以前才可能直接替换可见 `xmin`）
+⇒ **冻结后 `xmin` 可能仍等于原值，但这不意味着它仍是可靠的提交归因证据**。
+R18 §26.5 第 3 条 ① 的"冻结标识"表述**作废**，按本节重写。
+
+**R19 规则**
+
+1. **不得依赖数值变化检测冻结**：因为冻结可能**保留** `xmin` 数值，所以「观察到的 `xmin` 与捕获值一致」**不能**证明该行版本仍受原事务保护。
+2. **因果判断的四要素（必须共同成立）**：①**完整 XID（xid8）**及其 **epoch**；②**目标行版本**的 `xmin`（32 位）；
+   ③**受信执行记录**（§27.4.1 的意图记录，含 HMAC 与文件身份）；④**主库**在**权威实例**上的重读结果。
+   任一要素缺失或不可验证 ⇒ `UNKNOWN`。
+3. **epoch 证明的可执行构造（未在目标库验证）**：在事务内捕获 `xid8 = pg_current_xact_id()`；
+   对账时读取该行 `xmin` 并**同时**再次捕获当前 `xid8'`；要求：
+   ①`xmin = (xid8 & 0xFFFFFFFF)`；②**`xid8' - xid8 < 2^31`**（即捕获与对账之间**未跨过回绕**）；
+   ③**冻结不可能介入**（第 4 条）。①②③ 全部成立**才**可作为"同一 XID epoch"的证据；
+   否则（含跨窗、回绕、无法求值）⇒ `UNKNOWN`。**全部为设计构造**：`XID_EPOCH_CONSTRUCTION_VERIFIED = NOT_VERIFIED`。
+4. **最大归因窗口与冻结前提（必须写成可运行契约）**：
+   ①规定 **`ATTRIBUTION_MAX_WINDOW`**（由运维配置、**有硬上限**），且**要求对账必须在窗口内完成**；超窗 ⇒ `UNKNOWN`（见 U2-50h 的超期测试）；
+   ②**必须**取得并记录目标库的冻结相关参数与实际推进情况（至少：`vacuum_freeze_min_age`、`autovacuum_freeze_max_age`、
+   以及实例的 XID 消耗速度证据），用于论证「窗口内**不可能**发生冻结」；**取证失败 ⇒ 窗口不成立 ⇒ `UNKNOWN`**；
+   ③使用 **`pageinspect` 之外的**手段**不得**被假定可用（读取 `t_infomax` 冻结位需要扩展）⇒ 设计**不**依赖该能力。
+5. **一律默认 `UNKNOWN` 的情形**：原始行**被更新**（含 HOT）、**删除后重插**、**被重写**（`VACUUM FULL`/`CLUSTER`/`ALTER TABLE ... REWRITE`）、
+   **来源不可信**（恢复/克隆/逻辑重放导致实例或版本来源变化）——**即使 `xmin` 数值匹配**。
+6. **目标库实测前置**：所有 SQL 与 XID 语义（`pg_current_xact_id()` 的可用性与权限、`xmin` 可读性、`xid8` 运算、窗口内参数）
+   **必须**在**目标 PostgreSQL 版本**上实测；**未实测 ⇒ 不得声明已证明 epoch 归属**（`XID_EPOCH_CONSTRUCTION_VERIFIED=NOT_VERIFIED`）。
+
+### 27.6 CHANGE 78（P1）—— 新增反例 **U2-50g ~ U2-50j**（及两项支撑用例）
+
+| 编号 | 反例场景 | 必须结果 |
+| --- | --- | --- |
+| **U2-50g** | 外部 `PREPARED` 记录**已 fsync**、`COMMIT` **前**进程崩溃 | **不得**误判 YES；按 §27.4.2 进入**受控恢复**，无目标行时保持非 YES |
+| **U2-50h** | **现代 PG 冻结后 `xmin` 数值未改变**，但版本可信性不足（或已超 `ATTRIBUTION_MAX_WINDOW`） | `UNKNOWN` |
+| **U2-50i** | E1 归因**不可恢复**，E2 竞争相同 `dedupeKey` | **不得产生第二个候选**（唯一索引 + `ON CONFLICT DO NOTHING` 结构性保证） |
+| **U2-50j** | 排他锁**提前释放** → 竞争进程取得锁 → 原进程**随后尝试 `COMMIT`** | **不得产生未受控双写**：提交前 `P2` 必须检出 ⇒ `ROLLBACK`/拒绝（§27.3.2–3） |
+| **U2-51a**（支撑） | 以 **`dup(T1.fd)` 构造伪独立探针** | 不得被当作有效 `P2` 证据；`P2_ACQUIRED=true` ⇒ `EXCLUSIVE_WINDOW_CONTRADICTED` ⇒ `T2_DENIED`（§27.1.4） |
+| **U2-51b**（支撑） | `COMMIT` 返回后复核 `P2` 时**成功取锁** | `exclusiveWindowViolated=true`、`outcome='REJECTED'`、**禁止后续自动化动作**、上报控制面（§27.3.5） |
+
+### 27.7 R19 未变部分与未验证项
+
+§12 候选键 v2 与 digest 概念、§13.1 接口、§13.2 矩阵（另加 U2-50g~j、U2-51a/b）、§16.1 `CONTROLLED_FIXED_WORKTREE`、
+§17.1 隔离证明框架、§17.2 U2-20A/B/C、§17.3 零行冲突复用路径、§18.1 释放全链校验、§18.2 行锁与重试边界、
+§19.4 通道/签发者分离、§20.3（CHANGE 42）状态语义、§21.2（CHANGE 45）方向、§21.3.4 验证时机与有效期、
+§22.2 `flock` 释放/继承修正、§22.4 四条件、§22.6 字节级契约、§22.7 原子占用、
+§23.1 `T0`/`T1`/`T2` 分阶段条件、§23.3 检测 vs 保证、§23.4 归因四类、§23.5 证据范围纪律、§23.6 字节编码三断言、
+§23.7 消费持久化、§24.1 `P2` 必要非充分与错误分类、§24.2 存在性/提交归因区分、§24.3 `CONSUMPTION_UNKNOWN`、
+§25.2 统一锁 FD 边界与全窗口覆盖、§25.3 M1~M4 候选、
+§26.1 `O3-CONTRADICTED` 边界、§26.2 唯一生产锁协议（`flock:whole-file:LOCK_EX`）与撤回 OFD 记录锁候选、
+§26.4 M1 的七项判定要求、§26.6 U2-50a~f、`builderRef` 固定常量、**U2 路径仅 INSERT**、
+U2 路径无 `UPDATE`/`DELETE`、不新增 schema/migration、不接 Runtime/Queue、不调用模型/Provider、
+ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、
+`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+
+```text
+R19_NOT_VERIFIED = P2_INDEPENDENCE_ENFORCEMENT ; DEPLOYMENT_INVENTORY_EVIDENCE ;
+                   FILESYSTEM_AND_MOUNT_PREREQUISITES ; WRITE_PROCESS_ISOLATION ;
+                   DB_SIDE_FENCING_CAPABILITY ; M1_RECOVERY_STATE_MACHINE ;
+                   ATTRIBUTION_UNRECOVERABLE_CROSS_INSTANCE_REGISTRY ;
+                   XID_EPOCH_CONSTRUCTION_VERIFIED（pg_current_xact_id / xmin / 窗口参数未在目标 PG 验证） ;
+                   ATTRIBUTION_MAX_WINDOW_EVIDENCE ; LOCKFD_BOUNDARY_STATIC_RULES ;
+                   U2_LINUX_MULTIPROCESS_TESTS ; DB_PRIVILEGE_VERIFICATION ; GLOBAL_IMMUTABILITY_PROOF ;
+                   DB_RUNTIME_PRIVILEGES ; DB_TRIGGERS_ACTUAL ; DB_ROLES ; DB_WRITER_SET_ACTUAL ;
+                   OBSERVATION_WINDOW_IMMUTABILITY ; U2_NONCE_CONSUMPTION_STORE ;
+                   POSTGRESQL_INTEGRATION_TEST ; VITEST ; TSC ; LINUX_SYSTEMD ; CI ; PRODUCTION ;
+                   U2_DESIGN_DOC_SHA256（送审方报告）
+```
+
+本文件仍为**纯设计 R19**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
 本轮只读核验**仅**读取 `apps/api/prisma/schema.prisma`、既有迁移文件与 `apps/api/src` 中的只读检索结果，
 **未**连接任何数据库、**未**执行任何写入。
