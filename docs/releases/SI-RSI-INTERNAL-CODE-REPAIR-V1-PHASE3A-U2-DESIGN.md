@@ -1,11 +1,11 @@
-# PHASE 3-A · U2 设计 R10（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R11（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-32 = REVISE` → `MSG-20261009-33 = REVISE` → `MSG-20261009-34 = REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R10_READ_ONLY_CHANGES_32_TO_35`。
-> 本文件是 **U2 设计 R10** 送审材料（MSG-20261009-35），**不含任何产品代码改动**。
-> **R10 的修订集中在 §18（锁释放原子性 / PG 并发失效防护 / 未知 COMMIT 对账语义 / 副作用报告）；
-> §1–§17 保留历史；凡冲突者以 §18 为准。**
+> `MSG-20261009-33 = REVISE` → `MSG-20261009-34 = REVISE` → `MSG-20261009-35 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R11_READ_ONLY_CHANGES_36_TO_39`。
+> 本文件是 **U2 设计 R11** 送审材料（MSG-20261009-36），**不含任何产品代码改动**。
+> **R11 的修订集中在 §19（同 UID 锁安全 / 提交归因 / 事务状态语义 / 证明与 digest 精化）；
+> §1–§18 保留历史；凡冲突者以 §19 为准。**
 
 | 锚点 | 值 |
 | --- | --- |
@@ -19,7 +19,8 @@
 | U2 设计 R7 | `f6c6d677` |
 | U2 设计 R8 | `7a5d8058` |
 | U2 设计 R9 | `d9172daa` |
-| U2 设计 R10 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R10 | `35a50c63` |
+| U2 设计 R11 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -1209,3 +1210,125 @@ U2 **拒绝**（`EXCLUSIVE_WINDOW_UNAVAILABLE`）。**R10 不引入密钥材料�
 不接 Runtime/Queue、不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
 `SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
 本文件仍为**纯设计 R10**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+
+---
+
+## 19. R11 修订（对应 MSG-20261009-35 的 CHANGE 36–39）
+
+### 19.1 CHANGE 36（P0）—— 同 UID 并发下的锁安全
+
+**承认审计方的判断**：`RENAME_NOREPLACE` 只防**目标覆盖**，`O_NOFOLLOW` 只防最终路径的符号链接，
+目录属主权限只挡**其他用户**；**同一运行账户的第二个进程**仍可能在「A 检查与改名之间」替换**源目录项**。
+纯用户态文件锁**无法**排除同 UID 同权限进程——R11 不再宣称能排除，而是把它变成**可验证的前提**。
+
+**R11 规则**
+
+1. **锁目录安全假设（显式声明）**：`<lockDir>` 属专用运行账户、权限 `0700`，
+   **且该账户下不得同时运行两个 U2 实例**。后一条是**运维前提**，必须由外部保序机制提供（见第 2 条）。
+2. **单实例保序前提 `SUPERVISOR_SINGLE_INSTANCE`（技术可验证）**：运行环境必须提供**外部单实例保证**，
+   在 §17.1 的隔离证明中新增字段：
+   `singleInstanceGuaranteeRef`（证据引用，例如 systemd 服务单元的 `RuntimeDirectory` +
+   单元级 `flock`/单实例配置的实际配置输出）与 `singleInstanceGuaranteeDigest`。
+   **缺失/无法验证** ⇒ `EXCLUSIVE_WINDOW_UNAVAILABLE`，**不进入任何写入流程**。
+   > 说明：R11 **不**新增自研 Runtime/Scheduler/Controller，只要求复用**既有**的操作系统/服务管理能力。
+3. **路径互斥仍必须可验证**：即使有单实例保证，释放流程仍按 §18.1 的
+   `RENAME_NOREPLACE` + `O_NOFOLLOW` + `(dev,inode)` + `ownerToken` 全链校验；
+   **任何异常一律 fail-closed**，且**不得删除**无法证明属于本次持锁者的锁对象。
+4. **生命周期关系（明确写出）**：
+   `T0 校验隔离证明与单实例证据` → `T1 取得协作锁` → `T2 候选事务（Git①②③ + 行锁 + INSERT + COMMIT）`
+   → `T3 释放锁（§18.1 全链校验）`。锁在 `T1`~`T3` 全程持有；`T2` 结果未知时**锁保持**直到对账完成。
+5. **U2-31（扩展）**：①同 UID 双进程竞争同一锁；②**释放验证后、删除前**由同 UID 进程替换源目录项；
+   ③目标名冲突；④持锁进程被中断。断言：**不删除非本次持锁者的锁对象**、无法证明所有权时**保留现场**、
+   候选行数按如实上报、异常路径 fail-closed。
+
+### 19.2 CHANGE 37（P0）—— COMMIT 对账的**事务归因**
+
+**承认**：**查到完全匹配记录 ≠ 本次 INSERT 已提交**（同 `dedupeKey` 候选可能**先前已存在**）。
+
+**R11 规则**
+
+1. **两类事实分离**：`RECORD_EXISTS`（库中存在匹配记录）与 `THIS_INSERT_COMMITTED`（**本次**事务写入被提交）。
+2. **归因判定（在既有 schema 内）** —— 只有同时满足以下三条才判定 `THIS_INSERT_COMMITTED`：
+   ① 事务内插入前读取（§18.2 第 1 步行锁读取）**未发现**该 `dedupeKey` 的既有行；
+   ② `insertSucceededInTx === true`；
+   ③ 对账在**主库**上查到**恰好一行**匹配记录，且其 `createdAt` 落在**本次事务窗口**内；
+   否则一律 `RECORD_EXISTS only` ⇒ `candidateInsertCommitState='UNKNOWN'`、`newRowsCommitted='UNKNOWN'`。
+3. **不虚构归因凭据**：R11 **不**新增列/表；如未来需要「写入令牌」式的强归因，**必须单独送审**
+   （本设计不越权假设）。**在无法排除既有记录或竞争事务影响时，一律 `UNKNOWN`**。
+4. **路径严格分开**：`ON CONFLICT ... DO NOTHING` 的**零行路径**（§17.3 重读+逐项比对 ⇒ `CANDIDATE_REUSED`
+   或 `INPUT_KEY_MISMATCH`）与**未知 `COMMIT` 的对账路径**（§19.2）**不得混用**。
+5. **新增对抗用例 U2-32**：预先存在完全匹配候选 + 本次 `COMMIT` 返回未知 ⇒
+   断言**禁止**输出 `CANDIDATE_INSERTED`、`newRowsCommitted` 必须为 `'UNKNOWN'`、`candidateId=null`。
+
+### 19.3 CHANGE 38（P1）—— 事务状态与新增行数的统一语义
+
+**字段改名与语义**
+
+```ts
+interface U2SideEffectReport {
+  insertAttempted: boolean;
+  insertSucceededInTx: boolean;
+  /** 仅描述**本次候选 INSERT** 的提交状态（不描述"是否复用了既有候选"） */
+  candidateInsertCommitState: 'COMMITTED' | 'NOT_COMMITTED' | 'UNKNOWN';
+  /** 本次调用**新插入并确认持久化**的行数；无法判定为 'UNKNOWN' */
+  newRowsCommitted: 0 | 1 | 'UNKNOWN';
+  lockReleaseFailed: boolean;
+  authoritativeReadInsideTx: boolean;
+  reconciled: boolean;
+}
+```
+
+**组合约束（每种结果都必须一致）**
+
+| 场景 | insertAttempted | insertSucceededInTx | candidateInsertCommitState | newRowsCommitted | reconciled | lockReleaseFailed |
+| --- | --- | --- | --- | --- | --- | --- |
+| 新候选确认提交 | true | true | `COMMITTED` | 1 | false | false |
+| 提交成功但释放失败 | true | true | `COMMITTED` | 1 | false | **true** |
+| 合法既有候选复用（未尝试 INSERT） | **false** | false | `NOT_COMMITTED` | 0 | false | false |
+| 输入校验拒绝 | false | false | `NOT_COMMITTED` | 0 | false | false |
+| 插入失败且事务确认回滚 | true | false | `NOT_COMMITTED` | 0 | false | false |
+| 结果未知且对账无定论 | true | true | `UNKNOWN` | **'UNKNOWN'** | true | 任意 |
+| 对账确认已提交 | true | true | `COMMITTED` | 1 | **true** | 任意 |
+
+**优先级规则**：当 `candidateInsertCommitState='UNKNOWN'` 时，
+**`lockReleaseFailed=true` 不得改变或掩盖该状态**（报告同时携带两个字段，调用方须以提交状态为准）。
+`outcome` 枚举保持 `{ CANDIDATE_INSERTED | CANDIDATE_REUSED | REJECTED }` 不变，
+`COMMIT_CONFIRMED_BY_RECONCILE` / `LOCK_RELEASE_FAILED` 仍为 **reason**。
+
+### 19.4 CHANGE 39（P1）—— 证明与 refs digest 的精确定义
+
+1. **Digest 用纯字节拼接（不得字符串/字节混用）**：
+   ```text
+   B = Buffer.concat([
+     Buffer.from('u2refs:v2\n', 'utf8'),
+     Buffer.from('common-git-dir\u0000', 'utf8'), commonGitDirBytes,
+     Buffer.from('\u0000worktree-gitdir\u0000', 'utf8'), worktreeGitdirBytes,
+     Buffer.from('\u0000forEachRef\u0000', 'utf8'), forEachRefBytes,
+     Buffer.from('\u0000packedRefs\u0000', 'utf8'), packedRefsRawBytes   // 不存在则零长度
+   ])
+   protectedRefsDigest = sha256(B)
+   ```
+   - `commonGitDirBytes` / `worktreeGitdirBytes`：`git rev-parse --git-common-dir` 与 `--git-dir` 的
+     **相对路径解析后**的 UTF-8 字节（相对路径以工作树根为基准做 `realpath` 归一，随后编码）；
+     **两者各自独立成段**并**带域分隔标签**，避免不同文件组合产生同一拼接结果；
+   - `forEachRefBytes`：`git for-each-ref --format='%(refname)%1F%(objectname)%1F%(objecttype)'`
+     按 `refname` **码点升序**排序；每行以 `0x0A` 结尾、字段以 `0x1F` 分隔、空值零长度；
+   - `packedRefsRawBytes`：`packed-refs` 文件**原始字节**（**绝不**做字符串转换）。
+2. **通道 ≠ 签发者认证**：隔离证明的**传输通道**（环境变量 / 启动挂载 / 控制面）**不等于**签发者可信。
+   R11 要求证明中额外携带 `signerIdentity` 与其**认证引用** `signerAuthRef`
+   （例如服务管理单元的单元身份/主机的机器身份证据），并区分验证：
+   - `CHANNEL_TRUSTED`：证明确实经受信通道送达；
+   - `SIGNER_AUTHENTICATED`：签发者身份已由环境认证。
+   二者**都成立**才视为 `ATTESTATION_VALID`；**任一不成立** ⇒ `NOT_ATTESTED` ⇒
+   `EXCLUSIVE_WINDOW_UNAVAILABLE`，拒绝写入。
+3. **不新增密钥管理系统**：R11 不引入密钥材料、不新增表；无法满足可信前提时**直接拒绝**。
+
+### 19.5 R11 未变部分
+
+§12 候选键 v2 与 digest、§13.1 接口、§13.2 矩阵（另加 U2-32，U2-31 扩展）、
+§16.1 `CONTROLLED_FIXED_WORKTREE`、§17.1 隔离证明框架（本节点扩展字段）、§17.2 U2-20A/B/C、
+§17.3 冲突复用路径、§18.1 释放全链校验、§18.2 行锁与重试边界、§18.3 对账三分类（本节点增补归因）、
+`builderRef` 固定常量、仅 INSERT、无 UPDATE/DELETE、不新增 schema/migration、不接 Runtime/Queue、
+不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
+`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+本文件仍为**纯设计 R11**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
