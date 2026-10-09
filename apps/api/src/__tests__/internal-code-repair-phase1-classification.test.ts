@@ -11,16 +11,23 @@
  * `internal-code-repair-phase1-incident-db.test.ts` 用真实 PostgreSQL 验收）。
  */
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   FAULT_CLASSES,
   FAULT_CLASSIFICATION_BOUNDARY,
   FAULT_REQUIRED_ACTIONS,
+  FAULT_SOURCE_REF_FIELDS,
+  FAULT_TEXT_LIMITS,
   INTERNAL_FAULT_INCIDENT_KIND,
+  UNVERIFIABLE_TEXT_MARKER,
   annotateUntrustedModelHint,
   buildFaultIncidentIntent,
   classifyFault,
+  hasResidualSecretRisk,
   redactFaultText,
   type FaultClass,
   type FaultObservation,
@@ -351,5 +358,199 @@ describe('PHASE 1 可信 Incident 意图（复用既有容器契约）', () => {
     expect(redactFaultText(null)).toBe('');
     expect(redactFaultText('   ')).toBe('');
     expect(redactFaultText(42)).toBe('');
+  });
+});
+
+/**
+ * MSG-20261009-07 / CHANGE 2 —— 脱敏对抗矩阵。
+ * 每一例都把**真实密钥原文**塞进故障文本，要求：落库载荷与摘要里都找不到原文；
+ * 无法可靠判定的自由文本一律**丢弃**（`UNVERIFIABLE_TEXT_MARKER`），而不是推测其安全。
+ */
+const SECRET_INJECTION_CASES: ReadonlyArray<{ label: string; message: string; secret: string }> = [
+  {
+    label: 'URL query 中的 access_token',
+    message: 'GET /v1/orders?access_token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.sig1234567890 failed',
+    secret: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.sig1234567890',
+  },
+  {
+    label: 'HTTP header 形态（大小写混合）',
+    // 合成值：刻意避开任何真实 provider 的密钥前缀形态（例如 Stripe `sk_live_…`），
+    // 既能命中掩码规则，又不会被 GitHub Push Protection 误判为真实密钥。
+    message: 'upstream 400 X-Api-Key: sk-DUMMYKEY-9f8e7d6c5b4a3210',
+    secret: 'sk-DUMMYKEY-9f8e7d6c5b4a3210',
+  },
+  {
+    label: '嵌套 JSON 内的密钥',
+    message: '{"outer":{"apiKey":"AKIAIOSFODNN7EXAMPLE","note":"keep"},"retry":true}',
+    secret: 'AKIAIOSFODNN7EXAMPLE',
+  },
+  {
+    label: 'PEM 私钥块（多行）',
+    message: 'sign failed -----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n-----END PRIVATE KEY-----',
+    secret: 'MIIEvQIBADANBgkqhkiG9w0BAQEFAASC',
+  },
+  {
+    label: '全大写 BEARER 前缀',
+    message: 'BEARER sk-live-9f8e7d6c5b4a3210 rejected',
+    secret: 'sk-live-9f8e7d6c5b4a3210',
+  },
+  {
+    label: 'URL 编码绕过（Authorization: Bearer …）',
+    message: 'Authorization%3A%20Bearer%20sk-live-9f8e7d6c5b4a3210',
+    secret: 'sk-live-9f8e7d6c5b4a3210',
+  },
+  {
+    label: '多行堆栈 + cause 链 + DB 错误文本',
+    message: 'Error: insert failed\n    at Prisma (D:\\app\\src\\db.ts:1:1)\n  cause: password=hunter2secret',
+    secret: 'hunter2secret',
+  },
+  {
+    label: 'Linux 绝对路径',
+    message: 'read failed: /etc/crossclaim/secrets/provider.key',
+    secret: '/etc/crossclaim/secrets/provider.key',
+  },
+  {
+    label: 'Windows 绝对路径',
+    message: 'open C:\\Users\\os\\.crossclaim\\provider.key failed',
+    secret: 'C:\\Users\\os\\.crossclaim\\provider.key',
+  },
+  {
+    label: '邮箱',
+    message: 'notification for buyer@example.test bounced',
+    secret: 'buyer@example.test',
+  },
+  {
+    label: '长数字串（订单号形状）',
+    message: 'order 98765432109876 not found',
+    secret: '98765432109876',
+  },
+];
+
+describe('PHASE 1 / CHANGE 2 脱敏对抗矩阵（密钥原文绝不进摘要与落库载荷）', () => {
+  it.each(SECRET_INJECTION_CASES)('$label ⇒ 原文不可见', ({ message, secret }) => {
+    const observation: FaultObservation = {
+      sourceModule: 'services/adapters',
+      environment: 'PRODUCTION',
+      errorName: 'AdapterMappingError',
+      message,
+      organizationRef: 'org-adv',
+      providerRef: 'AMAZON',
+      // refs 只放**结构化标识符**：把报文/密钥塞进 ref 是调用方违约，且会被 ref 语法直接丢弃（见下一用例）
+      taskRefs: ['task:recovery:ADV:1'],
+      evidenceRefs: [`evidence:${message}`],
+      modelHint: { claimedClass: 'PARSER_FAILURE', rationale: message },
+    };
+    const { diagnosis, intent } = buildFaultIncidentIntent(observation, { now: new Date('2026-10-09T05:00:00.000Z') });
+    const serialized = JSON.stringify(intent) + JSON.stringify(diagnosis);
+    expect(serialized).not.toContain(secret);
+    expect(diagnosis.summary).not.toContain(secret);
+  });
+
+  it('自由文本引用（把报文塞进 ref）一律丢弃，不留半可信痕迹', () => {
+    const { intent } = buildFaultIncidentIntent({
+      sourceModule: 'services/adapters',
+      environment: 'TEST',
+      errorName: 'AdapterMappingError',
+      taskRefs: ['task:recovery:LOGISTICS:ok', 'task: recovery with spaces', 'evidence:Error: insert failed at Prisma'],
+      evidenceRefs: ['run:36651145264', '{"raw":"payload"}'],
+    });
+    // 只有结构化标识符留下；含空格 / 引号 / 花括号的一律丢弃
+    expect(intent.sourceRefs.affectedTaskRefs).toEqual(['task:recovery:LOGISTICS:ok']);
+    expect(intent.sourceRefs.evidenceRefs).toEqual(['run:36651145264']);
+  });
+
+  it('掩码（而非丢弃）时留下可审计标记', () => {
+    const text = redactFaultText('X-Api-Key: sk-DUMMYKEY-9f8e7d6c5b4a3210');
+    expect(text).toContain('[redacted');
+    expect(text).not.toContain('sk-DUMMYKEY-9f8e7d6c5b4a3210');
+  });
+
+  it('无法可靠判定的自由文本 ⇒ 整段丢弃（不推测其安全）', () => {
+    // 单引号包值 + 空格分隔的赋值形态超出可直接识别范围 ⇒ 丢弃
+    const quoted = redactFaultText("refresh_token : 'abc123def456ghi789'");
+    expect(quoted).toBe(UNVERIFIABLE_TEXT_MARKER);
+    // 无法识别的长 token（base64 形状）⇒ 丢弃
+    const blob = redactFaultText('opaque blob aGVsbG8gd29ybGQgdGhpcyBpcyBhIHNlY3JldA==');
+    expect(blob).toBe(UNVERIFIABLE_TEXT_MARKER);
+    expect(hasResidualSecretRisk('error TS2322: clean message')).toBe(false);
+  });
+
+  it('丢弃策略下摘要不留半可信内容，且不影响确定性分类', () => {
+    const { diagnosis, intent } = buildFaultIncidentIntent({
+      sourceModule: 'services/adapters',
+      environment: 'TEST',
+      errorName: 'AdapterMappingError',
+      message: 'opaque blob aGVsbG8gd29ybGQgdGhpcyBpcyBhIHNlY3JldA==',
+    });
+    expect(diagnosis.faultClass).toBe('PARSER_FAILURE');
+    expect(diagnosis.summary).toBe(UNVERIFIABLE_TEXT_MARKER);
+    expect(intent.sourceRefs.summary).toBe(UNVERIFIABLE_TEXT_MARKER);
+  });
+});
+
+describe('PHASE 1 / CHANGE 2 结构化白名单与长度上限', () => {
+  it('落库字段严格等于白名单集合（不透传任何额外键）', () => {
+    const { intent } = buildFaultIncidentIntent(
+      {
+        ...BASE,
+        errorCode: 'OUTPUT_SCHEMA_INVALID',
+        taskRefs: ['task:1'],
+        evidenceRefs: ['run:1'],
+      },
+      { now: new Date('2026-10-09T05:00:00.000Z') },
+    );
+    const keys = Object.keys(intent.sourceRefs).sort();
+    expect(keys).toEqual([...FAULT_SOURCE_REF_FIELDS].sort());
+  });
+
+  it('所有可持久化字符串都在字段上限内', () => {
+    const long = 'x'.repeat(5_000);
+    const { intent } = buildFaultIncidentIntent({
+      ...BASE,
+      errorCode: long,
+      errorName: long,
+      message: `clean ${long}`,
+      providerFailureReason: long,
+      prismaCode: long,
+      stage: long,
+      sourceModule: long,
+      domain: long,
+      taskRefs: [long],
+      evidenceRefs: [long],
+    });
+    const limitOf = (key: string): number => {
+      if (key === 'summary') return FAULT_TEXT_LIMITS.summary;
+      if (key === 'sourceModule') return FAULT_TEXT_LIMITS.module;
+      if (key === 'taskRefs' || key === 'evidenceRefs') return FAULT_TEXT_LIMITS.ref;
+      return FAULT_TEXT_LIMITS.code;
+    };
+    for (const [key, value] of Object.entries(intent.sourceRefs)) {
+      if (typeof value === 'string') expect(value.length).toBeLessThanOrEqual(limitOf(key));
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (typeof item === 'string') expect(item.length).toBeLessThanOrEqual(limitOf(key));
+        }
+      }
+    }
+    expect(intent.sourceRefs.summary.length).toBeLessThanOrEqual(FAULT_TEXT_LIMITS.summary);
+  });
+
+  it('边界声明登记 CHANGE 2 三项口径', () => {
+    expect(FAULT_CLASSIFICATION_BOUNDARY).toMatchObject({
+      structuredFieldWhitelist: true,
+      dropsUnverifiableFreeText: true,
+      capsPersistedTextLength: true,
+      decodesEncodedSecretsBeforeMasking: true,
+      logsNothing: true,
+    });
+  });
+
+  it('修复平面源码不做任何日志输出（敏感原文不进可读日志）', () => {
+    const dir = path.resolve(__dirname, '../services/self-repair');
+    for (const file of ['fault-classification.ts', 'fault-incident-intake.ts']) {
+      const source = readFileSync(path.join(dir, file), 'utf8');
+      expect(source.includes('console.')).toBe(false);
+      expect(source.includes('process.stdout')).toBe(false);
+    }
   });
 });

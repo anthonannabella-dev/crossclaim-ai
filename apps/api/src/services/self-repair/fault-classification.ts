@@ -136,24 +136,39 @@ export interface FaultDiagnosis {
   untrustedModelHint: ModelHintAnnotation | null;
 }
 
+/**
+ * 可持久化文本上限（MSG-20261009-07 CHANGE 2：限制可持久化文本长度）。
+ * 所有落库字符串都必须经过 `redactFaultText(..., 对应上限)`。
+ */
+export const FAULT_TEXT_LIMITS = {
+  summary: 300,
+  ref: 200,
+  code: 80,
+  module: 120,
+  stage: 60,
+  modelHint: 200,
+} as const;
+
+/** 无法可靠判定安全的自由文本 ⇒ **丢弃**（不推测其安全，不以「看起来干净」放行）。 */
+export const UNVERIFIABLE_TEXT_MARKER = '[dropped-unverifiable-text]';
+
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const JWT_RE = /\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\b/g;
-const BEARER_RE = /\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{6,}/gi;
+const PEM_RE = /-----BEGIN [A-Z0-9 ]{0,40}-----[\s\S]*?(?:-----END [A-Z0-9 ]{0,40}-----|$)/g;
+const BEARER_RE = /\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{6,}/gi;
+/** 键名（含 JSON 引号包裹形态）后跟 `:` / `=` 的赋值形态 —— 值一律抹掉。 */
 const ASSIGNMENT_RE =
-  /\b(api[_-]?key|secret|password|passwd|token|access[_-]?token|refresh[_-]?token|client[_-]?secret|signature|authorization|x-api-key)\b\s*[:=]\s*"?[^\s"',;]{4,}"?/gi;
-const CLOUD_KEY_RE = /\b(AKIA|ASIA)[0-9A-Z]{12,}\b/g;
-const PREFIXED_KEY_RE = /\b(sk|pk|rk|gh[pousr])[-_][A-Za-z0-9_-]{8,}\b/g;
+  /\b(api[_-]?key|secret|password|passwd|token|access[_-]?token|refresh[_-]?token|client[_-]?secret|signature|authorization|x-api-key|cookie|set-cookie|private[_-]?key)\b"?\s*[:=]\s*"?[^\s"',;]{3,}"?/gi;
+const CLOUD_KEY_RE = /\b(?:AKIA|ASIA)[0-9A-Z]{12,}\b/g;
+const PREFIXED_KEY_RE = /\b(?:sk|pk|rk|gh[pousr]|github_pat)[-_][A-Za-z0-9_-]{8,}\b/g;
+const QUERY_SECRET_RE = /([?&](?:token|key|secret|signature|access_token|api_key)=)[^\s&#]+/gi;
 const LONG_HEX_RE = /\b[0-9a-f]{32,}\b/gi;
-const QUERY_SECRET_RE = /([?&](?:token|key|secret|signature)=)[^\s&#]+/gi;
+const POSIX_PATH_RE = /(?:\/(?:[A-Za-z0-9._-]+)){3,}/g;
+const PEM_KEYWORD_RE = /-----BEGIN [A-Z0-9 ]{0,40}-----/;
 
-/**
- * 故障文本脱敏：先掩掉密钥/授权串/订单号形状的内容，再复用既有 `sanitizeSignalText()`
- * （邮箱 / 电话 / 长数字 / 带 token 的 URL / 绝对路径），最后截断。
- * 输出可安全落库，也可安全送入模型做**辅助**归因。
- */
-export function redactFaultText(input: unknown, maxLength = 300): string {
-  if (typeof input !== 'string' || input.trim() === '') return '';
-  const masked = input
+function maskSecrets(text: string): string {
+  return text
+    .replace(PEM_RE, '[redacted-pem]')
     .replace(JWT_RE, '[redacted-jwt]')
     .replace(BEARER_RE, '[redacted-authorization]')
     .replace(ASSIGNMENT_RE, '[redacted-secret]')
@@ -161,8 +176,57 @@ export function redactFaultText(input: unknown, maxLength = 300): string {
     .replace(PREFIXED_KEY_RE, '[redacted-key]')
     .replace(QUERY_SECRET_RE, '$1[redacted]')
     .replace(LONG_HEX_RE, '[redacted-hash]')
-    .replace(EMAIL_RE, '[redacted-email]');
-  return truncate(sanitizeSignalText(masked), maxLength);
+    .replace(EMAIL_RE, '[redacted-email]')
+    .replace(POSIX_PATH_RE, '[redacted-path]');
+}
+
+/**
+ * 掩码后仍残留的「值形态」敏感证据：
+ *   · 掩码器本该吃掉却没吃掉的赋值形态（说明该文本形态超出可判定范围）；
+ *   · PEM 块、Bearer/Basic 串；
+ *   · 无法识别的长 token（base64/hex 等 32+ 连续字符；UUID 形状除外）。
+ * 命中 ⇒ 调用方必须**丢弃整段**，而不是保留一段自己都无法判定安全的内容。
+ */
+export function hasResidualSecretRisk(text: string): boolean {
+  const stripped = text.replace(/\[(?:redacted|dropped)[^\]]*\]/g, ' ');
+  const valueBearing = [
+    PEM_KEYWORD_RE,
+    /\b(?:bearer|basic)\s+\S/i,
+    /\b(?:api[_-]?key|secret|password|passwd|token|access[_-]?token|refresh[_-]?token|client[_-]?secret|authorization|x-api-key)\b"?\s*[:=]/i,
+  ];
+  if (valueBearing.some((pattern) => pattern.test(stripped))) return true;
+  const UUID_LIKE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  for (const run of stripped.match(/[A-Za-z0-9+/_=-]{32,}/g) ?? []) {
+    if (!UUID_LIKE_RE.test(run)) return true;
+  }
+  return false;
+}
+
+/**
+ * 故障文本脱敏（MSG-20261009-07 CHANGE 2 补强）：
+ *   1. 掩掉 PEM / JWT / Bearer / 赋值形态 / 云厂商与常见前缀密钥 / URL query 密钥；
+ *   2. **编码绕过**：对含 `%XX` 的文本最多解码两轮后重新掩码（URL 编码是常见绕过）；
+ *   3. 复用既有 `sanitizeSignalText()`（邮箱 / 电话 / 长数字 / 带 token 的 URL / 绝对路径）；
+ *   4. 按字段上限截断；
+ *   5. 若仍残留「值形态」或无法识别的长 token ⇒ **整段丢弃**（`UNVERIFIABLE_TEXT_MARKER`）。
+ * 输出可安全落库，也可安全送入模型做**辅助**归因。
+ */
+export function redactFaultText(input: unknown, maxLength: number = FAULT_TEXT_LIMITS.summary): string {
+  if (typeof input !== 'string' || input.trim() === '') return '';
+  let masked = maskSecrets(input);
+  for (let round = 0; round < 2; round += 1) {
+    if (!/%[0-9A-Fa-f]{2}/.test(masked)) break;
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(masked);
+    } catch {
+      break;
+    }
+    if (decoded === masked) break;
+    masked = maskSecrets(decoded);
+  }
+  const collapsed = truncate(sanitizeSignalText(masked), maxLength);
+  return hasResidualSecretRisk(collapsed) ? UNVERIFIABLE_TEXT_MARKER : collapsed;
 }
 
 /** 不可逆引用：用于组织 / Provider 关联，落库不存原始 id。 */
@@ -644,6 +708,43 @@ export interface FaultIncidentSourceRefs {
   untrustedModelHint: ModelHintAnnotation | null;
 }
 
+/**
+ * `AutonomyIncident.sourceRefs` 的**字段白名单**（MSG-20261009-07 CHANGE 2）：
+ * 只允许这些键落库；任何未列出的输入字段一律**不透传**（丢弃，而不是转存）。
+ */
+export const FAULT_SOURCE_REF_FIELDS = [
+  'classificationAuthority',
+  'faultClass',
+  'ruleId',
+  'severity',
+  'retryEligibility',
+  'requiredAction',
+  'ownerGatedAction',
+  'summary',
+  'errorCode',
+  'errorName',
+  'httpStatus',
+  'providerFailureReason',
+  'prismaCode',
+  'stage',
+  'sourceModule',
+  'environment',
+  'organizationRef',
+  'providerRef',
+  'domain',
+  'affectedTaskRefs',
+  'evidenceRefs',
+  'occurrenceCount',
+  'detectedAt',
+  'untrustedModelHint',
+] as const;
+export type FaultSourceRefField = (typeof FAULT_SOURCE_REF_FIELDS)[number];
+
+/** 白名单判定（供持久化与测试共用，避免各处各写一份键名清单）。 */
+export function isWhitelistedSourceRefField(key: string): key is FaultSourceRefField {
+  return (FAULT_SOURCE_REF_FIELDS as readonly string[]).includes(key);
+}
+
 export interface FaultIncidentIntent {
   kind: typeof INTERNAL_FAULT_INCIDENT_KIND;
   dedupeKey: string;
@@ -653,18 +754,61 @@ export interface FaultIncidentIntent {
   detectedAt: string;
 }
 
+/** 引用前缀（`task` / `run` / `head` / `evidence` / `ci` …）的保守字符集。 */
+const REF_PREFIX_RE = /^[A-Za-z][A-Za-z0-9_.-]{0,31}$/;
+/** 引用值只允许标识符字符：**不含空格 / 引号 / 花括号 / 反斜杠 / `%`** ⇒ 自由文本无法夹带。 */
+const REF_VALUE_RE = /^[A-Za-z0-9._:/#@+=~-]{1,200}$/;
+
+/**
+ * 引用清洗（CHANGE 2）：引用是**结构化标识符**，不是自由文本。
+ *   1. 若该引用含有任何「需要掩码」的内容（密钥 / 邮箱 / 路径 / 长 hex …）⇒ 说明它夹带了非标识符内容，
+ *      **整条丢弃**（不做「掩码后仍当引用用」，避免半可信痕迹）；
+ *   2. 必须满足 `prefix:value` 结构且两段都在保守字符集内（不含空格 / 引号 / 花括号 / `%` / `\`），否则丢弃；
+ *   3. 超出长度上限丢弃。
+ *
+ * 由此阻断「把整段错误报文塞进 ref」这类夹带（对抗用例 `evidence:${message}` 即该场景）。
+ * 调用方契约：只传 id；代价是含长 hex（如 40 位 SHA）的引用会被一并丢弃 —— 这是**故意选定的保守性**。
+ */
+function sanitizeRef(value: string): string | null {
+  if (value.length > FAULT_TEXT_LIMITS.ref) return null;
+  if (maskSecrets(value) !== value) return null;
+  if (hasResidualSecretRisk(value)) return null;
+  const separator = value.indexOf(':');
+  if (separator <= 0) return null;
+  const prefix = value.slice(0, separator);
+  const rest = value.slice(separator + 1);
+  if (!REF_PREFIX_RE.test(prefix) || !REF_VALUE_RE.test(rest)) return null;
+  return value;
+}
+
 function sanitizedRefList(values: readonly string[] | null | undefined, limit: number): readonly string[] {
   if (values === null || values === undefined) return [];
-  return values
-    .slice(0, limit)
-    .map((value) => redactFaultText(value, 200))
-    .filter((value) => value !== '');
+  const out: string[] = [];
+  for (const value of values.slice(0, limit)) {
+    const ref = sanitizeRef(value);
+    if (ref !== null) out.push(ref);
+  }
+  // 无法判定安全的引用没有可追溯价值 ⇒ 丢弃（不落库、不留半可信痕迹）
+  return out;
 }
 
 function nullableRedacted(value: string | null | undefined, maxLength: number): string | null {
   if (typeof value !== 'string') return null;
   const redacted = redactFaultText(value, maxLength);
-  return redacted === '' ? null : redacted;
+  // 代码 / 阶段这类**结构化短字段**一旦无法判定安全就置空，不把不确定内容落库
+  return redacted === '' || redacted === UNVERIFIABLE_TEXT_MARKER ? null : redacted;
+}
+
+/**
+ * 白名单过滤：只保留 `FAULT_SOURCE_REF_FIELDS` 列出的键。
+ * 即使未来有人把额外字段塞进装配对象，也不会随之落库。
+ */
+function whitelistSourceRefs(input: FaultIncidentSourceRefs): FaultIncidentSourceRefs {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (isWhitelistedSourceRefField(key)) out[key] = value;
+  }
+  return out as unknown as FaultIncidentSourceRefs;
 }
 
 /**
@@ -686,38 +830,44 @@ export function buildFaultIncidentIntent(
       ? opaqueRef('provider', observation.providerRef.trim().toUpperCase())
       : null;
 
+  /**
+   * 结构化白名单装配（CHANGE 2）：先把字段按上限脱敏，再经白名单过滤后才允许落库；
+   * 任何未列出的键（例如未来误加的透传字段）都会被丢弃。
+   */
+  const sourceRefs = whitelistSourceRefs({
+    classificationAuthority: 'DETERMINISTIC_RULES_ONLY',
+    faultClass: diagnosis.faultClass,
+    ruleId: diagnosis.ruleId,
+    severity: diagnosis.severity,
+    retryEligibility: diagnosis.retryEligibility,
+    requiredAction: diagnosis.requiredAction,
+    ownerGatedAction: diagnosis.ownerGatedAction,
+    summary: diagnosis.summary,
+    errorCode: nullableRedacted(observation.errorCode, FAULT_TEXT_LIMITS.code),
+    errorName: nullableRedacted(observation.errorName, FAULT_TEXT_LIMITS.code),
+    httpStatus: typeof observation.httpStatus === 'number' ? observation.httpStatus : null,
+    providerFailureReason: nullableRedacted(observation.providerFailureReason, FAULT_TEXT_LIMITS.code),
+    prismaCode: nullableRedacted(observation.prismaCode, 40),
+    stage: nullableRedacted(observation.stage, FAULT_TEXT_LIMITS.stage),
+    sourceModule: redactFaultText(observation.sourceModule, FAULT_TEXT_LIMITS.module),
+    environment: observation.environment,
+    organizationRef,
+    providerRef,
+    domain: nullableRedacted(observation.domain, FAULT_TEXT_LIMITS.stage),
+    affectedTaskRefs: sanitizedRefList(observation.taskRefs, 20),
+    evidenceRefs: sanitizedRefList(observation.evidenceRefs, 20),
+    occurrenceCount: typeof observation.occurrenceCount === 'number' ? observation.occurrenceCount : 1,
+    detectedAt,
+    untrustedModelHint: diagnosis.untrustedModelHint,
+  });
+
   const intent: FaultIncidentIntent = {
     kind: INTERNAL_FAULT_INCIDENT_KIND,
     dedupeKey: diagnosis.dedupeKey,
     status: 'DIAGNOSED',
     riskClass: diagnosis.riskClass,
     detectedAt,
-    sourceRefs: {
-      classificationAuthority: 'DETERMINISTIC_RULES_ONLY',
-      faultClass: diagnosis.faultClass,
-      ruleId: diagnosis.ruleId,
-      severity: diagnosis.severity,
-      retryEligibility: diagnosis.retryEligibility,
-      requiredAction: diagnosis.requiredAction,
-      ownerGatedAction: diagnosis.ownerGatedAction,
-      summary: diagnosis.summary,
-      errorCode: nullableRedacted(observation.errorCode, 80),
-      errorName: nullableRedacted(observation.errorName, 80),
-      httpStatus: typeof observation.httpStatus === 'number' ? observation.httpStatus : null,
-      providerFailureReason: nullableRedacted(observation.providerFailureReason, 80),
-      prismaCode: nullableRedacted(observation.prismaCode, 40),
-      stage: nullableRedacted(observation.stage, 60),
-      sourceModule: redactFaultText(observation.sourceModule, 120),
-      environment: observation.environment,
-      organizationRef,
-      providerRef,
-      domain: nullableRedacted(observation.domain, 60),
-      affectedTaskRefs: sanitizedRefList(observation.taskRefs, 20),
-      evidenceRefs: sanitizedRefList(observation.evidenceRefs, 20),
-      occurrenceCount: typeof observation.occurrenceCount === 'number' ? observation.occurrenceCount : 1,
-      detectedAt,
-      untrustedModelHint: diagnosis.untrustedModelHint,
-    },
+    sourceRefs,
   };
   return { diagnosis, intent };
 }
@@ -731,6 +881,12 @@ export const FAULT_CLASSIFICATION_BOUNDARY = {
   modelMayDeclareRootCauseVerified: false,
   redactsBeforePersistOrModel: true,
   unknownStaysUnknown: true,
+  /** MSG-20261009-07 CHANGE 2 */
+  structuredFieldWhitelist: true,
+  dropsUnverifiableFreeText: true,
+  capsPersistedTextLength: true,
+  decodesEncodedSecretsBeforeMasking: true,
+  logsNothing: true,
   incidentKind: INTERNAL_FAULT_INCIDENT_KIND,
   customerExecutionKind: 'CUSTOMER_GOAL_QUEUE',
 } as const;

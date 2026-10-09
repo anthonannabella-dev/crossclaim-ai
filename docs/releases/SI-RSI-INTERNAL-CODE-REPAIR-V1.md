@@ -116,7 +116,7 @@ Incident 跨租户访问或误合并（P0，CHANGE 3）／可重试故障被误�
 | CHANGE | 级别 | 状态 | 证据（本轮实测） |
 | --- | --- | --- | --- |
 | 1 Incident 并发创建 / 去重原子性 | P0 | **本轮完成** | 见下 |
-| 2 脱敏边界补强（对抗测试 + 结构化白名单） | P0 | NOT_STARTED | — |
+| 2 脱敏边界补强（对抗测试 + 结构化白名单） | P0 | **本轮完成** | 见下 |
 | 3 Incident 生命周期与租户边界 | P0 | NOT_STARTED | — |
 | 4 分类安全重试语义 | P1 | NOT_STARTED | — |
 
@@ -144,6 +144,31 @@ Incident 跨租户访问或误合并（P0，CHANGE 3）／可重试故障被误�
 | 真实 PostgreSQL 套件 | **9/9 PASS** |
 | 定向回归（新增 2 + schema-contract + phase1-authorization + phase1-durable-queue） | **5 文件 / 61 tests 全绿** |
 | `apps/api tsc --noEmit` | **0 error** |
+
+**CHANGE 2 实现口径**（`fault-classification.ts`）：
+
+- **掩码面扩展**：PEM 私钥块、JWT、`Bearer/Basic`（大小写与形态变体）、键值赋值形态（含 JSON 引号包裹如 `"apiKey":"…"`、
+  `X-Api-Key:`、`Cookie:`、`private_key` 等）、云厂商与常见前缀密钥（`AKIA/ASIA`、`sk_/pk_/rk_/ghp_/github_pat`）、
+  URL query 密钥（`access_token/api_key/signature`）、32+ 位长 hex、邮箱、POSIX 与 Windows 绝对路径。
+- **编码绕过**：对含 `%XX` 的文本最多**解码两轮后重新掩码**（URL 编码是常见绕过手法）。
+- **丢弃优先于猜测**：掩码后若仍残留「值形态」证据或无法识别的长 token（UUID 形状除外）⇒
+  整段替换为 `[dropped-unverifiable-text]`，**不推测其安全**。
+- **结构化白名单**：新增 `FAULT_SOURCE_REF_FIELDS`（24 键）并由 `whitelistSourceRefs()` 在装配时**运行时过滤**，
+  任何未列出的键都不落库；代码 / 阶段等短字段一旦无法判定安全则**置空**而非留存。
+- **可持久化长度上限**：`FAULT_TEXT_LIMITS`（summary 300 / ref 200 / code 80 / module 120 / stage 60 / modelHint 200）。
+- **引用收紧（本轮由对抗测试驱动发现并修复）**：refs 是**结构化标识符**，不是自由文本 ——
+  凡含任何「需要掩码的内容」（密钥 / 邮箱 / 路径 / 长 hex）或不符合 `prefix:value` 保守字符集者**整条丢弃**。
+  该收紧修掉了一个真实夹带面：旧实现会把整段错误报文（含空格与掩码片段）当 `evidenceRef` 落库。
+  代价（**故意选定**）：含 40 位 SHA 的 `head:` 类引用会被一并丢弃 —— 已登记为调用方契约（只传 id）。
+- **无日志**：两个模块**零日志输出**（源码级用例断言无 `console.` / `process.stdout`），敏感原文不进可读日志。
+- **夹具卫生（本轮实际发生并已修正）**：对抗夹具初版含 `sk_live_…` 形态字面量，**被 GitHub Push Protection 判定为 Stripe 密钥并拒绝推送**；
+  已全部替换为明显合成值（`sk-DUMMYKEY-…`，不含任何真实 provider 前缀形态）后重推。测试夹具**不含任何真实密钥**。
+
+**CHANGE 2 验收**：对抗矩阵 11 例（URL query / header 形态 / 嵌套 JSON / PEM / 大小写变体 / URL 编码 / 多行堆栈+cause+DB 文本 /
+Linux 路径 / Windows 路径 / 邮箱 / 长数字）逐例断言**密钥原文在摘要与落库载荷中均不可见**；
+白名单键集合逐字等于 24 键；全部可持久化字符串 ≤ 字段上限；自由文本引用被丢弃（`task: recovery with spaces`、
+`evidence:Error: insert failed…`、`{"raw":"payload"}` 全部不落库）。门禁：纯函数套件 **48/48 PASS**、
+定向回归 **5 文件 / 80 tests 全绿**、`tsc --noEmit` **0 error**。
 
 ## 2. 阶段计划与当前状态
 
@@ -186,7 +211,7 @@ INDEPENDENT_AUDIT = MSG-20261009-07 = PASS WITH REVISE（逐字归档 FULL_COPY_
 PHASE0_CLOSED = YES
 PHASE1_CLOSED = NO（待 PHASE1-FINAL-R2：CHANGE 1–4 后复审）
 PHASE2_IMPLEMENTATION_AUTHORIZED = NO
-NEXT_UNIT = PHASE1-FINAL-R2（CHANGE 1 P0 ✅ 完成 → NEXT = CHANGE 2 P0 脱敏对抗测试 + 结构化字段白名单 → CHANGE 3 → CHANGE 4 → 复审）
+NEXT_UNIT = PHASE1-FINAL-R2（CHANGE 1 ✅ / CHANGE 2 ✅ → NEXT = CHANGE 3 P0 真实 PG 生命周期与租户边界 → CHANGE 4 P1 安全重试语义 → 复审）
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
