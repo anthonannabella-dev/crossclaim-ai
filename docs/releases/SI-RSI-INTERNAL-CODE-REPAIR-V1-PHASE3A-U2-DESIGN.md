@@ -1,11 +1,11 @@
-# PHASE 3-A · U2 设计 R6（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R7（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-28 = REVISE` → `MSG-20261009-29 = PASS WITH REVISE` → `MSG-20261009-30 = PASS WITH REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R6_READ_ONLY_CHANGES_16_TO_18`。
-> 本文件是 **U2 设计 R6** 送审材料（MSG-20261009-31），**不含任何产品代码改动**。
-> **R6 的修订集中在 §14（基线一致性 / 运行时严格白名单 / Git↔DB 时序边界）；
-> §1–§13 保留历史；凡冲突者以 §14 为准。**
+> `MSG-20261009-29 = PASS WITH REVISE` → `MSG-20261009-30 = PASS WITH REVISE` → `MSG-20261009-31 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R7_READ_ONLY_CHANGES_19_TO_21`。
+> 本文件是 **U2 设计 R7** 送审材料（MSG-20261009-32），**不含任何产品代码改动**。
+> **R7 的修订集中在 §15（排他写入窗口 / 拒绝码收口 / 证据与声明更正）；
+> §1–§14 保留历史；凡冲突者以 §15 为准。**
 
 | 锚点 | 值 |
 | --- | --- |
@@ -15,7 +15,8 @@
 | U2 设计 R3 | `ac94ef8e` |
 | U2 设计 R4 | `378bfb2a` |
 | U2 设计 R5 | `f115f881` |
-| U2 设计 R6 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R6 | `a12a9f36` |
+| U2 设计 R7 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -742,3 +743,89 @@ Task/Incident/候选关联 ⇒ 拒绝，且**不返回其他作用域的候选 I
 U1 封板 `9ee36837` 不变、`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、
 `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
 本文件仍为**纯设计 R6**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+
+---
+
+## 15. R7 修订（对应 MSG-20261009-31 的 CHANGE 19–21）
+
+### 15.1 CHANGE 19（P0）—— Git 写入窗口的**技术性**排他保证
+
+**承认审计方的判断**：三次 Git 检查**只在「排他成立」时才是有效防线**；检查③到 `COMMIT` 之间的窗口
+必须由**技术门禁**覆盖，而不能只写「存在并发写入者就必须拒绝」这种运维约定。
+
+**R7 的唯一运行模式：`CONTROLLED_FIXED_WORKTREE`（受控、固定提交的隔离工作树）**
+
+1. **运行位置**：U2 只在**受控、固定提交的隔离工作树**（`git worktree`/独立 clone 的固定 commit）内运行；
+   **禁止**自动跟随可变远程分支（运行期不执行 `git fetch` / `git pull` / `git checkout`）。
+2. **排他锁（技术门禁，非新组件）**：进入流程的**第一步**（**早于**首次 Git 校验）尝试对工作树内
+   锁文件 `.u2-exclusive.lock` 取得**独占创建**（`O_CREAT|O_EXCL`），写入 `{ownerToken, pid, acquiredAt, ttlMs}`：
+   - 取锁失败（已存在且未过期 / 归属他人）⇒ `REJECTED`，`reason='EXCLUSIVE_WINDOW_UNAVAILABLE'`，**零写入**；
+   - 锁**全程持有**：自首次 Git 校验**之前**开始，直到**数据库提交完成后**（或回滚完成后）释放；
+   - 锁文件位于隔离工作树内，**不参与 schema、不建表**（属运行期文件，不随候选写入）。
+3. **三次 Git 检查（保留，但只作为完整性复核）**：①取锁后、②事务内、③`COMMIT` 前；
+   每次记录 `{check, head, branchRef, worktreeClean, refsDigest, at}`，其中 `refsDigest = sha256(canon(git for-each-ref 的排序输出))`；
+   任一次与首次不一致，或 `worktreeClean=false` ⇒ 回滚，`BASELINE_CHANGED_DURING_WRITE`，**零写入**。
+4. **若无法建立排他**（例如无法创建锁文件、工作树不可控、存在外部写入者）⇒ **直接拒绝**，零写入。
+5. **不得**为此新增第二套 Runtime / Scheduler / Controller：锁与检查都在 U2 服务调用内部完成。
+
+**U2-20（负向）**：在检查③之后、`COMMIT` 之前由**对抗进程**尝试修改 `HEAD`（或写入工作树）：
+断言**候选行数为 0** 且返回稳定拒绝码（`EXCLUSIVE_WINDOW_UNAVAILABLE` 或 `BASELINE_CHANGED_DURING_WRITE`）——
+即排他锁使对抗写入无法取得同一窗口，或事务在发现不一致时拒绝。
+
+### 15.2 CHANGE 20（P1）—— 拒绝原因码与校验顺序（唯一、确定）
+
+**每一级只对应一个 reason；自上而下命中即返回，绝不并列。**
+
+| 级别 | reason | 触发定义（精确定义） |
+| --- | --- | --- |
+| L1 | `TOP_LEVEL_INPUT_INVALID` | 顶层不是普通对象（`null`/`undefined`/数组/原始值/类实例） |
+| L2 | `EXTRA_FIELD_SCOPE` | 出现作用域类额外键（`scope`/`identity`/`platformAccountId`） |
+| L3 | `EXTRA_FIELD_TRUSTED_FACTS` | 出现 U1 事实类额外键（`factsSnapshotRef`/`factsDigest`/`issuedAt`） |
+| L4 | `EXTRA_FIELD_KEY_OR_UNKNOWN` | 出现 `signalKey`/`baselineRef` 或任何未知键 |
+| L5 | `MISSING_INCIDENT_ID` | `incidentId` 缺失（键不存在或为 `undefined`） |
+| L6 | `MISSING_REQUEST_REF` | `requestRef` 缺失（键不存在或为 `undefined`）——**优先于类型/空串检查** |
+| L7 | `INVALID_FIELD_TYPE` | 字段存在且非 `null`，但类型不是 `string` |
+| L8 | `EMPTY_STRING_FIELD` | 字段为 `null` 或空字符串 |
+| L9 | `EXCLUSIVE_WINDOW_UNAVAILABLE` | 无法取得 §15.1 的排他锁 |
+| L10 | `INPUT_KEY_MISMATCH` | **数据库中已存在的候选**与本次**重新计算的权威身份**（候选键、关联 `Task`/`Incident`、`baselineRef`、`builderRef`、摘要）不一致 |
+| L11 | `INCIDENT_NOT_ELIGIBLE` | Incident 不存在 / `kind≠INTERNAL_FAULT` / `status≠DIAGNOSED` |
+| L12 | `TASK_LINK_INVALID` | 无关联 Task 或外键链不一致 |
+| L13 | `FAULT_CONTEXT_UNAVAILABLE` | 既有故障上下文字段读取失败 |
+| L14 | `BASELINE_UNRESOLVABLE` | 基线不可解析 |
+| L15 | `BASELINE_INVALID` | 基线与 HEAD 不自洽（或 `AUTHORIZED_FIXED_BASELINE` 模式下与冻结基线不符） |
+| L16 | `BASELINE_CHANGED_DURING_WRITE` | 三次检查之间 / 提交前发现 HEAD 或 refsDigest 变化 |
+
+**补充规则**
+
+- 非法顶层输入**不得**抛运行时异常，也**不得**产生任何写入（L1 返回结构化拒绝）；
+- 多违规并存 ⇒ 只返回**最高优先级**的单一 reason（U2-19）；
+- **复用契约**：唯一冲突命中既有行时，必须逐项校验 `dedupeKey`（重算）、`taskId`、`Task.incidentId`、
+  `baselineRef`、`builderRef` 与权威值一致；**任何不匹配 ⇒ L10 `INPUT_KEY_MISMATCH`，且不得返回既有 `candidateId`**；
+- `INPUT_KEY_MISMATCH` 语义按审计方要求更正（调用方已无法合法提供 `signalKey`）；
+- 保留 §13.1 的接口结构，不新增字段。
+
+### 15.3 CHANGE 21（P1）—— 提交证据与变更声明更正
+
+1. **变更记录更正**：`f115f881 → a12a9f36` 实为**两个提交、三个文件**（设计文档、checkpoint、
+   `AI-ARCHITECT-INBOX.md`）。本设计今后**不再**用「只改一个文件」这类不精确表述；
+   声明统一写作：「产品代码零变更」+「本轮变更文件清单以 `git diff --name-only` 为准」。
+   R7 的变更文件清单亦按此口径在送审正文中逐条列出（由 `git diff --name-only` 生成）。
+2. **`u1SealRef` 写入位置（不新增 schema）**：仅写入**既有合法证据位置** ——
+   与 U1 同构的机器可读证据行 `U2_EVIDENCE {...}`（操作输出）以及既有证据目录
+   `tools/verification/self-repair/phase3a-u2-*` 的文本/JSON 工件；**不建表、不加列、不改迁移**。
+3. **三次 Git 检查的最小审计记录**：
+   `{check: 1|2|3, head, branchRef, worktreeClean, refsDigest, at}`；不一致时追加
+   `{reason, rollback: true, candidateRowsWritten: 0}`。
+4. **指纹口径分离**：
+   - 文档 **SHA-256**（对设计文档字节）：在审计方完成独立字节复算前，**始终**标记
+     `U2_DESIGN_DOC_SHA256_VERIFICATION = NOT_INDEPENDENTLY_VERIFIED`；
+   - **Git blob SHA**（`git rev-parse <commit>:<path>`）：与文档 SHA-256 **分别记录**，**不得混用**。
+
+### 15.4 R7 未变部分
+
+§12 候选键 v2 与 digest、§13.1 接口结构、§13.2 矩阵（U2-1…U2-19 状态不变，另加 U2-20）、
+§14.1 的 `auditAnchor` / `baselineRef` 分离与两种运行模式、`builderRef` 固定常量、
+仅 INSERT、无 UPDATE/DELETE、不新增 schema/migration、不接 Runtime/Queue、不调用模型/Provider、
+ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、`SCHEMA_MIGRATION=HOLD`、
+`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+本文件仍为**纯设计 R7**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
