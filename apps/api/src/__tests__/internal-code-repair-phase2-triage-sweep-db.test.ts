@@ -152,4 +152,74 @@ describe(`PHASE 2 分流扫描 × 真实 PostgreSQL（${testDatabaseMarker()}）
       defaultTrustedFacts: 'FAIL_CLOSED',
     });
   });
+
+  /**
+   * GATE-4 在 PHASE 2 层可覆盖的部分：**重复分流**与**并发扫描**的幂等性。
+   * （运行时的 fencing / 断连 / 崩溃恢复属既有运行时路径，由既有 SI/RSI 门禁覆盖。）
+   */
+  it('DB-S6 重复分流幂等：连跑两次结论不变、登记字段不重复、仍然零执行', async () => {
+    const id = await seed({ ...BASE, errorCode: 'PROVIDER_TIMEOUT', operationKind: 'READ_ONLY' });
+    const sweep = createPrismaFaultTriageSweep({
+      prisma,
+      now: () => T0,
+      resolveTrustedFacts: async () => ({ ...TRUSTED }),
+    });
+    const first = await sweep.sweepOnce();
+    const afterFirst = await prisma.autonomyIncident.findUniqueOrThrow({ where: { id } });
+    const second = await sweep.sweepOnce();
+    const afterSecond = await prisma.autonomyIncident.findUniqueOrThrow({ where: { id } });
+
+    expect(first.decisions[0]!.disposition).toBe('AUTO_RECOVER_VIA_RUNTIME');
+    expect(second.decisions[0]!.disposition).toBe('AUTO_RECOVER_VIA_RUNTIME');
+    expect(second.registered).toBe(1);
+    // 结论与登记值逐字稳定（不因重复分流而漂移）
+    expect(afterSecond.sourceRefs).toEqual(afterFirst.sourceRefs);
+    expect(Object.keys(afterSecond.sourceRefs as Record<string, unknown>)).toHaveLength(
+      Object.keys(afterFirst.sourceRefs as Record<string, unknown>).length,
+    );
+    expect(await prisma.autonomyTask.count()).toBe(0);
+    expect(await prisma.autonomyLease.count()).toBe(0);
+  });
+
+  it('DB-S7 并发扫描（4 路同时）：结论一致、登记不重复、零任务零租约', async () => {
+    const id = await seed({ ...BASE, errorName: 'AdapterMappingError' });
+    const make = (): ReturnType<typeof createPrismaFaultTriageSweep> =>
+      createPrismaFaultTriageSweep({ prisma, now: () => T0, resolveTrustedFacts: async () => ({ ...TRUSTED }) });
+
+    const results = await Promise.all([make().sweepOnce(), make().sweepOnce(), make().sweepOnce(), make().sweepOnce()]);
+    for (const result of results) {
+      expect(result.scanned).toBe(1);
+      expect(result.decisions[0]!.disposition).toBe('CODE_REPAIR_CANDIDATE');
+      expect(result.tasksCreated).toBe(0);
+      expect(result.runtimeInvocations).toBe(0);
+    }
+    const row = await prisma.autonomyIncident.findUniqueOrThrow({ where: { id } });
+    const refs = row.sourceRefs as Record<string, unknown>;
+    expect(refs.triageDecision).toBe('CODE_REPAIR_CANDIDATE');
+    expect(refs.triagedAt).toBe(T0.toISOString());
+    for (const field of TRIAGE_REGISTRATION_FIELDS) {
+      expect(Object.keys(refs).filter((key) => key === field)).toHaveLength(1);
+    }
+    expect(await prisma.autonomyTask.count()).toBe(0);
+    expect(await prisma.autonomyLease.count()).toBe(0);
+  });
+
+  it('DB-S8 扫描 vs 状态变更竞争：转终态后登记被前置条件挡住（不写、不错、不抛）', async () => {
+    const id = await seed({ ...BASE, errorCode: 'PROVIDER_TIMEOUT', operationKind: 'READ_ONLY' });
+    const sweep = createPrismaFaultTriageSweep({
+      prisma,
+      now: () => T0,
+      resolveTrustedFacts: async () => {
+        // 模拟「分流过程中该 Incident 被人工置为 CLOSED」
+        await prisma.autonomyIncident.update({ where: { id }, data: { status: 'CLOSED' } });
+        return { ...TRUSTED };
+      },
+    });
+    const result = await sweep.sweepOnce();
+    expect(result.scanned).toBe(1); // 扫描时仍是 DIAGNOSED
+    expect(result.registered).toBe(0); // 登记被 kind/status 前置条件挡住
+    const row = await prisma.autonomyIncident.findUniqueOrThrow({ where: { id } });
+    expect(row.status).toBe('CLOSED');
+    expect((row.sourceRefs as Record<string, unknown>).triageDecision).toBeUndefined();
+  });
 });

@@ -287,6 +287,21 @@ DB-S4 登记仅固定三项且值为稳定码 / ISO 时间；DB-S5 静态证据�
 - 历史登记的 P2E-DB5 隔离债与 broker authorization hook 超时债在本轮全量运行中**未复现**；仍不视为关闭（单次通过不足以关闭历史测试债）。
 - 如实声明未验证项：Linux/systemd 实机、真实 Provider/模型联调（`REAL_MODEL_INTEGRATION = HOLD`）、生产环境、GitHub Actions（本记录仅代表**本机隔离库**证据）。
 
+### 2.3 GATE-4（P0）在 PHASE 2 层可覆盖的部分：**幂等与并发已验收**
+
+GATE-4 原文要求「真实运行时测试异常重投、重复分流、断连、崩溃恢复和并发处理时的幂等与 fencing」。
+其中**分流层**可自验的部分已补测（真实 PostgreSQL，DB-S6/S7/S8）：
+
+| 用例 | 结论 |
+| --- | --- |
+| DB-S6 **重复分流幂等** | 连跑两次扫描：结论一致（`AUTO_RECOVER_VIA_RUNTIME`）、登记字段逐字稳定（`sourceRefs` 深比较相等）、键数量不变、零任务零租约 |
+| DB-S7 **并发扫描（4 路同时）** | 四路结论一致、登记字段不重复（每个 triage 键恰好出现一次）、零任务零租约 |
+| DB-S8 **扫描 vs 状态变更竞争** | 分流过程中被置为 `CLOSED` ⇒ 登记被 `kind`/`status` 前置条件挡住（`registered = 0`），该行仍是 `CLOSED` 且**无** triage 字段，流程不抛错 |
+
+**仍不覆盖的部分（如实登记，不由本层自证）**：运行时的租约 fencing、数据库断连、进程崩溃恢复与异常重投 ——
+这些属于既有 ONE SI Runtime 路径，已由既有 SI/RSI 门禁（PHASE 3 收官 / `FAILURE_RECOVERY` 门禁 MSG-20261009-06）覆盖；
+PHASE 2 本层不执行任何动作，故不重复实现第二套恢复机制。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -374,7 +389,8 @@ PHASE1_REVIEW_VERDICT = MSG-20261009-08 = PASS WITH REVISE（逐字归档 FULL_C
 定向回归 5 文件 / **98 tests 全绿**；`apps/api tsc --noEmit` **0 error**；未跑全量回归（如实登记）。
 
 GATE1_FULL_REGRESSION = PASS（490/490 文件、4926/4926 用例、exit 0；隔离库；证据 tools/verification/self-repair/phase2-gate1-full-regression.json）
-PHASE2_PROGRESS = TRIAGE_MODULE_IMPLEMENTED + SWEEP_IMPLEMENTED + GATE1_PASS（A 路径仅为候选登记，零执行）
+GATE4_PHASE2_LAYER = PASS（重复分流幂等 / 并发扫描 / 状态竞争登记保护；运行时层 fencing 与断连由既有运行时门禁覆盖）
+PHASE2_PROGRESS = TRIAGE_MODULE_IMPLEMENTED + SWEEP_IMPLEMENTED + GATE1_PASS + GATE4_PHASE2_LAYER_PASS
 NEXT_UNIT = PHASE 2 收口（接线到既有运行时入口的**只读候选登记**）→ GATE-1 全量 API 回归 → PHASE 2 独立复审
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
