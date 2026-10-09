@@ -576,4 +576,79 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat
       exceptionPath: { org: ORG_MISSING, reason: 'ORGANIZATION_NOT_FOUND', laterCallFreshTransaction: new Set([seqA, seqB, seqC, seqD]).size === 4 },
     });
   });
+
+  it('U1-DB10（CHANGE 33）同一调用链内嵌套 withReadOnlyTransaction 复用同一事务（只开一个事务）', async () => {
+    await seedOrganization(ORG_A);
+    const port = createPrismaTrustedFactsReadPort({ prisma });
+    const txSeq = new WeakMap<object, number>();
+    let txCounter = 0;
+    const seqOf = (tx: unknown): number => {
+      const key = tx as object;
+      if (!txSeq.has(key)) {
+        txCounter += 1;
+        txSeq.set(key, txCounter);
+      }
+      return txSeq.get(key)!;
+    };
+    const seen: number[] = [];
+    let opened = 0;
+
+    const result = await port.withReadOnlyTransaction(async (tx) => {
+      opened += 1;
+      seen.push(seqOf(tx));
+      // 同一调用链内再次进入 ⇒ 必须复用同一事务句柄，且不得新开第二个只读事务
+      const inner = await port.withReadOnlyTransaction(async (tx2) => {
+        seen.push(seqOf(tx2));
+        // 通过端口读取：db() 应命中当前调用链的事务（而非裸 client / 别人的事务）
+        const org = await port.findOrganization({ organizationId: ORG_A });
+        return org === null ? 'MISS' : 'HIT';
+      });
+      return inner;
+    });
+
+    expect(result).toBe('HIT');
+    expect(opened).toBe(1);
+    expect(seen).toEqual([1, 1]);
+    evidence({
+      kind: 'NESTED_TRANSACTION_REUSE',
+      sameCallChain: true,
+      transactionsOpened: opened,
+      handleSequences: seen,
+      reusedSameHandle: seen[0] === seen[1],
+      readInsideNestedCall: result === 'HIT',
+    });
+  });
+
+  it('U1-DB11（CHANGE 33）事务结束后脱离生命周期的异步任务不得回落裸 client（fail-closed）', async () => {
+    await seedOrganization(ORG_A);
+    const port = createPrismaTrustedFactsReadPort({ prisma });
+    let leaked: Promise<unknown> | null = null;
+
+    await port.withReadOnlyTransaction(async () => {
+      // 在事务作用域内派生一个“超出事务生命周期”的任务：事务提交后才尝试读取
+      leaked = (async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        return port.findOrganization({ organizationId: ORG_A });
+      })();
+      return true;
+    });
+
+    let threw = false;
+    let value: unknown = null;
+    try {
+      value = await leaked;
+    } catch {
+      threw = true;
+    }
+    // 已失效事务句柄必须报错（fail-closed）；不得静默改用裸 client 返回数据
+    expect(threw).toBe(true);
+    expect(value).toBeNull();
+    evidence({
+      kind: 'DEAD_TRANSACTION_ACCESS',
+      detachedFromTransactionLifecycle: true,
+      threw,
+      returnedValue: value,
+      failClosed: threw && value === null,
+    });
+  });
 });
