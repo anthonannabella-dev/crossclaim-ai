@@ -11,8 +11,33 @@ import {
   CUSTOMS_FEE_COLLECTION_VERSION,
   evaluateCustomsSuccessFeeCollection,
   sumReceivablesSameCurrency,
+  verifyFeeCollectionFact,
+  type CustomsFeeCollectionFact,
   type CustomsFeeCollectionInput,
+  type VerifiedFeeCollectionFact,
 } from '../services/customs/customs-success-fee-collection';
+
+/** CHANGE 03：收款事实必须经核验（品牌类型），测试走同一条核验路径。 */
+function collectionFact(
+  overrides: Partial<CustomsFeeCollectionFact> = {},
+): VerifiedFeeCollectionFact {
+  const verified = verifyFeeCollectionFact({
+    fact: {
+      transactionId: 'txn-1',
+      merchantAccountId: 'acct-1',
+      receivableId: 'st-1',
+      collectedAmount: '1500.00',
+      outcome: 'COLLECTED',
+      source: 'PAYMENT_PROVIDER_WEBHOOK',
+      occurredAt: '2026-10-10T00:00:00.000Z',
+      ...overrides,
+    },
+    expectedReceivableId: 'st-1',
+    expectedMerchantAccountId: 'acct-1',
+  });
+  if (verified === null) throw new Error('TEST_COLLECTION_FACT_UNVERIFIED');
+  return verified;
+}
 
 function input(overrides: Partial<CustomsFeeCollectionInput> = {}): CustomsFeeCollectionInput {
   const base: CustomsFeeCollectionInput = {
@@ -133,7 +158,7 @@ describe('V2-08 收款门禁 — HOLD 与应收账单两条路径', () => {
 describe('V2-08 收款结果 — 到账 / 失败 / 部分 / 退款 / 争议', () => {
   it('可信事实确认全额到账 → PAYMENT_COLLECTED', () => {
     const result = evaluateCustomsSuccessFeeCollection(
-      input({ collectionFact: { outcome: 'COLLECTED', collectedAmount: '1500.00' } }),
+      input({ collectionFact: collectionFact() }),
     );
     expect(result.state).toBe('PAYMENT_COLLECTED');
     expect(result.reasonCodes).toContain('COLLECTED_VERIFIED');
@@ -143,18 +168,18 @@ describe('V2-08 收款结果 — 到账 / 失败 / 部分 / 退款 / 争议', ()
 
   it('部分到账 → 保留余额并进入待收状态', () => {
     const result = evaluateCustomsSuccessFeeCollection(
-      input({ collectionFact: { outcome: 'COLLECTED', collectedAmount: '500.00' } }),
+      input({ collectionFact: collectionFact({ collectedAmount: '500.00' }) }),
     );
     expect(result.state).toBe('PAYMENT_COLLECTION_AUTHORIZED');
     expect(result.reasonCodes).toContain('PARTIAL_COLLECTION_PENDING');
     expect(result.remainingCollectible).toBe('1000.00');
-    expect(result.adjustments[0]?.kind).toBe('REVERSAL');
+    expect(result.adjustments[0]?.kind).toBe('PARTIAL_COLLECTION');
   });
 
   it('到账金额不可信（非法 / 超过应收）→ 不认定已收', () => {
     for (const collectedAmount of ['abc', '0', '9999.00']) {
       const result = evaluateCustomsSuccessFeeCollection(
-        input({ collectionFact: { outcome: 'COLLECTED', collectedAmount } }),
+        input({ collectionFact: collectionFact({ collectedAmount }) }),
       );
       expect(result.state).not.toBe('PAYMENT_COLLECTED');
       expect(result.reasonCodes).toContain('COLLECTION_AMOUNT_UNTRUSTED');
@@ -163,7 +188,7 @@ describe('V2-08 收款结果 — 到账 / 失败 / 部分 / 退款 / 争议', ()
 
   it('扣款失败 → 回到 HOLD 并按规则等待重试', () => {
     const result = evaluateCustomsSuccessFeeCollection(
-      input({ collectionFact: { outcome: 'FAILED', collectedAmount: null } }),
+      input({ collectionFact: collectionFact({ outcome: 'FAILED', collectedAmount: null }) }),
     );
     expect(result.state).toBe('PAYMENT_COLLECTION_HOLD');
     expect(result.reasonCodes).toContain('COLLECTION_FAILED');
@@ -171,7 +196,7 @@ describe('V2-08 收款结果 — 到账 / 失败 / 部分 / 退款 / 争议', ()
 
   it('退款 / 争议 → 生成可审计调整记录并把余额清零', () => {
     const refunded = evaluateCustomsSuccessFeeCollection(
-      input({ collectionFact: { outcome: 'REFUNDED', collectedAmount: null } }),
+      input({ collectionFact: collectionFact({ outcome: 'REFUNDED', collectedAmount: null }) }),
     );
     expect(refunded.adjustments[0]).toMatchObject({
       kind: 'REFUND_ADJUSTMENT',
@@ -181,10 +206,79 @@ describe('V2-08 收款结果 — 到账 / 失败 / 部分 / 退款 / 争议', ()
     expect(refunded.remainingCollectible).toBe('0.00');
 
     const chargeback = evaluateCustomsSuccessFeeCollection(
-      input({ collectionFact: { outcome: 'CHARGEBACK', collectedAmount: null } }),
+      input({ collectionFact: collectionFact({ outcome: 'CHARGEBACK', collectedAmount: null }) }),
     );
     expect(chargeback.adjustments[0]?.kind).toBe('CHARGEBACK_ADJUSTMENT');
     expect(chargeback.reasonCodes).toContain('CHARGEBACK_RECORDED');
+  });
+
+  // CHANGE 03（P0）：收款事实必须可核验，且历史已收不受撤销授权影响。
+  it('自行构造的收款事实冒充可信事实 → 不得认定已收', () => {
+    const forged = {
+      transactionId: 'txn-x',
+      merchantAccountId: 'acct-1',
+      receivableId: 'st-1',
+      collectedAmount: '1500.00',
+      outcome: 'COLLECTED',
+      source: 'PAYMENT_PROVIDER_WEBHOOK',
+      occurredAt: '2026-10-10T00:00:00.000Z',
+    } as unknown as VerifiedFeeCollectionFact;
+    const result = evaluateCustomsSuccessFeeCollection(input({ collectionFact: forged }));
+    expect(result.state).not.toBe('PAYMENT_COLLECTED');
+    expect(result.reasonCodes).toContain('COLLECTION_FACT_UNTRUSTED');
+  });
+
+  it('核验期拒绝：交易号缺失 / 应收不匹配 / 商户不匹配 / 来源不可信', () => {
+    const base = {
+      transactionId: 'txn-1',
+      merchantAccountId: 'acct-1',
+      receivableId: 'st-1',
+      collectedAmount: '1500.00',
+      outcome: 'COLLECTED' as const,
+      source: 'PAYMENT_PROVIDER_WEBHOOK',
+      occurredAt: '2026-10-10T00:00:00.000Z',
+    };
+    const expectRejected = (fact: CustomsFeeCollectionFact) =>
+      expect(
+        verifyFeeCollectionFact({
+          fact,
+          expectedReceivableId: 'st-1',
+          expectedMerchantAccountId: 'acct-1',
+        }),
+      ).toBeNull();
+    expectRejected({ ...base, transactionId: null });
+    expectRejected({ ...base, receivableId: 'other' });
+    expectRejected({ ...base, merchantAccountId: 'acct-2' });
+    expectRejected({ ...base, source: 'CLIENT_REPORTED' });
+  });
+
+  it('已核验收款事实：历史已收写入结果，撤销授权只影响未来扣款', () => {
+    const collected = evaluateCustomsSuccessFeeCollection(
+      input({
+        history: { collectedAmount: '300.00', refundedAmount: '0.00' },
+        collectionFact: collectionFact({ collectedAmount: '1500.00' }),
+      }),
+    );
+    expect(collected.state).toBe('PAYMENT_COLLECTED');
+    expect(collected.historicalCollectedAmount).toBe('300.00');
+    expect(collected.collectionAuthorizedForFuture).toBe(false);
+
+    const revoked = evaluateCustomsSuccessFeeCollection(
+      input({
+        history: { collectedAmount: '300.00', refundedAmount: '0.00' },
+        authorization: {
+          active: true,
+          revoked: true,
+          paymentMethodSupportsAutoCollection: true,
+          hostAutoCollectionEnabled: true,
+        },
+      }),
+    );
+    expect(revoked.state).toBe('PAYMENT_COLLECTION_HOLD');
+    expect(revoked.reasonCodes).toContain('CUSTOMER_AUTHORIZATION_REVOKED');
+    // 历史已收不被抹除；但未来自动扣款不再授权
+    expect(revoked.historicalCollectedAmount).toBe('300.00');
+    expect(revoked.collectionAuthorizedForFuture).toBe(false);
   });
 });
 

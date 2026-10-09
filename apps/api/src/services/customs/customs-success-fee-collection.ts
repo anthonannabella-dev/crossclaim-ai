@@ -52,6 +52,8 @@ export type CustomsFeeCollectionReason =
   | 'COLLECTION_AUTHORIZED'
   | 'COLLECTION_FAILED'
   | 'COLLECTION_AMOUNT_UNTRUSTED'
+  | 'COLLECTION_FACT_UNTRUSTED'
+  | 'COLLECTION_FACT_RECEIVABLE_MISMATCH'
   | 'PARTIAL_COLLECTION_PENDING'
   | 'COLLECTED_VERIFIED'
   | 'REVERSAL_RECORDED'
@@ -80,17 +82,74 @@ export interface CustomsFeeCollectionAuthorization {
 }
 
 export interface CustomsFeeAdjustmentEntry {
-  kind: 'REVERSAL' | 'REFUND_ADJUSTMENT' | 'CHARGEBACK_ADJUSTMENT';
+  kind: 'PARTIAL_COLLECTION' | 'REVERSAL' | 'REFUND_ADJUSTMENT' | 'CHARGEBACK_ADJUSTMENT';
   settlementId: string | null;
   amount: string;
   signedAmount: string;
   reason: CustomsFeeCollectionReason;
 }
 
+/** 只有这两类来源可被视为可信收款事实（人工录入、客户端上报一律不算）。 */
+export const CUSTOMS_TRUSTED_COLLECTION_SOURCES = [
+  'PAYMENT_PROVIDER_WEBHOOK',
+  'RECONCILIATION',
+] as const;
+export type CustomsTrustedCollectionSource = (typeof CUSTOMS_TRUSTED_COLLECTION_SOURCES)[number];
+
+/** 调用方提供的**原始**收款事实（未经核验，不可直接驱动 COLLECTED）。 */
 export interface CustomsFeeCollectionFact {
-  /** 可信支付事实：实际收到的金额（decimal string）。 */
+  transactionId: string | null;
+  merchantAccountId: string | null;
+  receivableId: string | null;
   collectedAmount: string | null;
   outcome: 'COLLECTED' | 'FAILED' | 'REFUNDED' | 'CHARGEBACK';
+  source: string | null;
+  occurredAt: string | null;
+}
+
+const VERIFIED_COLLECTION_BRAND: unique symbol = Symbol('crossclaim.customs.verifiedCollectionFact');
+
+/** 经核验的收款事实：品牌为模块私有 Symbol，只能由 verifyFeeCollectionFact 产出。 */
+export interface VerifiedFeeCollectionFact extends CustomsFeeCollectionFact {
+  readonly [VERIFIED_COLLECTION_BRAND]: true;
+  readonly source: CustomsTrustedCollectionSource;
+}
+
+export function isVerifiedFeeCollectionFact(value: unknown): value is VerifiedFeeCollectionFact {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string | symbol, unknown>;
+  return (
+    record[VERIFIED_COLLECTION_BRAND] === true &&
+    (CUSTOMS_TRUSTED_COLLECTION_SOURCES as readonly string[]).includes(record.source as string)
+  );
+}
+
+/**
+ * 核验收款事实：交易号非空、来源可信、归属（receivableId / merchantAccountId）与预期一致。
+ * 任一不满足 → 返回 null（调用方必须按"不可信"处理）。
+ */
+export function verifyFeeCollectionFact(input: {
+  fact: CustomsFeeCollectionFact;
+  expectedReceivableId: string;
+  expectedMerchantAccountId: string | null;
+}): VerifiedFeeCollectionFact | null {
+  const { fact } = input;
+  if (fact.transactionId === null || fact.transactionId.trim().length === 0) return null;
+  if (fact.receivableId === null || fact.receivableId !== input.expectedReceivableId) return null;
+  if (
+    input.expectedMerchantAccountId !== null &&
+    fact.merchantAccountId !== input.expectedMerchantAccountId
+  ) {
+    return null;
+  }
+  if (!(CUSTOMS_TRUSTED_COLLECTION_SOURCES as readonly string[]).includes(fact.source ?? '')) {
+    return null;
+  }
+  return {
+    ...fact,
+    source: fact.source as CustomsTrustedCollectionSource,
+    [VERIFIED_COLLECTION_BRAND]: true,
+  };
 }
 
 export interface CustomsFeeCollectionInput {
@@ -98,7 +157,10 @@ export interface CustomsFeeCollectionInput {
   authorization: CustomsFeeCollectionAuthorization;
   killSwitch: { engaged: boolean };
   billedSettlementIds: ReadonlySet<string>;
-  collectionFact?: CustomsFeeCollectionFact;
+  /** CHANGE 03：只接受经核验的收款事实（品牌类型，无法自行构造）。 */
+  collectionFact?: VerifiedFeeCollectionFact;
+  /** 已入账的历史收款/退款合计（来自台账，不受当前授权状态影响）。 */
+  history?: { collectedAmount: string; refundedAmount: string };
   rateBps?: number;
 }
 
@@ -114,6 +176,10 @@ export interface CustomsFeeCollectionResult {
   remainingCollectible: string | null;
   adjustments: readonly CustomsFeeAdjustmentEntry[];
   autoCollection: 'HOLD' | 'AUTHORIZED';
+  /** HISTORICAL：已发生并被核验的收款合计，客户撤销授权**不会**抹除它。 */
+  historicalCollectedAmount: string;
+  /** 是否仍可对**未来**收款发起自动扣款（撤销授权后为 false）。 */
+  collectionAuthorizedForFuture: boolean;
   collectionInitiated: false;
   chargedAmount: null;
   paymentCaptured: false;
@@ -126,6 +192,15 @@ function isPositiveAmount(value: string | null): value is string {
   const normalized = normalizeDecimalAmount(value);
   if (normalized === null) return false;
   return compareDecimalAmounts(normalized, '0') === 1;
+}
+
+/** 展示用格式：至少两位小数（最多保留 4 位，**不做截断或四舍五入**）。 */
+function formatAtLeastTwoDecimals(amount: string | null): string {
+  const normalized = amount === null ? null : normalizeDecimalAmount(amount);
+  if (normalized === null) return '0.00';
+  const [whole, fraction = ''] = normalized.split('.');
+  if (fraction.length === 0) return `${whole}.00`;
+  return fraction.length === 1 ? `${whole}.${fraction}0` : `${whole}.${fraction}`;
 }
 
 /**
@@ -142,6 +217,11 @@ export function evaluateCustomsSuccessFeeCollection(
     rateBps,
     currency: input.settlement.currency,
     basisSettlementId: input.settlement.settlementId,
+    historicalCollectedAmount:
+      input.history === undefined
+        ? '0.00'
+        : formatAtLeastTwoDecimals(input.history.collectedAmount),
+    collectionAuthorizedForFuture: false,
     collectionInitiated: false as const,
     chargedAmount: null,
     paymentCaptured: false as const,
@@ -233,11 +313,24 @@ export function evaluateCustomsSuccessFeeCollection(
     remainingCollectible: remaining,
     adjustments,
     autoCollection: 'AUTHORIZED',
+    collectionAuthorizedForFuture: state === 'PAYMENT_COLLECTION_AUTHORIZED',
   });
 
   const fact = input.collectionFact;
   if (fact === undefined) {
     return authorized([], feeAmount, [], 'PAYMENT_COLLECTION_AUTHORIZED');
+  }
+  // CHANGE 03：伪造 / 未核验 / 归属不符的收款事实一律不得驱动 COLLECTED
+  if (!isVerifiedFeeCollectionFact(fact)) {
+    return authorized(['COLLECTION_FACT_UNTRUSTED'], feeAmount, [], 'PAYMENT_COLLECTION_AUTHORIZED');
+  }
+  if (fact.receivableId !== settlementId) {
+    return authorized(
+      ['COLLECTION_FACT_RECEIVABLE_MISMATCH'],
+      feeAmount,
+      [],
+      'PAYMENT_COLLECTION_AUTHORIZED',
+    );
   }
 
   if (fact.outcome === 'FAILED') {
@@ -275,7 +368,7 @@ export function evaluateCustomsSuccessFeeCollection(
       remaining,
       [
         {
-          kind: 'REVERSAL',
+          kind: 'PARTIAL_COLLECTION',
           settlementId,
           amount: collected,
           signedAmount: subtractDecimalAmounts('0', collected) ?? `-${collected}`,
@@ -294,6 +387,7 @@ export function evaluateCustomsSuccessFeeCollection(
     remainingCollectible: '0.00',
     adjustments: [],
     autoCollection: 'AUTHORIZED',
+    collectionAuthorizedForFuture: false,
   };
 }
 
