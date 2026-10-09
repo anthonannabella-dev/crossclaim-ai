@@ -170152,3 +170152,566 @@ NEXT_AUDIT = MSG-20261009-12 · PHASE 3 DESIGN REVIEW
 
 本次关闭不改变任何既有发布或生产门禁状态，也不隐含对自主修复、自动提交代码、自动合并或自动部署的授权。
 ```
+
+### [MSG-20261009-12] PHASE 3 独立设计复审裁决 = PASS WITH REVISE（设计附条件认可；PHASE3_IMPLEMENTATION_AUTHORIZED=NO；三项 P0 CHANGE 1–3 + 五项 P1 CHANGE 4–8；NEXT=PHASE3_DESIGN_FINAL_R2_READ_ONLY）reviewed ref 101d5912
+
+```text
+MSG-20261009-12｜SI/RSI INTERNAL CODE REPAIR V1 · PHASE 3 独立设计复审裁决
+FINAL VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD： 101d5912
+审计范围： PHASE 3 只读设计（P3-01～P3-06）
+审计依据： 本轮提交的设计说明及声明的现有架构，不代表已直接核验 Git 代码或测试证据。
+
+一、最终裁决
+
+本轮设计方向可接受，但尚有三个关键安全契约需要补充，才能授权 PHASE 3 实施。
+
+裁决字段
+
+	
+
+结果
+
+
+
+
+FINAL_VERDICT
+
+	
+
+PASS WITH REVISE
+
+
+
+
+PHASE2_CLOSED
+
+	
+
+YES（继承上一轮裁决）
+
+
+
+
+PHASE3_DESIGN_ACCEPTED
+
+	
+
+YES（附条件）
+
+
+
+
+PHASE3_IMPLEMENTATION_AUTHORIZED
+
+	
+
+NO
+
+
+
+
+AUTONOMOUS_CODE_REPAIR_AUTHORIZED
+
+	
+
+NO
+
+
+
+
+EXTERNAL_WRITE
+
+	
+
+HOLD
+
+
+
+
+PRODUCTION_READY
+
+	
+
+NO
+
+
+
+
+NEXT_AUDIT
+
+	
+
+MSG-20261009-13
+
+核心裁决：设计架构成立，但不得将“已有防护组件”直接等同于“整个执行窗口的安全性已经得到证明”。
+
+PHASE 3 可以继续完善设计契约和测试规范，不得开始执行代码接线。
+
+二、逐项审计
+
+审计项目
+
+	
+
+裁决
+
+	
+
+审计说明
+
+
+
+
+1. TRUSTED_ADAPTER_PROVENANCE_DESIGN
+
+	
+
+PASS WITH REVISE
+
+	
+
+来源分类正确，但需补充不可伪造的主体绑定及证明生命周期
+
+
+
+
+2. PRE_EXECUTION_REVALIDATION_SEQUENCE
+
+	
+
+REVISE
+
+	
+
+八步覆盖主要检查，但撤销竞态和最终副作用提交边界尚未闭合
+
+
+
+
+3. CANDIDATE_CONSUMPTION_PATH
+
+	
+
+REVISE
+
+	
+
+不新增第二运行时的方向正确，但客户队列隔离及认领前重验尚缺完整契约
+
+
+
+
+4. REPAIR_PERMISSION_MODEL
+
+	
+
+PASS WITH REVISE
+
+	
+
+权限限制合理，但需要补充补丁来源、Judge 独立性和落地权限边界
+
+
+
+
+5. FAILURE_MATRIX_AND_GATES
+
+	
+
+PASS WITH REVISE
+
+	
+
+场景覆盖较完整，需要增加 TOCTOU、路径逃逸和崩溃恢复负向用例
+
+
+
+
+6. DESIGN_SCOPE_HONESTY
+
+	
+
+PASS
+
+	
+
+未实现项、生产限制与历史测试债已明确登记
+
+三、必须修订的 CHANGES
+CHANGE 1 — P0：封闭授权撤销与执行副作用之间的竞态
+
+当前描述：
+
+第 4 步与第 8 步之间发生撤销，由既有 claim 授权重解析与 fenced settle 兜住。
+
+这一机制只能证明部分执行前检查成立，不能自动证明执行窗口内任何时刻的撤销均能阻止副作用。
+
+例如：
+
+第 4 步授权有效。
+
+第 8 步成功 claim。
+
+授权被撤销。
+
+Worker 已获得任务并准备执行。
+
+Worker 仍然调用具有副作用的操作。
+
+fenced settle 拒绝最终状态写入。
+
+此时即使结算被拒绝，外部或内部副作用也可能已经发生。
+
+必须新增契约：
+
+在实际执行动作前设置最终授权重验门。
+
+任务执行期间持续校验租约和 fencing token。
+
+对所有可见副作用定义明确的最终提交边界。
+
+撤销与副作用提交必须具有可证明的线性化顺序，或者使用等效的串行化、防重和取消协议。
+
+无法证明执行安全性的动作必须进入 BLOCK 或 HUMAN_REVIEW。
+
+已发生的副作用不能因事后 settle 失败而被标记为“零副作用”。
+
+对于不可逆外部动作，不能仅依赖执行前二次检查；本阶段继续禁止此类动作。
+
+验收门： 必须分别覆盖撤销发生在 claim 前、claim 后、执行前、执行中以及提交边界的情况。零副作用断言只能针对可被系统实际证明阻断的执行窗口。
+
+CHANGE 2 — P0：建立 A 路径候选与客户任务之间的强身份隔离
+
+目前提出复用 CUSTOMER_GOAL_QUEUE，符合 ONE SI Runtime 原则，但存在需要进一步约束的风险。
+
+必须明确：
+
+内部故障候选不是客户请求，不得通过更换 kind 获得客户授权。
+
+候选必须保留 incidentId、可信租户关系、任务类型和来源身份。
+
+不能把候选载荷中的 organizationId 当作可信组织身份。
+
+候选入队之前和认领之后必须分别重解析授权及身份。
+
+当前客户任务的授权不得自动扩大到内部代码修改。
+
+INTERNAL_FAULT 不得通过队列转换绕过 Action Guard。
+
+必须定义 incident 与 task 的持久化关联、去重键、状态转移及崩溃后的恢复规则。
+
+尤其需要明确： 如果原有 CUSTOMER_GOAL_QUEUE 的语义只能支持客户目标，不能仅为复用队列而伪装任务类型。
+
+可以复用既有任务执行基础设施，但内部任务必须保持独立、可验证的身份语义。
+
+本轮不授权修改队列代码。
+
+CHANGE 3 — P0：代码修复权限分离必须覆盖补丁生成到发布的全过程
+
+目前 Builder、Judge、隔离工作区、文件白名单设计合理，但还需把权限边界落实为不可由 Builder 自行改变的规则。
+
+必须增加：
+
+工作区绑定：每个补丁绑定确定的基线 commit、允许文件清单及变更内容哈希。
+
+路径限制：防止符号链接、路径穿越、Git hooks、子模块、间接配置及脚本调用逃逸。
+
+命令限制：测试命令不得继承生产凭据、Docker socket、宿主敏感挂载或发布权限。
+
+Judge 独立性：Judge 不得由 Builder 构造或覆盖其评审依据，且必须核验真实可复现的测试输出。
+
+结果不可变性：Judge 审核的补丁哈希必须与最终候选补丁一致。
+
+提交边界：即使 Judge PASS，也仅能生成已验证候选，不允许自动合并、自动部署或修改封板分支。
+
+回滚边界：回滚能力必须实际可行；对不可逆副作用不能承诺自动回滚。
+
+还应将 services/** 白名单缩小到逐路径允许清单，不能将整个目录默认视为安全修改范围。
+
+四、建议补充的 P1 条款
+
+编号
+
+	
+
+修订要求
+
+	
+
+验收标准
+
+
+
+
+CHANGE 4
+
+	
+
+provenance 绑定执行主体、租户、会话、事实版本及读取时间
+
+	
+
+旧证明、跨主体证明不得复用
+
+
+
+
+CHANGE 5
+
+	
+
+明确快照 TTL、授权版本、状态变更与重新分流规则
+
+	
+
+过期快照无法进入执行
+
+
+
+
+CHANGE 6
+
+	
+
+设计补丁重试与成本上限
+
+	
+
+REVISE 有界，超限 BLOCK
+
+
+
+
+CHANGE 7
+
+	
+
+补充真实 PostgreSQL 与运行时负向测试
+
+	
+
+不允许仅用 mock 证明安全边界
+
+
+
+
+CHANGE 8
+
+	
+
+明确崩溃后状态收敛与不可重复提交契约
+
+	
+
+恢复后不存在重复副作用或身份漂移
+
+特别说明：失败矩阵建议增加一个独立场景：
+
+JUDGE_PASS_PATCH_CHANGED_AFTER_REVIEW
+
+预期结果：
+
+BLOCK / PATCH_DIGEST_MISMATCH / NO_APPLY
+
+该场景用于防止补丁在 Judge 批准之后被替换。
+
+五、PHASE 3 是否可以开始实施？
+
+目前不授权实施。
+
+原因并非总体架构错误，而是存在三个尚未完成的安全证明：
+
+授权撤销不能仅凭 fenced settle 推导出零副作用。
+
+内部故障候选不能凭借复用客户队列自动继承客户权限。
+
+Builder/Judge 分离不能仅凭角色名称证明补丁执行环境安全。
+
+这些问题必须在设计层明确之后，再授权具体实现。
+
+不需要重做 PHASE 1/2，也不需要新增 Runtime、Scheduler、Controller 或第二套 AI 智能体系统。
+
+六、NEXT_AUTHORIZED
+
+PHASE3_DESIGN_FINAL_R2 — READ ONLY
+
+授权范围：仅修订设计文档、状态机契约、权限矩阵、时序图和测试验收规范。
+
+ALLOWED
+
+关闭 CHANGE 1–3 三项 P0。
+
+补充 CHANGE 4–8 的设计及测试验收条款。
+
+输出候选入队、认领、执行与终止的状态转移表。
+
+提交设计复审 MSG-20261009-13。
+
+FORBIDDEN
+
+实现 FaultTrustedFactsAdapter 或执行接线。
+
+修改生产 Runtime、队列或 Action Guard。
+
+实施代码修复 Builder / Judge。
+
+创建自动修复代理或开放自动提交。
+
+修改 Prisma、migration、封板 RC/main。
+
+开启真实 Provider、支付、报关或其他外写。
+
+七、RISKS：剩余风险登记
+
+风险
+
+	
+
+等级
+
+	
+
+当前状态
+
+
+
+
+授权撤销后产生副作用
+
+	
+
+P0
+
+	
+
+未闭合
+
+
+
+
+内部任务借用客户队列权限
+
+	
+
+P0
+
+	
+
+未闭合
+
+
+
+
+修复补丁越权修改或执行
+
+	
+
+P0
+
+	
+
+未闭合
+
+
+
+
+provenance 被跨会话重放
+
+	
+
+P1
+
+	
+
+待补强
+
+
+
+
+Judge 结果与实际补丁不一致
+
+	
+
+P1
+
+	
+
+待补强
+
+
+
+
+崩溃后任务重复消费
+
+	
+
+P1
+
+	
+
+待实施验证
+
+
+
+
+历史测试债与敏感载荷残留
+
+	
+
+P1
+
+	
+
+继续登记
+
+
+
+
+Linux、Provider、生产端到端验证
+
+	
+
+P1
+
+	
+
+未执行
+
+八、最终机器可读裁决
+
+MSG-20261009-12
+
+复制裁决
+
+AUDIT_ID=MSG-20261009-12
+REVIEWED_HEAD=101d5912
+FINAL_VERDICT=PASS_WITH_REVISE
+
+PHASE2_CLOSED=YES
+PHASE3_DESIGN_ACCEPTED=YES_WITH_CONDITIONS
+PHASE3_IMPLEMENTATION_AUTHORIZED=NO
+AUTONOMOUS_CODE_REPAIR_AUTHORIZED=NO
+
+EXTERNAL_WRITE=HOLD
+PRODUCTION_READY=NO
+
+NEXT_AUTHORIZED=PHASE3_DESIGN_FINAL_R2_READ_ONLY
+
+REQUIRED_CHANGES=
+  CHANGE_1_P0
+  CHANGE_2_P0
+  CHANGE_3_P0
+  CHANGE_4_P1
+  CHANGE_5_P1
+  CHANGE_6_P1
+  CHANGE_7_P1
+  CHANGE_8_P1
+
+NEXT_AUDIT=MSG-20261009-13
+
+最终结论： PHASE 3 的设计方向获得附条件认可，ONE SI Runtime、可信来源隔离、执行前重验、独立 Judge 及修复权限限制等基本原则可以保留。当前唯一授权动作是完成设计修订并申请下一轮复审。
+
+不得把本轮 PASS WITH REVISE 解释为实施许可，也不得把设计通过解释为自主代码修复能力已经交付。
+```

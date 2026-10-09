@@ -546,6 +546,61 @@ Linux·CI·真实模型·Provider 未验证（发布门禁，不计入本轮关�
 **本轮未实施、未接线、未开放权限**（如实登记）：可信适配器、执行前重验、候选消费通道、修复代理、隔离沙箱、独立 Judge 接线、回滚机制
 **均未实现**；`runtimeSourceIsolationImplemented = false` 仍成立；`EXTERNAL_WRITE = HOLD`、`PRODUCTION_READY = NO`。
 
+### 2.9 PHASE 3 设计复审裁决（MSG-20261009-12 = PASS WITH REVISE；**实施仍未授权**）
+
+**裁决原文**：`AI-ARCHITECT-INBOX.md` → `### [MSG-20261009-12]`（逐字归档，FNV1A `d95eeb78`，`FULL_COPY_OK`：195 行 / 缺失 0 / 多出 0）。
+会话：`https://chatgpt.com/c/6ac84e46-6240-83ec-bddc-0163b19a7e56`。
+
+| 审计项 | 裁决 |
+| --- | --- |
+| 1 TRUSTED_ADAPTER_PROVENANCE_DESIGN | **PASS WITH REVISE**（需补不可伪造的主体绑定与证明生命周期） |
+| 2 PRE_EXECUTION_REVALIDATION_SEQUENCE | **REVISE**（撤销竞态与最终副作用提交边界未闭合） |
+| 3 CANDIDATE_CONSUMPTION_PATH | **REVISE**（客户队列隔离与认领前重验契约不完整） |
+| 4 REPAIR_PERMISSION_MODEL | **PASS WITH REVISE**（需补补丁来源、Judge 独立性、落地权限边界） |
+| 5 FAILURE_MATRIX_AND_GATES | **PASS WITH REVISE**（需增 TOCTOU、路径逃逸、崩溃恢复负向用例） |
+| 6 DESIGN_SCOPE_HONESTY | **PASS** |
+
+机器裁决：`PHASE2_CLOSED = YES`（继承）、`PHASE3_DESIGN_ACCEPTED = YES_WITH_CONDITIONS`、
+**`PHASE3_IMPLEMENTATION_AUTHORIZED = NO`**、`AUTONOMOUS_CODE_REPAIR_AUTHORIZED = NO`、`EXTERNAL_WRITE = HOLD`、`PRODUCTION_READY = NO`；
+`NEXT_AUTHORIZED = PHASE3_DESIGN_FINAL_R2_READ_ONLY`、`NEXT_AUDIT = MSG-20261009-13`。
+
+**必须修订（三项 P0）**：
+
+1. **CHANGE 1（P0）封闭「授权撤销 ↔ 执行副作用」竞态**：仅靠 fenced settle **不能**推出零副作用
+   （存在「claim 成功 → 授权被撤销 → worker 已获任务 → 调用副作用 → settle 被拒」的窗口）。
+   必须补：① 实际执行动作**前的最终授权重验门**；② 执行期间**持续**校验租约与 fencing token；
+   ③ 为所有可见副作用定义**最终提交边界**；④ 撤销与副作用提交之间具备**可证明的线性化顺序**（或等效串行化 / 防重 / 取消协议）；
+   ⑤ 无法证明执行安全的动作 ⇒ `BLOCK` / `HUMAN_REVIEW`；⑥ **已发生的副作用不得因事后 settle 失败而被标记为「零副作用」**。
+   不可逆外部动作本阶段继续禁止。验收须分别覆盖撤销发生在 **claim 前 / claim 后 / 执行前 / 执行中 / 提交边界** 五种情形。
+2. **CHANGE 2（P0）A 路径候选与客户任务的强身份隔离**：内部故障候选**不是**客户请求，
+   不得通过更换 `kind` 获得客户授权；候选必须保留 `incidentId`、可信租户关系、任务类型与来源身份；
+   **不得**把候选载荷里的 `organizationId` 当作可信组织身份；入队前**与**认领后必须**分别**重解析授权与身份；
+   现有客户授权**不得**自动扩大到内部代码修改；`INTERNAL_FAULT` 不得经队列转换绕过 Action Guard；
+   必须定义 incident ↔ task 的持久化关联、去重键、状态转移与崩溃恢复规则。**本轮不授权修改队列代码。**
+3. **CHANGE 3（P0）修复权限分离覆盖「补丁生成 → 发布」全过程**：工作区绑定（基线 commit + 允许文件清单 + 内容哈希）；
+   路径限制（符号链接 / 路径穿越 / Git hooks / 子模块 / 间接配置与脚本逃逸）；命令限制（不得继承生产凭据、Docker socket、宿主敏感挂载、发布权限）；
+   Judge 独立性（不得由 Builder 构造或覆盖评审依据，必须核验**真实可复现**测试输出）；结果不可变性（Judge 审核的补丁哈希必须等于最终候选）；
+   提交边界（即使 Judge PASS 也只能生成已验证候选，禁止自动合并 / 部署 / 修改封板分支）；回滚边界（必须实际可行；不可逆副作用不得承诺自动回滚）；
+   并把 `services/**` 白名单**缩小为逐路径允许清单**。
+
+**建议补充（五项 P1）**：CHANGE 4 provenance 绑定执行主体 / 租户 / 会话 / 事实版本 / 读取时间（旧证明与跨主体证明不得复用）；
+CHANGE 5 明确快照 TTL、授权版本、状态变更与重新分流规则（过期快照不得进入执行）；
+CHANGE 6 补丁重试与成本上限（REVISE 有界，超限 BLOCK）；CHANGE 7 补真实 PostgreSQL 与运行时负向测试（**不允许**仅用 mock 证明安全边界）；
+CHANGE 8 崩溃后状态收敛与不可重复提交契约（恢复后不得重复副作用或身份漂移）。
+
+**额外强制失败场景**：`JUDGE_PASS_PATCH_CHANGED_AFTER_REVIEW` ⇒ 预期 `BLOCK` / `PATCH_DIGEST_MISMATCH` / `NO_APPLY`
+（防止 Judge 批准后补丁被替换）。
+
+**RISKS（原文）**：授权撤销后产生副作用（**P0 未闭合**）/ 内部任务借用客户队列权限（**P0 未闭合**）/
+修复补丁越权修改或执行（**P0 未闭合**）/ provenance 被跨会话重放（P1 待补强）/ Judge 结果与实际补丁不一致（P1 待补强）/
+崩溃后任务重复消费（P1 待实施验证）/ 历史测试债与敏感载荷残留（P1 继续登记）/ Linux·Provider·生产端到端（P1 未执行）。
+
+**NEXT_AUTHORIZED = PHASE3_DESIGN_FINAL_R2_READ_ONLY**：仅允许修订设计文档、状态机契约、权限矩阵、时序图与测试验收规范；
+关闭 CHANGE 1–3、补充 CHANGE 4–8、输出「候选入队 / 认领 / 执行 / 终止」状态转移表，并提交 MSG-20261009-13。
+**FORBIDDEN**：实现 `FaultTrustedFactsAdapter` 或执行接线；修改生产 Runtime / 队列 / Action Guard；
+实施 Builder/Judge；创建自动修复代理或开放自动提交；修改 Prisma / migration / 封板 RC·main；开启真实 Provider / 支付 / 报关或其他外写。
+审计明确：**不得**把本轮 PASS WITH REVISE 解释为实施许可。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -645,8 +700,11 @@ PHASE2_REVIEW_VERDICT = MSG-20261009-10 = PASS WITH REVISE（逐字归档 FULL_C
 PHASE2_FINAL_CLOSURE_PROGRESS = CHANGE 4 ✅ / CHANGE 5 ✅ / CHANGE 6 ✅（三项 P1 全部完成）
 GATE1_AT_FINAL_HEAD = PASS（c5d05fd4：491/491 文件、4956/4956 用例、exit 0；证据 tools/verification/self-repair/phase2-final-closure-gate1-full-regression.json）
 PHASE3_IMPLEMENTATION_PREREQUISITE = TRUSTED_ADAPTER_SOURCE_PROVENANCE_EXECUTION_TIME_RECHECK（如实登记，未实现）
-PHASE3_DESIGN_PROGRESS = DESIGN_DOC_COMPLETED（docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3-DESIGN.md；未实施任何能力）
-NEXT_UNIT = 送 PHASE 3 设计复审（MSG-20261009-12 · PHASE 3 DESIGN REVIEW）
+PHASE3_DESIGN_REVIEW_VERDICT = MSG-20261009-12 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A d95eeb78）
+PHASE3_DESIGN_ACCEPTED = YES_WITH_CONDITIONS
+PHASE3_IMPLEMENTATION_AUTHORIZED = NO（禁止实施适配器/接线/Builder/Judge/自动修复）
+PHASE3_DESIGN_FINAL_R2 = NOT_STARTED（需关闭 CHANGE 1–3 P0 + 补 CHANGE 4–8 P1 + 状态转移表）
+NEXT_UNIT = PHASE 3 设计 FINAL-R2（只读修订）→ 送 MSG-20261009-13
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
