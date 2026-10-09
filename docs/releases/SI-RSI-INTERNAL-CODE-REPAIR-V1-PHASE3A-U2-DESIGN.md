@@ -1,11 +1,11 @@
-# PHASE 3-A · U2 设计 R7（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R8（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-29 = PASS WITH REVISE` → `MSG-20261009-30 = PASS WITH REVISE` → `MSG-20261009-31 = REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R7_READ_ONLY_CHANGES_19_TO_21`。
-> 本文件是 **U2 设计 R7** 送审材料（MSG-20261009-32），**不含任何产品代码改动**。
-> **R7 的修订集中在 §15（排他写入窗口 / 拒绝码收口 / 证据与声明更正）；
-> §1–§14 保留历史；凡冲突者以 §15 为准。**
+> `MSG-20261009-30 = PASS WITH REVISE` → `MSG-20261009-31 = REVISE` → `MSG-20261009-32 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R8_READ_ONLY_CHANGES_22_TO_25`。
+> 本文件是 **U2 设计 R8** 送审材料（MSG-20261009-33），**不含任何产品代码改动**。
+> **R8 的修订集中在 §16（OS 级写入隔离 / 锁生命周期 / 拒绝顺序 / 唯一运行模式）；
+> §1–§15 保留历史；凡冲突者以 §16 为准。**
 
 | 锚点 | 值 |
 | --- | --- |
@@ -16,7 +16,8 @@
 | U2 设计 R4 | `378bfb2a` |
 | U2 设计 R5 | `f115f881` |
 | U2 设计 R6 | `a12a9f36` |
-| U2 设计 R7 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R7 | `f6c6d677` |
+| U2 设计 R8 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -829,3 +830,120 @@ U1 封板 `9ee36837` 不变、`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、
 ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、`SCHEMA_MIGRATION=HOLD`、
 `EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
 本文件仍为**纯设计 R7**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+
+---
+
+## 16. R8 修订（对应 MSG-20261009-32 的 CHANGE 22–25）
+
+### 16.1 CHANGE 22（P0）—— 从「协作锁」升级为「操作系统级写入隔离」
+
+**承认审计方判断**：`O_CREAT|O_EXCL` 锁只提供**协作式互斥**，对**不遵守该协议的进程**毫无约束力；
+它**不能**作为「受保护 Git 基线不被外部修改」的证明。
+
+**R8 设计：隔离前置条件（attested precondition）+ 协作锁降级为辅助**
+
+1. **唯一执行环境**：`CONTROLLED_FIXED_WORKTREE` = 由**独立受限权限**的隔离工作树承担：
+   - 目录与 `.git`（含 `refs/`）归属**专用运行账户**，**其他主体无写权限**（以文件系统 ACL/所有权实现，
+     使用**既有**基础设施，**不新增 Runtime / Scheduler / Controller**）；
+   - 运行期禁止 `git fetch` / `git pull` / `git checkout`，不跟随可变远程分支。
+2. **隔离证明（必须由运行环境提供，U2 不自我宣称）**：U2 进程**无法自证** OS 隔离，因此引入
+   **隔离前置条件** `ISOLATION_ATTESTED`，由运行侧编排（既有运维脚本/CI 步骤）产出并随调用传入：
+   ```ts
+   interface IsolationAttestation {
+     worktreePath: string;          // 受控工作树绝对路径
+     ownerAccount: string;          // 专用运行账户
+     aclEvidenceRef: string;        // ACL/所有权检查证据引用（只读命令输出）
+     writeDeniedProbeRef: string;   // 「非属主写入被拒绝」探针证据引用
+     issuedAt: string;              // 时间戳（UTC 毫秒）
+     maxAgeMs: number;              // 证据有效期上限（由调用方配置，U2 只做判定）
+   }
+   ```
+   判定规则：**缺失 / 过期 / `worktreePath` 与当前运行路径不一致** ⇒ `EXCLUSIVE_WINDOW_UNAVAILABLE`，
+   **零写入**（不进入后续任何检查）。
+3. **`.u2-exclusive.lock` 保留但降级**：仅用于**协作式**互斥（同一运行账户下的多进程防重入），
+   **文档明确标注「非安全关键」**；安全性由第 1、2 条承担。
+4. **U2-20（改写）**：在检查③之后、`COMMIT` 之前由**不遵守锁协议的**对抗进程尝试
+   `git reset` / 修改 `refs` / 写入工作树：
+   - 断言 ①对抗写入**被操作系统权限拒绝**（或对受保护路径不可写）；②**候选行零新增**；
+     ③**无 candidate ID 泄露**（返回体只有结构化 reason）；
+   - **不得**以「对抗进程主动遵守 `.u2-exclusive.lock`」充当证明。
+
+### 16.2 CHANGE 23（P0）—— 锁文件生命周期 vs 工作树洁净性
+
+**承认冲突**：锁文件若位于工作树内且未被跟踪，`git status --porcelain` 立即变脏 ⇒ 正常 INSERT 会被全部拒绝。
+
+**R8 设计**
+
+1. **锁文件移出工作树**：`<worktreePath>.u2-lock`（工作树的**同级兄弟路径**，不在仓库目录内）。
+   因此 `git status --porcelain` **不受锁影响**，产品代码洁净性检查保持原语义。
+2. **禁止**为绕过该问题而忽略整个目录或扩大 `.gitignore` 范围（**不得**掩盖产品文件变更）。
+3. **锁语义（无 TTL 自动接管）**：
+   - 获取：`O_CREAT|O_EXCL` 创建并写入 `{ownerToken, pid, account, startedAt}`；
+   - **TTL 仅作诊断标注，绝不作为删除依据**：即使 `startedAt` 很旧，也**不自动删除**锁；
+   - 释放：仅**属主**可释放，释放前必须校验 `ownerToken` 一致；校验不符 ⇒ 不删除（fail-closed）并报
+     `EXCLUSIVE_WINDOW_UNAVAILABLE`；
+   - 崩溃恢复：进程异常退出后锁**保持存在**；恢复只能由**显式人工/编排步骤**（在确认旧持有者已终止后）
+     执行删除；U2 自身**永不**自动清除不明归属的锁；
+   - 锁损坏（内容不可解析）、归属不明、旧持有者存活状态不可判定 ⇒ 一律 `EXCLUSIVE_WINDOW_UNAVAILABLE`，零写入。
+4. **锁持有/释放状态表**
+
+| 阶段 | 动作 | 失败处置 |
+| --- | --- | --- |
+| T0 前置 | 校验 `ISOLATION_ATTESTED` | 缺失/过期/路径不符 ⇒ `EXCLUSIVE_WINDOW_UNAVAILABLE` |
+| T1 获取锁 | `<worktreePath>.u2-lock` 独占创建 | 已存在/损坏/归属不明 ⇒ `EXCLUSIVE_WINDOW_UNAVAILABLE`（不删除、不接管） |
+| T2 持有 | Git①②③ + 事务 + INSERT | 任一步异常 ⇒ 回滚 + 释放（校验 ownerToken） |
+| T3 提交后 | 释放锁（校验 ownerToken） | ownerToken 不符 ⇒ 不释放并告警（fail-closed） |
+| T4 崩溃恢复 | **人工/编排**确认旧持有者终止后删除 | U2 不自动接管 |
+
+5. **新增 U2-21（负向验收）**：锁不存在时正常路径；锁已存在（活跃/陈旧/损坏/属主不明）四类分别
+   `EXCLUSIVE_WINDOW_UNAVAILABLE` 且零写入；TTL 过期**不触发**任何接管；释放时 ownerToken 不符
+   **不删除**锁；同时断言 `git status --porcelain` 在锁存在期间仍为**干净**。
+
+### 16.3 CHANGE 24（P1）—— 「执行顺序—reason—数据库副作用」对应表
+
+**执行顺序（与代码顺序一致；每步失败即返回唯一 reason）**
+
+| # | 步骤 | 失败 reason | 数据库副作用 |
+| --- | --- | --- | --- |
+| 1 | 顶层输入形态判定（普通对象；symbol 键/访问器属性/代理对象 → 拒绝） | `TOP_LEVEL_INPUT_INVALID` | 无 |
+| 2 | 严格白名单键集合（作用域类额外键） | `EXTRA_FIELD_SCOPE` | 无 |
+| 3 | 严格白名单键集合（U1 事实类额外键） | `EXTRA_FIELD_TRUSTED_FACTS` | 无 |
+| 4 | 严格白名单键集合（`signalKey`/`baselineRef`/未知键） | `EXTRA_FIELD_KEY_OR_UNKNOWN` | 无 |
+| 5 | `incidentId` 缺失 | `MISSING_INCIDENT_ID` | 无 |
+| 6 | `requestRef` 缺失 | `MISSING_REQUEST_REF` | 无 |
+| 7 | 字段类型非 `string` | `INVALID_FIELD_TYPE` | 无 |
+| 8 | 字段为 `null` / 空字符串 | `EMPTY_STRING_FIELD` | 无 |
+| 9 | 隔离前置条件与协作锁 | `EXCLUSIVE_WINDOW_UNAVAILABLE` | 无 |
+| 10 | Git 解析①并建立 `baselineRef` | `BASELINE_UNRESOLVABLE` / `BASELINE_INVALID` | 无 |
+| 11 | 读 `Incident`（kind/status/linkage） | `INCIDENT_NOT_ELIGIBLE` | 无（只读） |
+| 12 | 读关联 `Task` 与真实外键链 | `TASK_LINK_INVALID` | 无（只读） |
+| 13 | 读故障上下文（`faultClass` / `detectedAt`） | `FAULT_CONTEXT_UNAVAILABLE` | 无（只读） |
+| 14 | 构造**权威身份**（候选键 v2 + `candidateDigest` + 关联四元组） | （构造阶段不产出 reason，失败按 10–13） | 无 |
+| 15 | 开启事务；Git 解析②复核 | `BASELINE_CHANGED_DURING_WRITE` | 回滚 |
+| 16 | 查询既有候选并**逐项**比对权威身份 | `INPUT_KEY_MISMATCH` | 回滚（不返回既有 `candidateId`） |
+| 17 | INSERT（唯一冲突 ⇒ 仅当 16 全部一致时复用） | `INPUT_KEY_MISMATCH`（不一致） | 复用或新增 |
+| 18 | Git 解析③（提交前复核） | `BASELINE_CHANGED_DURING_WRITE` | 回滚 |
+| 19 | COMMIT | （异常 ⇒ 回滚） | 提交或零写入 |
+
+> **L10 位置更正**：`INPUT_KEY_MISMATCH` 现在位于**权威身份构造之后**（第 16 步），
+> 不再出现在身份尚未解析的位置；R7 §15.2 的排序被本节取代。
+
+**非普通输入口径**：以 `Reflect.ownKeys` 检测 **symbol 键**；以属性描述符检测**访问器属性**
+（仅接受**数据属性**）；任一步抛出（含 Proxy trap 抛错）⇒ `TOP_LEVEL_INPUT_INVALID`，零写入。
+**如实声明**：进程内无法穷尽防御恶意 Proxy；主要控制仍是「只由内部服务端组合调用」这一可信来源约束。
+
+### 16.4 CHANGE 25（P1）—— 唯一运行模式
+
+- **`CONTROLLED_FIXED_WORKTREE` 是唯一允许的 U2 执行环境**（§16.1）。
+- §14.1 的 `SELF_CONSISTENT_HEAD` / `AUTHORIZED_FIXED_BASELINE` **不再是运行模式**：
+  它们**仅**作为**受控工作树内部**的基线校验策略被保留——即「以当前 HEAD 为基线」是默认策略，
+  「冻结基线」只是可选校验策略，**不构成独立运行模式、也不含任何自动授权**。
+- `auditAnchor = 9ee36837` 仅用于溯源；**任何冻结基线策略不因 R8 通过而自动启用**（需单独审批）。
+
+### 16.5 R8 未变部分
+
+§12 候选键 v2 与 digest、§13.1 接口结构、§13.2 矩阵（U2-1…U2-20 状态不变，另加 U2-21）、
+`builderRef` 固定常量、仅 INSERT、无 UPDATE/DELETE、不新增 schema/migration、不接 Runtime/Queue、
+不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
+`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+本文件仍为**纯设计 R8**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
