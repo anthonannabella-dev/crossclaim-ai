@@ -111,6 +111,40 @@ Incident 跨租户访问或误合并（P0，CHANGE 3）／可重试故障被误�
 > 归档限制说明：`tools/verification/archive-verdict.mjs` 校验的是**归档文本 = 抽取源文件**（机械一致），
 > 抽取本身的正确性由 DOM 容器选择与 FNV1A 指纹共同固定（本次为 `69f7b353`）。
 
+### 1.5 PHASE1-FINAL-R2 进度（MSG-20261009-07 指定的四项修订）
+
+| CHANGE | 级别 | 状态 | 证据（本轮实测） |
+| --- | --- | --- | --- |
+| 1 Incident 并发创建 / 去重原子性 | P0 | **本轮完成** | 见下 |
+| 2 脱敏边界补强（对抗测试 + 结构化白名单） | P0 | NOT_STARTED | — |
+| 3 Incident 生命周期与租户边界 | P0 | NOT_STARTED | — |
+| 4 分类安全重试语义 | P1 | NOT_STARTED | — |
+
+**CHANGE 1 实现口径**（`apps/api/src/services/self-repair/fault-incident-intake.ts`）：
+
+- 并发路径不再「先 `findUnique` 再 `create`」；把**创建 / 聚合 / 终态保护 / 容器隔离**压进**一条**
+  `INSERT ... ON CONFLICT ("dedupeKey") DO UPDATE ... WHERE kind/status` 语句（数据库级原子 upsert）。
+- 冲突分支带前置条件 ⇒ **终态行与外来容器在 SQL 层就不可写**；返回 0 行时只做**只读**定位
+  （`KIND_MISMATCH` / `INCIDENT_NOT_OPEN`）或重试，不盲目重放。
+- 「本次是否新建」由「返回行 id == 本请求预生成 id」判定（不依赖 `xmax` 等实现细节）。
+- 生命周期契约（`OPEN → DIAGNOSED`）在**接线时** fail-fast 校验，不在并发路径上悄悄写坏数据。
+
+**CHANGE 1 验收（真实 PostgreSQL，隔离库 `crossclaim_p3r2_iso`）**：
+
+| 用例 | 结果 |
+| --- | --- |
+| DB-P2 **20 路并发**同一故障 | **1 行 / 计数=20 / 恰好一次新建**，20 路全部被接纳（无丢接纳、无重复行） |
+| DB-P7 混合创建-更新并发（12 路旧键 + 8 路新键） | 旧键计数 13（1 种子+12）**无一次判新建**；新键 8 且恰好一次新建；共 2 行、诊断载荷未串写 |
+| DB-P8 **CLOSED 后 10 路并发** | 全部 `INCIDENT_NOT_OPEN`；状态仍 `CLOSED`、计数仍 1、未另建新行 |
+| DB-P9 **外来容器（`CUSTOMER_GOAL_QUEUE`）占位 + 10 路并发** | 全部 `KIND_MISMATCH`；该行 id/kind/status/riskClass/sourceRefs **零改动** |
+
+| 门禁 | 结果 |
+| --- | --- |
+| 纯函数分类 | 29/29 PASS |
+| 真实 PostgreSQL 套件 | **9/9 PASS** |
+| 定向回归（新增 2 + schema-contract + phase1-authorization + phase1-durable-queue） | **5 文件 / 61 tests 全绿** |
+| `apps/api tsc --noEmit` | **0 error** |
+
 ## 2. 阶段计划与当前状态
 
 | PHASE | 内容 | 状态 |
@@ -152,7 +186,7 @@ INDEPENDENT_AUDIT = MSG-20261009-07 = PASS WITH REVISE（逐字归档 FULL_COPY_
 PHASE0_CLOSED = YES
 PHASE1_CLOSED = NO（待 PHASE1-FINAL-R2：CHANGE 1–4 后复审）
 PHASE2_IMPLEMENTATION_AUTHORIZED = NO
-NEXT_UNIT = PHASE1-FINAL-R2（CHANGE 1 P0 → CHANGE 2 P0 → CHANGE 3 P0 → CHANGE 4 P1 → 复审）
+NEXT_UNIT = PHASE1-FINAL-R2（CHANGE 1 P0 ✅ 完成 → NEXT = CHANGE 2 P0 脱敏对抗测试 + 结构化字段白名单 → CHANGE 3 → CHANGE 4 → 复审）
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```

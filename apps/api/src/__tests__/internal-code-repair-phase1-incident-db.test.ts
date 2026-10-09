@@ -3,7 +3,10 @@
  * ---------------------------------------------------------------
  * 真实验收：
  *   · 同因多次故障 ⇒ **1 行** Incident + occurrenceCount 精确聚合（真实 PG 原子 UPDATE）；
- *   · 并发（6 路同时） ⇒ 仍然 **1 行**、计数无丢失（行锁 + 唯一约束收敛）；
+ *   · 并发（**≥20 路同时**，MSG-20261009-07 CHANGE 1 要求） ⇒ 仍然 **1 行**、计数无丢失、
+ *     且**恰好一次**被判定为「新建」（数据库级原子 upsert：唯一约束 + 冲突分支前置条件）；
+ *   · 混合创建/更新并发 ⇒ 新键各建一行、旧键仅聚合，互不串扰；
+ *   · 终态 / 外来容器在**并发**下也不被写（WHERE 前置条件 ⇒ 0 行，只读定位原因）；
  *   · 容器隔离 ⇒ 同 dedupeKey 已被别人（`CUSTOMER_GOAL_QUEUE`）占用时**拒绝写入**，绝不劫持；
  *   · 终态不复活 ⇒ CLOSED 后不静默重开、计数不涨（fail-closed 交回调用方）；
  *   · 权限隔离 ⇒ 修复平面 Incident 下的任务**无法被客户执行面领取**（持久化 BLOCKED、零租约）。
@@ -96,20 +99,99 @@ describe(`PHASE 1 故障 Incident 持久化（真实 PG：${testDatabaseMarker()
     expect(await prisma.autonomyLease.count()).toBe(0);
   });
 
-  it('DB-P2 并发安全：6 路同时记录同一故障 ⇒ 仍然 1 行且计数精确为 6', async () => {
+  it('DB-P2 并发安全（CHANGE 1）：20 路同时记录同一故障 ⇒ 仍然 1 行、计数精确为 20、恰好一次新建', async () => {
     const observation = faultObservation({ errorName: 'TypeError', message: 'undefined is not a function' });
     const dedupeKey = dedupeKeyOf(observation);
 
     const results = await Promise.all(
-      Array.from({ length: 6 }, () => intake().record(observation)),
+      Array.from({ length: 20 }, () => intake().record(observation)),
     );
-    expect(results.every((result) => result.ok)).toBe(true);
-    expect(results.filter((result) => result.ok && result.created).length).toBeGreaterThanOrEqual(1);
+    // 20 路全部被接纳（不得因唯一约束冲突/重试预算耗尽而丢接纳）
+    expect(results.filter((result) => result.ok).length).toBe(20);
+    // 恰好一次「新建」赢家（其余全是聚合）
+    expect(results.filter((result) => result.ok && result.created).length).toBe(1);
+    const incidentIds = new Set(results.filter((r) => r.ok).map((r) => (r.ok ? r.incidentId : '')));
+    expect(incidentIds.size).toBe(1);
 
     const rows = await prisma.autonomyIncident.findMany({ where: { dedupeKey } });
     expect(rows).toHaveLength(1);
-    expect(refsOf(rows[0]!.sourceRefs).occurrenceCount).toBe(6);
+    expect(refsOf(rows[0]!.sourceRefs).occurrenceCount).toBe(20);
+    expect(rows[0]!.status).toBe('DIAGNOSED');
+    expect(rows[0]!.kind).toBe(INTERNAL_FAULT_INCIDENT_KIND);
     expect(await prisma.autonomyTask.count()).toBe(0);
+    expect(await prisma.autonomyLease.count()).toBe(0);
+  });
+
+  it('DB-P7 混合创建/更新并发（CHANGE 1）：旧键只聚合、新键各建一行，互不串扰', async () => {
+    const known = faultObservation({ errorName: 'AdapterMappingError', message: 'legacy key' });
+    const fresh = faultObservation({ errorName: 'TypeError', message: 'fresh key' });
+    const knownKey = dedupeKeyOf(known);
+    const freshKey = dedupeKeyOf(fresh);
+    expect(knownKey).not.toBe(freshKey);
+
+    const seeded = await intake().record(known);
+    expect(seeded.ok).toBe(true);
+
+    const results = await Promise.all([
+      ...Array.from({ length: 12 }, () => intake().record(known)),
+      ...Array.from({ length: 8 }, () => intake().record(fresh)),
+    ]);
+    expect(results.filter((r) => r.ok).length).toBe(20);
+    // 旧键：没有任何一次被判为新建；新键：恰好一次新建
+    expect(results.filter((r) => r.ok && r.created).map((r) => (r.ok ? r.incidentId : '')).length).toBe(1);
+
+    const knownRow = await prisma.autonomyIncident.findUniqueOrThrow({ where: { dedupeKey: knownKey } });
+    const freshRow = await prisma.autonomyIncident.findUniqueOrThrow({ where: { dedupeKey: freshKey } });
+    expect(refsOf(knownRow.sourceRefs).occurrenceCount).toBe(13); // 1（种子）+ 12
+    expect(refsOf(freshRow.sourceRefs).occurrenceCount).toBe(8);
+    expect(await prisma.autonomyIncident.count()).toBe(2);
+    // 诊断载荷按各自故障归档（未串写）
+    expect(refsOf(knownRow.sourceRefs).faultClass).toBe('PARSER_FAILURE');
+    expect(refsOf(freshRow.sourceRefs).faultClass).toBe('RUNTIME_EXCEPTION');
+  });
+
+  it('DB-P8 终态保护并发（CHANGE 1）：CLOSED 后 10 路并发 ⇒ 全部拒绝、状态与计数不变', async () => {
+    const observation = faultObservation();
+    const dedupeKey = dedupeKeyOf(observation);
+    const accepted = await intake().record(observation);
+    expect(accepted.ok).toBe(true);
+    await prisma.autonomyIncident.update({ where: { dedupeKey }, data: { status: 'CLOSED' } });
+
+    const results = await Promise.all(Array.from({ length: 10 }, () => intake().record(observation)));
+    expect(results.filter((r) => r.ok).length).toBe(0);
+    expect(results.every((r) => !r.ok && r.reason === 'INCIDENT_NOT_OPEN')).toBe(true);
+
+    const row = await prisma.autonomyIncident.findUniqueOrThrow({ where: { dedupeKey } });
+    expect(row.status).toBe('CLOSED');
+    expect(refsOf(row.sourceRefs).occurrenceCount).toBe(1); // 未被复活、未被加计数
+    expect(await prisma.autonomyIncident.count()).toBe(1); // 也未另建新行
+  });
+
+  it('DB-P9 外来容器并发（CHANGE 1）：客户执行面占位时 10 路并发全部 KIND_MISMATCH 且不改动该行', async () => {
+    const observation = faultObservation();
+    const dedupeKey = dedupeKeyOf(observation);
+    const foreignRefs = [{ organizationId: 'org-customer-2' }];
+    const foreign = await prisma.autonomyIncident.create({
+      data: {
+        kind: CUSTOMER_GOAL_QUEUE_INCIDENT_KIND,
+        dedupeKey,
+        status: 'OPEN',
+        riskClass: 'LOW',
+        sourceRefs: foreignRefs,
+        detectedAt: T0,
+      },
+    });
+
+    const results = await Promise.all(Array.from({ length: 10 }, () => intake().record(observation)));
+    expect(results.filter((r) => r.ok).length).toBe(0);
+    expect(results.every((r) => !r.ok && r.reason === 'KIND_MISMATCH')).toBe(true);
+
+    const row = await prisma.autonomyIncident.findUniqueOrThrow({ where: { dedupeKey } });
+    expect(row.id).toBe(foreign.id);
+    expect(row.kind).toBe(CUSTOMER_GOAL_QUEUE_INCIDENT_KIND);
+    expect(row.status).toBe('OPEN');
+    expect(row.riskClass).toBe('LOW');
+    expect(row.sourceRefs).toEqual(foreignRefs);
   });
 
   it('DB-P3 容器隔离：同名 dedupeKey 已被客户执行面占用 ⇒ 拒绝写入（不劫持、不改动）', async () => {
