@@ -1239,3 +1239,39 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.19b MSG-20261009-19 投递状态（本 tick 未送达）+ 通道问题如实记录
+
+**已完成并推送**：R5 代码 `e4c2f27d`（CHANGE 27 残留项 `SCOPE_DIMENSION_NOT_DECLARED`、CHANGE 31 七张表内容级 count:md5 快照）、
+证据与送审包 `fac55b02`（`phase3a-u1-final-r5-evidence.json` 147,846 bytes，含 `u1FileContents` 与 `fingerprintMethod`；
+13 个分片文件与 manifest）。本机实测：端口级 53/53 + 真实 PG 8/8 = 61/61、`api tsc` 0。
+
+**MSG-20261009-19 尚未送达**。失败经过（如实记录，不掩饰）：
+
+1. 为绕开「网页评审读不到私有仓库」，本轮改用「OS 剪贴板 → 浏览器 Ctrl+V」把完整文件内容送入输入框。
+2. 实测发现：本机自动化下**浏览器剪贴板与 OS 剪贴板不是同一个**（`tab.clipboard` 只反映页面内复制/粘贴，
+   PowerShell `Set-Clipboard` 的内容不会被页面 Ctrl+V 取到）。因此 Ctrl+V 粘入的是**上一条**内容。
+3. 后果：新建的一个会话（https://chatgpt.com/c/6ac85f9b-846c-83ec-a88c... 见会话列表）中
+   被误发了一条 **MSG-20261009-18 内联材料副本**；该副本与原材料一致，无新增或伪造内容，
+   但属于重复投递，**不能作为 MSG-19 的送审**。MSG-19 的主送审文本并未送出（输入框校验 `HAS_M1=false`）。
+
+**下一 tick 的投递方案（不再使用 OS 剪贴板）**：
+
+- 用 `tab.paste(index, text, {format:'text'})`（已知可靠：按 Playwright `insertText` 注入，不经剪贴板），
+  JS 字面量中对两类字符做**可逆转义**而非替换：反引号 → `\``、`${` → `\${`，从而保持字节一致。
+- 分 7 条消息投递（M1 说明；M2 适配器全文；M3 端口测试全文；M4 DB 测试全文；M5/M6 evidence.json 核心视图；M7 原始 vitest 输出）。
+- 为控制每次工具调用的上下文开销与输入长度，必要时把 M2/M4 再按行分片（每片 ≤12k 字符，标注 part i/N）。
+
+**需要用户决定（可选项，不阻塞）**：若希望大幅减少往返，可让评审方获得该分支的**只读访问**
+（例如把分支推到可被其读取的位置或提供只读快照），否则将继续按上述「正文字节级内联」方式推进。
+
+```text
+MSG19_DELIVERY = NOT_SENT（本 tick）
+MSG19_STRAY_DUPLICATE = 1 条（新会话，内容 = MSG-20261009-18 内联材料副本；已在会话列表中可辨认）
+MSG19_TRANSPORT_FIX = tab.paste + 模板字面量可逆转义（反引号 / ${）
+R5_CODE_COMMIT = e4c2f27d（已 push）
+R5_DOCS_EVIDENCE_COMMIT = fac55b02（已 push）
+NEXT_UNIT = 继续投递 MSG-20261009-19（M1–M7），随后等待裁决
+```
