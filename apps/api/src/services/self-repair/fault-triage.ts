@@ -139,6 +139,15 @@ export const TRIAGE_TRUSTED_FACT_CONTRACT = {
   requirements: TRUSTED_FACT_SOURCE_REQUIREMENTS,
   /** 分流结果是**快照**：未来运行时不得无条件信任，必须自行复核。 */
   snapshotNotAuthorization: true,
+  /**
+   * MSG-20261009-10 / CHANGE 5 —— **声明不是运行时授权**：
+   * 来源声明只约束解析器**配置**；PHASE 3 必须通过受信服务端适配器取得事实，并在执行前**重新读取与校验**；
+   * 禁止以声明对象、登记快照或模型输出代替授权。
+   */
+  declarationIsNotAuthorization: true,
+  /** MSG-20261009-10 / CHANGE 6 —— 本层**没有**可验证的运行时来源真实性隔离（如实登记，不虚报）。 */
+  runtimeSourceIsolationImplemented: false,
+  phase3ImplementationPrerequisite: 'TRUSTED_ADAPTER_SOURCE_PROVENANCE_EXECUTION_TIME_RECHECK',
 } as const;
 
 /** PHASE 1 允许自动恢复的确定性可重试类别（与分类模块的白名单一致）。 */

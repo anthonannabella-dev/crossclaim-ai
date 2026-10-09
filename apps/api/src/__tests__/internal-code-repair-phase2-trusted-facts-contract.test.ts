@@ -128,4 +128,59 @@ describe('PHASE 2 / CHANGE 3 可信事实来源契约', () => {
       expect(source.includes('console.')).toBe(false);
     }
   });
+
+  /**
+   * MSG-20261009-10 / CHANGE 5 —— **声明不是运行时授权**（强制条款）。
+   */
+  it('CHANGE 5：契约明确「声明只约束解析器配置；执行前必须重新读取与校验」', () => {
+    expect(TRIAGE_TRUSTED_FACT_CONTRACT).toMatchObject({
+      declarationIsNotAuthorization: true,
+      snapshotNotAuthorization: true,
+    });
+    const doc = readFileSync(
+      'D:/crossclaim-ai/docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE2-TRUSTED-FACTS-CONTRACT.md',
+      'utf8',
+    );
+    expect(doc).toContain('来源声明只约束解析器');
+    expect(doc).toContain('执行前重新读取与校验');
+    expect(doc).toContain('PHASE3_IMPLEMENTATION_PREREQUISITE');
+  });
+
+  /**
+   * MSG-20261009-10 / CHANGE 6 —— 来源伪装负向断言（契约测试 + 静态边界审计）。
+   */
+  describe('CHANGE 6 来源伪装负向断言', () => {
+    it('形态变体（大小写/空白/前缀后缀伪装）一律判为违规', () => {
+      for (const bogus of [
+        'trusted_persisted_identity',
+        'TRUSTED_PERSISTED_IDENTITY ',
+        'TRUSTED_PERSISTED_IDENTITY_FROM_CLIENT',
+        'SERVER_AUTHORIZATION_STATE_VIA_MODEL',
+      ]) {
+        const result = assertTrustedFactSources({
+          ...VALID_SOURCES,
+          organizationIdResolved: bogus as TrustedFactSourceDeclaration['organizationIdResolved'],
+        });
+        expect(result.ok).toBe(false);
+      }
+    });
+
+    it('静态边界：可信事实**绝不**从载荷/sourceRefs 合成（只来自注入的解析器）', () => {
+      const source = readFileSync(path.resolve(__dirname, '../services/self-repair/fault-triage-sweep.ts'), 'utf8');
+      // 三个事实键在扫描模块中只应各出现一次（fail-closed 默认值），不存在从 payload 反推事实的代码路径
+      for (const fact of ['organizationIdResolved', 'authorizationActive', 'operationRecheck'] as const) {
+        expect(source.split(`${fact}:`).length - 1).toBe(1);
+      }
+      // 扫描模块不 import 分流白名单解析器，也不读取 sourceRefs 字段来构造事实
+      expect(source.includes('parsePersistedFaultPayload')).toBe(false);
+      expect(/sourceRefs[^\n]{0,40}=\s*\{/.test(source)).toBe(false);
+    });
+
+    it('如实登记：本层没有运行时来源真实性隔离，属 PHASE 3 实现前置条件', () => {
+      expect(TRIAGE_TRUSTED_FACT_CONTRACT.runtimeSourceIsolationImplemented).toBe(false);
+      expect(TRIAGE_TRUSTED_FACT_CONTRACT.phase3ImplementationPrerequisite).toBe(
+        'TRUSTED_ADAPTER_SOURCE_PROVENANCE_EXECUTION_TIME_RECHECK',
+      );
+    });
+  });
 });

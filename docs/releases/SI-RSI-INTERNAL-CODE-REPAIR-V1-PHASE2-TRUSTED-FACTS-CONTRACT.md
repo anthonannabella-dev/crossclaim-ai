@@ -53,3 +53,28 @@
 | 构造期校验 | `defineTrustedFactsResolver` 违规声明抛 `TrustedFactSourceContractError`；合法声明可正常解析 |
 | 源码级边界 | 分流/扫描源码不出现 `req.body|query|params`、`request.body|query|params`、`modelOutput`，且零日志输出 |
 | 回归 | PHASE 2 四套件 **56/56 PASS**（含真实 PostgreSQL 17 用例）；`apps/api tsc --noEmit` **0 error** |
+
+## 6. 强制条款（MSG-20261009-10 · CHANGE 5 / CHANGE 6）
+
+### 6.1 声明不是运行时授权（CHANGE 5）
+
+> **来源声明只约束解析器配置。** PHASE 3 必须通过**受信服务端适配器**取得可信事实，并在**执行前重新读取与校验**；
+> 禁止以声明对象、登记快照或模型输出代替授权。
+
+- 注册到代码中的常量：`TRIAGE_TRUSTED_FACT_CONTRACT.declarationIsNotAuthorization = true`。
+- `triageDecision = AUTO_RECOVER_VIA_RUNTIME` 只是**历史时点的候选判断**；执行前必须重新验证组织身份、授权有效性、
+  操作上下文与当前故障状态（审计 MSG-20261009-10 原文约束）。
+
+### 6.2 来源伪装负向断言与已登记前置条件（CHANGE 6）
+
+- 契约测试断言：来源种类的**形态变体**（大小写、首尾空白、前后缀伪装）一律判为违规，不可能仅靠字符串相似通过校验。
+- **如实登记的限制**：字符串级声明校验**不能证明来源真实性** —— 若未来适配器把客户端值包装成合法声明，
+  本层无法阻止信任提升。因此本层**没有**可验证的运行时来源隔离：
+
+  ```
+  PHASE3_IMPLEMENTATION_PREREQUISITE = TRUSTED_ADAPTER_SOURCE_PROVENANCE_EXECUTION_TIME_RECHECK
+  TRIAGE_TRUSTED_FACT_CONTRACT.runtimeSourceIsolationImplemented = false
+  ```
+
+  该前置条件必须在 PHASE 3 实现阶段关闭（受信适配器来源证明 + 执行时重新读取与校验），
+  在此之前**不得**据此批准任何自动执行能力。

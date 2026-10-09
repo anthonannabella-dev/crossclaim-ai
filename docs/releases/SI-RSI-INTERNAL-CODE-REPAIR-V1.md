@@ -460,6 +460,16 @@ PHASE 3 自动代码修复的错误传播（P0 未来）。
 **暂不授权**：创建或启动实际修复代理；自动修改源码 / 提交 / 合并 / 部署；自动执行 A 路径登记候选；
 自动调用真实 Provider / 支付 / 报关或其他外部写；扩展第二套 Runtime / Scheduler / Controller；修改封板 RC / main。
 
+**FINAL CLOSURE 进度（本轮）**：
+
+| CHANGE | 状态 | 证据 |
+| --- | --- | --- |
+| 5 声明不是运行时授权（强制条款） | **本轮完成** | 契约常量 `declarationIsNotAuthorization = true`；契约文档 §6.1 写入强制条款（**来源声明只约束解析器**配置；PHASE 3 必须经**受信服务端适配器**取事实并在**执行前重新读取与校验**；禁止以声明对象、登记快照或模型输出代替授权）；测试断言文档含该条款原文 |
+| 6 来源伪装负向断言 | **本轮完成（含如实登记前置条件）** | 形态变体（大小写 / 首尾空白 / 前后缀伪装）一律判违规；静态边界断言：扫描模块中三个事实键**各只出现一次**（仅 fail-closed 默认值），**绝不存在**从载荷 / sourceRefs 反推事实的代码路径；并**如实登记** `runtimeSourceIsolationImplemented = false`、`PHASE3_IMPLEMENTATION_PREREQUISITE = TRUSTED_ADAPTER_SOURCE_PROVENANCE_EXECUTION_TIME_RECHECK`（字符串级声明不能证明来源真实性，故本层不虚报已具备运行时隔离） |
+| 4 当前 HEAD 全量回归 | **PENDING（下一单元）** | 将在一个**包含 CHANGE 5/6 的最终候选 HEAD** 上运行一次完整 API 回归（而非分别跑两次），保存 SHA / 命令 / 退出码 / 统计 / 失败详情 / 证据摘要 |
+
+门禁：PHASE 2 四套件 **60/60 PASS**；`apps/api tsc --noEmit` **0 error**。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -554,8 +564,9 @@ PHASE2_CLOSED = NO（待 CHANGE 4–6 后最终关闭复审 MSG-20261009-11）
 PHASE3_DESIGN_AUTHORIZED = YES_READ_ONLY（仅只读方案设计；实现授权 NO）
 PHASE2_FINAL_R2_PROGRESS = CHANGE 1 ✅ + CHANGE 2 ✅ + CHANGE 3 ✅（三项 P1 修订全部完成）
 PHASE2_REVIEW_VERDICT = MSG-20261009-10 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A 83707404）
-PHASE2_FINAL_CLOSURE_PROGRESS = CHANGE 4/5/6 = NOT_STARTED
-NEXT_UNIT = PHASE 2 FINAL CLOSURE：CHANGE 4（当前 HEAD 全量回归，不得用旧 HEAD 替代）→ CHANGE 5（声明非授权条款）→ CHANGE 6（来源伪装负向断言 / 如缺失则如实登记 PHASE3_IMPLEMENTATION_PREREQUISITE）→ 送 MSG-20261009-11
+PHASE2_FINAL_CLOSURE_PROGRESS = CHANGE 5 ✅ / CHANGE 6 ✅ → NEXT = CHANGE 4（最终候选 HEAD 全量回归，不得用旧 HEAD 替代）
+PHASE3_IMPLEMENTATION_PREREQUISITE = TRUSTED_ADAPTER_SOURCE_PROVENANCE_EXECUTION_TIME_RECHECK（如实登记，未实现）
+NEXT_UNIT = PHASE 2 FINAL CLOSURE：CHANGE 4（在最终候选 HEAD 上跑全量 API 回归并留证）→ 送 MSG-20261009-11
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
