@@ -1,0 +1,41 @@
+{
+  "gate": "GATE-1",
+  "issuedBy": "MSG-20261009-08",
+  "scope": "INTERNAL CODE REPAIR V1 / PHASE 2 集成验收前置门禁（全量 API 回归）",
+  "reviewedHead": "3acfb195bc15e4605cdd11f40c9dad32f3523dec",
+  "reviewedHeadShort": "3acfb195",
+  "branch": "feat/si-rsi-internal-code-repair-v1",
+  "command": "vitest run（apps/api，全量）",
+  "database": "隔离库 crossclaim_p3r2_iso（本任务自建；未触碰共享开发库）",
+  "databaseMarker": "127.0.0.1:55432/crossclaim_p3r2_iso",
+  "result": {
+    "testFilesPassed": 490,
+    "testFilesFailed": 0,
+    "testsPassed": 4926,
+    "testsFailed": 0,
+    "exitCode": 0,
+    "durationSeconds": 1582.53
+  },
+  "log": {
+    "name": "full-regression-2026-10-09T00-44-09-622Z.log",
+    "bytes": 171834,
+    "sha256_16": "ca7ea00c76aa66cc",
+    "location": "work/self-repair/logs/（工作区，非仓库；未入库以免污染仓库）"
+  },
+  "falsePositiveNote": "汇总脚本按关键字统计的 4 条 FAIL 命中全部是**测试名称**中含 FAILED/fail-closed 的正常通过用例（行首均为 ✓），非真实失败；真实失败数为 0。",
+  "knownHistoricalDebt": "历史登记的 P2E-DB5 隔离债与 broker authorization hook 超时债在本轮全量运行中**未复现**（0 失败），但仍不视为已关闭（单次通过不足以关闭历史测试债）。",
+  "notVerified": [
+    "Linux/systemd 实机验收",
+    "真实 Provider / 真实模型联调（REAL_MODEL_INTEGRATION = HOLD）",
+    "生产环境任何行为",
+    "GitHub Actions（本机与 CI 为两个环境；本记录仅代表本机隔离库证据）"
+  ],
+  "boundaries": {
+    "modifiedReleaseBranch": false,
+    "modifiedMain": false,
+    "secondRuntimeCreated": false,
+    "prismaSchemaOrMigrationChanged": false,
+    "realProviderWrite": false,
+    "productionDeployment": false
+  }
+}

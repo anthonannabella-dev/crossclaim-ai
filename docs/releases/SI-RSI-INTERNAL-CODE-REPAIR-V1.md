@@ -273,6 +273,20 @@ PHASE 1 + PHASE 2 合并定向回归 **7 文件 / 123 tests 全绿**；`apps/api
 DB-S2 未注入 ⇒ 全部 BLOCK（`TENANT_CONTEXT_NOT_TRUSTED`）；DB-S3 只扫 `DIAGNOSED`（`OPEN`/`CLOSED` 不进入）；
 DB-S4 登记仅固定三项且值为稳定码 / ISO 时间；DB-S5 静态证据。PHASE 2 三套件 **30/30 PASS**。
 
+### 2.2 GATE-1（MSG-20261009-08 指定门禁）：全量 API 回归 = **PASS**
+
+| 项目 | 结果 |
+| --- | --- |
+| `REVIEWED_HEAD` | `3acfb195`（本轮 PHASE 2 扫描提交） |
+| 环境 | 隔离库 `crossclaim_p3r2_iso`（本任务自建；未触碰共享开发库） |
+| 命令 | `vitest run`（apps/api 全量） |
+| 结果 | **490 / 490 测试文件通过、4926 / 4926 用例通过、exit 0**，耗时 1582.53s |
+| 证据文件 | `tools/verification/self-repair/phase2-gate1-full-regression.json`（含日志 SHA256 前 16 位 `ca7ea00c76aa66cc`、字节数 171834） |
+
+- 汇总脚本按关键字统计出的 4 条 “FAIL” 命中**全部是测试名称**中含 `FAILED` / `fail-closed` 的正常通过用例（行首均为 ✓），**真实失败数为 0**。
+- 历史登记的 P2E-DB5 隔离债与 broker authorization hook 超时债在本轮全量运行中**未复现**；仍不视为关闭（单次通过不足以关闭历史测试债）。
+- 如实声明未验证项：Linux/systemd 实机、真实 Provider/模型联调（`REAL_MODEL_INTEGRATION = HOLD`）、生产环境、GitHub Actions（本记录仅代表**本机隔离库**证据）。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -359,7 +373,8 @@ PHASE1_REVIEW_VERDICT = MSG-20261009-08 = PASS WITH REVISE（逐字归档 FULL_C
 **全过程门禁**：纯函数 61 用例 + 真实 PostgreSQL 14 用例（隔离库 `crossclaim_p3r2_iso`）；
 定向回归 5 文件 / **98 tests 全绿**；`apps/api tsc --noEmit` **0 error**；未跑全量回归（如实登记）。
 
-PHASE2_PROGRESS = TRIAGE_MODULE_IMPLEMENTED + SWEEP_IMPLEMENTED（只读扫描 + 只登记三项；A 路径仅为候选登记，零执行）
+GATE1_FULL_REGRESSION = PASS（490/490 文件、4926/4926 用例、exit 0；隔离库；证据 tools/verification/self-repair/phase2-gate1-full-regression.json）
+PHASE2_PROGRESS = TRIAGE_MODULE_IMPLEMENTED + SWEEP_IMPLEMENTED + GATE1_PASS（A 路径仅为候选登记，零执行）
 NEXT_UNIT = PHASE 2 收口（接线到既有运行时入口的**只读候选登记**）→ GATE-1 全量 API 回归 → PHASE 2 独立复审
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
