@@ -177273,3 +177273,240 @@ PRODUCTION=NOT_VERIFIED
 
 最终授权边界： 允许 CODEX 继续完成 R12 的 CHANGE 40–43 只读设计修订，并在 MSG-20261009-37 重新送审。在两个 P0 问题通过独立复核前，不开放 U2 的数据库写入实施权限。
 ```
+
+### [MSG-20261009-37] U2 设计 R12 = **REVISE**（CHANGE 42 首次 **PASS**；CHANGE 43 条件通过；两个 P0 未关，新增 CHANGE 44–46）—— 十项：`CHANGE42_STATE_REPORT_SEMANTICS_FIXED=PASS`（零行冲突复用 insertAttempted=true 的区分、reconciled 不再代表有结论、未知提交优先级明确；实施时加组合测试但不再作为设计阻断项）、`CHANGE43_DIGEST_TEST_VECTOR_FIXED=PASS_WITH_REVISE·P1`、`CHANGE40_LIVE_EXCLUSIVITY_FIXED=REVISE·P0`、`CHANGE41_PRECISE_COMMIT_ATTRIBUTION_FIXED=REVISE·P0`、`U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE`、`U2_IMPLEMENTATION_BOUNDARY=PASS`、`SCOPE_HONESTY=PASS`、`U2_DESIGN_APPROVED=NO`、`U2_IMPLEMENTATION_AUTHORIZED=NO`；独立核验：`R11→R12 = 2 提交/3 文件`、blob SHA `fadd6878022da70fc48bf991e3893c88d3001d68` **与送审一致**、无 `apps/api` 变更、§20 四项修订均已入库；**两个 P0 理由**：① **CHANGE 40 锁验证时序矛盾**——我在 T0 让外部探针尝试同一把锁，只能证明「探测时有其他主体持锁」，**不能**证明「U2 在 T1 已持锁」；且未定义 T1 复用时如何验证 FD 属于当前实例、也未定义 flock 的 FD 继承/复制/关闭行为（子进程继承会致锁意外持续）；② **CHANGE 41 归因前提不是全局保证**——「U2 路径不 UPDATE/DELETE」只约束我的模块，**其他模块/管理员/DB 作业**仍可改删候选行，因此未知 COMMIT 后仅凭返回过的 id 重读到匹配行仍需**全局不可变性**前提；另须覆盖 `RETURNING` 得一行但事务**明确 ROLLBACK** 的场景（避免把「执行过 INSERT」当「已提交」）；**新增 REQUIRED_CHANGES**：**CHANGE 44（P0）** 时序改为 T0（受控启动身份/隔离前提/配置证明）→ T1（当前实例取锁，记录持锁 FD、实例身份、锁对象标识）→ **T1A（独立探针用独立 FD 非阻塞取同一锁并确认失败，且验证锁对象身份与 U2 持锁事实一致）** → T2（仅 T1 与 T1A 均成功且证明仍有效才进入事务）→ T3（事务/对账/释放，释放失败须保留异常事实不得声称正常释放）；明确 flock FD 继承/复制/关闭语义；负例须覆盖「探针失败但 U2 实际未持锁」「探针与 U2 锁定不同 inode」「验证后锁被提前释放」三类均不得进入写入；**CHANGE 45（P0）** 将归因前提升级为**全局不可变性保证**：给出**全局写入者清单**（不止 U2）、核对 `AutonomyCandidate.id` 的生成与不复用机制（实际 schema/约束/写入路径）、`returnedCandidateId` 须在 COMMIT 前可靠存入**事务外**执行上下文（且它本身不是已提交证明）、对账须在权威主库且满足前提后进行；无法证明全局不可变性 ⇒ **只能 UNKNOWN**；并覆盖 RETURNING 得行后明确 ROLLBACK 的场景；**CHANGE 46（P1）** refs 摘要字节规范：`git rev-parse` 只去除命令行尾换行（不得损伤路径名有效字符）、非 ASCII refname 的**码序 vs 字节序**须固定排序算法且**区域设置不影响输出**、for-each-ref 输出/退出码/路径解析失败须统一 fail-closed、`signerAuthRef` 须明确**验证时机、有效期与防重放**；本轮 34 字节向量与文档 SHA-256 仍属**送审方报告**、未记为独立哈希验证；NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R13_READ_ONLY_CHANGES_44_TO_46 / NEXT_AUDIT=MSG-20261009-38（须附修订后 §21、正反例验收矩阵、R12→R13 Git 差异）；reviewed ref c9b167c7
+
+```text
+MSG-20261009-37｜U2 设计 R12 独立审计裁决
+FINAL VERDICT：REVISE
+审计对象： CrossClaim AI · SI/RSI INTERNAL CODE REPAIR V1
+审计范围： PHASE 3-A · U2 设计 R12 · CHANGE 40–43
+审计基准： c9b167c7d49a579cf35b74e6aee230c6c9c707c7
+
+本轮已经通过 GitHub 连接器读取 R12 设计文档和提交差异，确认：
+
+R11 → R12：2 个提交、3 个文件变更。
+
+U2 设计文档 Git blob SHA：fadd6878022da70fc48bf991e3893c88d3001d68，与送审一致。
+
+差异清单不包含 apps/api 产品代码，支持本轮产品代码零变更的结论。
+
+R12 的四项修订均已写入 §20，核心修复方向合理。
+
+总体判断：R12 比 R11 更严格，但还不能批准 U2 实施。
+
+主要原因不是缺少真实 PostgreSQL 或 Linux 运行测试——纯设计阶段允许这些保持 NOT_VERIFIED——而是当前仍有两个影响安全性的 P0 设计问题：锁验证时序不一致，以及提交归因前提未形成全局可执行约束。
+
+一、十项审计结果
+
+审计项目
+
+裁决
+
+1. CHANGE40_LIVE_EXCLUSIVITY_FIXED
+
+REVISE（P0）
+
+2. CHANGE41_PRECISE_COMMIT_ATTRIBUTION_FIXED
+
+REVISE（P0）
+
+3. CHANGE42_STATE_REPORT_SEMANTICS_FIXED
+
+PASS
+
+4. CHANGE43_DIGEST_TEST_VECTOR_FIXED
+
+PASS WITH REVISE（P1）
+
+5. U2_INPUT_OUTPUT_CONTRACT
+
+PASS WITH REVISE
+
+6. U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED
+
+REVISE
+
+7. U2_IMPLEMENTATION_BOUNDARY
+
+PASS
+
+8. SCOPE_HONESTY
+
+PASS
+
+9. U2_DESIGN_APPROVED
+
+NO
+
+10. U2_IMPLEMENTATION_AUTHORIZED
+
+NO
+
+这里的 PASS 是设计文本层面的通过，不代表真实运行验证通过。
+
+二、必须修订的问题
+
+CHANGE 44（P0）：修复 LIVE_EXCLUSIVITY 的时序和锁所有权证明
+
+R12 §20.1 把锁验证分为 CONFIG_VERIFIED 和 LIVE_EXCLUSIVITY_VERIFIED，这是正确方向。
+
+但当前定义：
+
+T0 校验活体排他 → T1 取锁 → T2 事务 → T3 释放
+
+存在时序矛盾。
+
+如果 T0 的外部探针尝试同一把锁并失败，这只证明探测时有其他主体持锁，不能证明 U2 在 T1 已持锁。
+
+如果 T0 时锁由 U2 自己持有，T1 的再次取锁则需要明确是否复用同一个已持锁文件描述符，以及如何验证它确实属于当前执行实例。
+
+必须修改为：
+
+T0：验证受控启动身份、隔离前提和配置证明。
+
+T1：当前 U2 实例获取锁，记录持锁 FD、实例身份与锁对象标识。
+
+T1A：独立探针使用独立打开的 FD 尝试非阻塞获取同一锁，并确认失败。探针必须验证锁对象身份与当前 U2 实例持锁事实的一致性。
+
+T2：仅在 T1 和 T1A 均成功且证明仍有效时进入数据库事务。
+
+T3：完成事务、必要对账和锁释放；释放失败必须保留异常事实，不得声称正常释放。
+
+还需明确 flock 的 FD 继承、复制和关闭行为，避免子进程继承 FD 后导致锁意外持续存在。
+
+验收要求： 增加负例，验证探针失败但当前 U2 实例实际未持锁、探针与 U2 锁定不同 inode、验证后锁被提前释放等情形均不能进入写入阶段。
+
+裁决：CHANGE40_LIVE_EXCLUSIVITY_FIXED=REVISE
+
+CHANGE 45（P0）：将 COMMIT 归因前提升级为全局不可变性保证
+
+R12 §20.2 使用：
+
+SQL
+
+INSERT ...
+
+ON CONFLICT ("dedupeKey") DO NOTHING
+
+RETURNING "id"
+
+这已经解决了 R11 依赖 createdAt 和不存在行的读取结果进行归因的问题。
+
+但 §20.2.3 的第二项前提仍不充分：
+
+U2 路径不存在 UPDATE/DELETE，因此记录不会被替换。
+
+U2 自己不修改记录，不代表其他模块、管理员或数据库作业不会修改。
+
+因此，在未知 COMMIT 后，仅依据返回过的 id 在主库重新读到匹配行，仍需额外保证该行在观察窗口内不会被其他写入者删除、替换或修改必要字段。
+
+R13 必须规定：
+
+全局写入者清单和不可变性保证，不得仅限制 U2 模块。
+
+AutonomyCandidate.id 的生成与不复用机制必须核对实际 Schema、数据库约束及写入路径。
+
+事务中取得的 returnedCandidateId 必须在 COMMIT 前可靠保存于事务外的执行上下文；它本身不等于已提交证明。
+
+未知 COMMIT 对账必须使用权威主库，在满足上述前提后进行。
+
+如果无法证明全局不可变性，只允许 UNKNOWN，不得据此认定 THIS_INSERT_COMMITTED。
+
+另外还应覆盖 RETURNING 得到一行但随后事务明确 ROLLBACK 的场景，避免将“执行过 INSERT”错误解释为“已提交”。
+
+裁决：CHANGE41_PRECISE_COMMIT_ATTRIBUTION_FIXED=REVISE
+
+CHANGE 46（P1）：修复 Git refs 摘要的字节规范歧义
+
+R12 §20.4 的长度前缀编码解决了连接字段之间的分隔符歧义，提交的规范测试向量也满足预期的编码结构。
+
+但以下细节尚未完全规范化：
+
+git rev-parse 原始输出需要明确去除的是命令产生的行尾换行，而不是路径名中的有效字符。
+
+非 ASCII refname 的“码点排序”与原始字节排序可能不同，必须固定排序算法，并明确地区域设置不影响输出。
+
+git for-each-ref 的输出、Git 命令退出码与路径解析失败必须定义统一 fail-closed 行为。
+
+signerAuthRef 除绑定签发者、实例和证明摘要，还需明确验证时机、有效期与防重放规则。
+
+现有 34 字节示例可保留为基准测试向量，但文档 SHA-256 和该向量的双实现复算，目前仍属于送审方报告的结果，不能记录为本轮独立哈希验证通过。
+
+裁决：CHANGE43_DIGEST_TEST_VECTOR_FIXED=PASS_WITH_REVISE
+
+三、其余项目结论
+
+CHANGE 42：PASS。 R12 已正确区分 INSERT 前复用和尝试 INSERT 后复用，reconciled 不再代表已取得结论，未知提交优先级也明确。建议实施时加入完整组合测试，但不再作为单独设计阻断项。
+
+输入输出契约：PASS WITH REVISE。 主要字段和冲突处理方向可接受，但其实际可执行语义依赖 CHANGE 44、45 收口。
+
+验收矩阵：REVISE。 必须补充锁证明时序、错误锁对象、锁被提前释放、外部写入者改变候选行、事务明确回滚等反例。
+
+实施边界：PASS。 保持仅设计、仅候选 INSERT、无 Schema 迁移、无 Runtime/Queue 接线、无模型和 Provider 调用的限制。
+
+范围诚实性：PASS。 本轮没有把设计修订宣称为真实数据库、Linux、CI 或生产验证通过。
+
+本轮结论：继续 R13 最小设计修订，不开放 U2 实施权限。
+
+四、下一轮最小授权
+
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R13_READ_ONLY_CHANGES_44_TO_46
+
+下一轮只允许修改设计文档和审计归档，重点完成 CHANGE 44–46。不要求重新设计 U2 全部功能，也不允许借此扩展 U3–U5 的实施范围。
+
+下一轮送审请提供修订后的 §21、对应的正反例验收矩阵，以及 R12 → R13 的 Git 差异。完成后重新评估是否能够批准 U2_PLATFORM_ONLY_INSERT_SUBSET。
+
+五、机器可读裁决
+
+MSG-20261009-37 · Audit Result
+
+复制裁决
+
+可直接交给 Codex / Hermes 执行下一轮设计修订
+
+纯文本
+
+AUDIT_ID=MSG-20261009-37
+REPO=anthonannabella-dev/crossclaim-ai
+U1_CODE_HEAD=9ee36837
+U2_DESIGN_COMMIT_R11=b02a92de
+U2_DESIGN_COMMIT_R12=c9b167c7
+U2_DESIGN_GIT_BLOB_SHA=fadd6878022da70fc48bf991e3893c88d3001d68
+U2_DESIGN_DOC_SHA256=dd01993b0b72113040c20d85d4f3aa132c8862d320fc495de786360c32ae107a
+U2_DESIGN_DOC_SHA256_VERIFICATION=NOT_INDEPENDENTLY_VERIFIED
+R11_TO_R12_COMMITS=2
+R11_TO_R12_FILES=3
+R11_TO_R12_PRODUCT_CODE_CHANGES=0
+FINAL_VERDICT=REVISE
+CHANGE40_LIVE_EXCLUSIVITY_FIXED=REVISE
+CHANGE41_PRECISE_COMMIT_ATTRIBUTION_FIXED=REVISE
+CHANGE42_STATE_REPORT_SEMANTICS_FIXED=PASS
+CHANGE43_DIGEST_TEST_VECTOR_FIXED=PASS_WITH_REVISE
+U2_INPUT_OUTPUT_CONTRACT=PASS_WITH_REVISE
+U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED=REVISE
+U2_IMPLEMENTATION_BOUNDARY=PASS
+SCOPE_HONESTY=PASS
+U2_DESIGN_APPROVED=NO
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PHASE3_A_U3_TO_U5_AUTHORIZED=NO
+REQUIRED_CHANGES=CHANGE_44_P0,CHANGE_45_P0,CHANGE_46_P1
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R13_READ_ONLY_CHANGES_44_TO_46
+NEXT_AUDIT=MSG-20261009-38
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+POSTGRESQL_INTEGRATION_TEST=NOT_VERIFIED
+VITEST=NOT_VERIFIED
+TSC=NOT_VERIFIED
+LINUX_SYSTEMD=NOT_VERIFIED
+CI=NOT_VERIFIED
+PRODUCTION=NOT_VERIFIED
+
+审计结论：R12 的事务归因与活体排他设计已有实质进展，但关键安全证明尚未闭合。本轮不授权产品代码实施，也未对仓库执行任何写入。
+```

@@ -2584,3 +2584,65 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.41 MSG-20261009-37 裁决归档 = **REVISE**（CHANGE 42 首次 PASS；两个 P0 未关，新增 CHANGE 44–46）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-37] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（138/138，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=4944 / NORM_LINES=138 / FNV=84d0e54b`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R11=b02a92de`、`REVIEWED_HEAD=c9b167c7`。
+
+**审计方独立核验**：`R11→R12 = 2 提交 / 3 文件`、R12 文档 Git blob SHA
+`fadd6878022da70fc48bf991e3893c88d3001d68` **与送审一致**、无 `apps/api` 变更、§20 四项修订均已入库。
+
+**十项**：`CHANGE42 = PASS`（**首次无条件通过**）、`CHANGE43 = PASS WITH REVISE · P1`、
+`CHANGE40 = REVISE · P0`、`CHANGE41 = REVISE · P0`、
+`U2_INPUT_OUTPUT_CONTRACT = PASS WITH REVISE`、`U2_ACCEPTANCE_MATRIX_AND_FAIL_CLOSED = REVISE`、
+`U2_IMPLEMENTATION_BOUNDARY = PASS`、`SCOPE_HONESTY = PASS`、
+`U2_DESIGN_APPROVED = NO`、`U2_IMPLEMENTATION_AUTHORIZED = NO`。
+
+**两个 P0 的否决理由（原文要点）**
+
+1. **CHANGE 40 锁验证时序矛盾**：T0 让外部探针尝试同一把锁并失败，只证明「探测时有其他主体持锁」，
+   **不能**证明「U2 在 T1 已持锁」；T1 复用时是否复用同一已持锁 FD 亦未定义；还缺 flock 的
+   **FD 继承/复制/关闭**语义（子进程继承会导致锁意外持续存在）。
+2. **CHANGE 41 归因前提不是全局保证**：「U2 路径不 UPDATE/DELETE」只约束本模块，
+   **其他模块 / 管理员 / 数据库作业**仍可删除、替换或修改必要字段 ⇒ 未知 COMMIT 后仅凭返回过的 id
+   重读到匹配行仍需**全局不可变性**前提；另须覆盖 `RETURNING` 得一行但事务**明确 ROLLBACK** 的场景。
+
+**REQUIRED_CHANGES（下一轮 MSG-20261009-38 只做这三项；`R13`，须附 §21 + 正反例验收矩阵 + R12→R13 diff）**
+
+- **CHANGE 44（P0）LIVE_EXCLUSIVITY 时序与锁所有权证明**：
+  `T0`（受控启动身份 / 隔离前提 / 配置证明）→ `T1`（当前 U2 实例取锁，记录**持锁 FD、实例身份、锁对象标识**）
+  → **`T1A`（独立探针用独立打开的 FD 非阻塞获取同一把锁并确认失败，且必须验证锁对象身份与
+  U2 当前持锁事实一致）** → `T2`（**仅 T1 与 T1A 均成功且证明仍有效**才进入数据库事务）
+  → `T3`（事务 + 必要对账 + 释放；**释放失败必须保留异常事实，不得声称正常释放**）。
+  另须明确 flock 的 **FD 继承/复制/关闭**行为。
+  **负例**：探针失败但 U2 实际未持锁 / 探针与 U2 锁定**不同 inode** / 验证后锁被**提前释放** ⇒ 均不得进入写入阶段。
+- **CHANGE 45（P0）把 COMMIT 归因前提升级为全局不可变性保证**：给出**全局写入者清单**
+  （不得仅限制 U2 模块）；核对 `AutonomyCandidate.id` 的生成与**不复用机制**（对照实际 Schema、数据库约束与写入路径）；
+  `returnedCandidateId` 必须在 `COMMIT` 前**可靠保存到事务外执行上下文**（其本身**不等于**已提交证明）；
+  未知 COMMIT 对账必须在**权威主库**且满足上述前提后进行；**无法证明全局不可变性 ⇒ 只允许 `UNKNOWN`**；
+  并覆盖「`RETURNING` 得一行但随后事务明确 `ROLLBACK`」的场景。
+- **CHANGE 46（P1）refs 摘要字节规范歧义**：`git rev-parse` 原始输出只去除**命令产生的行尾换行**
+  （不得损伤路径名中的有效字符）；非 ASCII refname 的「码点排序」与「原始字节排序」可能不同，
+  必须**固定排序算法**并明确**区域设置不影响输出**；`git for-each-ref` 输出、Git 退出码与路径解析失败
+  须定义**统一 fail-closed** 行为；`signerAuthRef` 除绑定签发者/实例/证明摘要外，还需明确
+  **验证时机、有效期与防重放**规则。现有 34 字节向量可保留为基准，但文档 SHA-256 与该向量的双实现复算
+  **仍属送审方报告**，本轮不记为独立哈希验证通过。
+
+```text
+MSG-20261009-37_FINAL_VERDICT = REVISE
+MSG-20261009-37_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 138/138；FNV1A 84d0e54b）
+CHANGE_42 = PASS（状态报告语义）
+U2_DESIGN_APPROVED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · U3–U5 = NO
+REQUIRED_CHANGES = CHANGE_44_P0_LIVE_EXCLUSIVITY_TIMING ; CHANGE_45_P0_GLOBAL_IMMUTABILITY ;
+                   CHANGE_46_P1_REFS_DIGEST_BYTE_SPEC
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R13_READ_ONLY_CHANGES_44_TO_46
+NEXT_AUDIT = MSG-20261009-38
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
