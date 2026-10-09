@@ -225,6 +225,42 @@ export interface VerifyCustomsWebhookResult {
   verified: boolean;
   reasonCodes: readonly CustomsWebhookReason[];
   payload: CustomsPaymentNotification | null;
+  /**
+   * V2-R1 / CHANGE 02：**只有验签成功分支**才会产出可信证据。
+   * 权益发放只接受本对象，普通调用方无法构造（品牌为模块私有 Symbol）。
+   */
+  evidence?: VerifiedPaymentEvidence | null;
+}
+
+const VERIFIED_PAYMENT_BRAND: unique symbol = Symbol('crossclaim.customs.verifiedPaymentEvidence');
+
+/**
+ * 不可伪造的支付证据：品牌键为模块私有 Symbol，外部无法构造等价对象；
+ * 运行时另有 `isVerifiedPaymentEvidence()` 兜底（即使被 `as any` 强转也会被拒）。
+ */
+export interface VerifiedPaymentEvidence {
+  readonly [VERIFIED_PAYMENT_BRAND]: true;
+  readonly notification: CustomsPaymentNotification;
+  readonly verifiedAt: string;
+  readonly signatureScheme: 'HMAC_SHA256_TS_BODY';
+}
+
+export function isVerifiedPaymentEvidence(value: unknown): value is VerifiedPaymentEvidence {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string | symbol, unknown>;
+  return record[VERIFIED_PAYMENT_BRAND] === true && typeof record.notification === 'object';
+}
+
+function buildVerifiedEvidence(
+  notification: CustomsPaymentNotification,
+  now: Date,
+): VerifiedPaymentEvidence {
+  return {
+    [VERIFIED_PAYMENT_BRAND]: true,
+    notification,
+    verifiedAt: now.toISOString(),
+    signatureScheme: 'HMAC_SHA256_TS_BODY',
+  };
 }
 
 export function signCustomsWebhookBody(timestamp: string, rawBody: string, secret: string): string {
@@ -311,7 +347,12 @@ export function verifyCustomsPaymentNotification(
   if (payload === null) {
     return { verified: false, reasonCodes: ['PAYLOAD_MALFORMED'], payload: null };
   }
-  return { verified: true, reasonCodes: ['SIGNATURE_VALID'], payload };
+  return {
+    verified: true,
+    reasonCodes: ['SIGNATURE_VALID'],
+    payload,
+    evidence: buildVerifiedEvidence(payload, input.now),
+  };
 }
 
 export type CustomsEntitlementStatus = 'ACTIVE' | 'REVOKED' | 'CANCELED' | 'EXPIRED';
@@ -337,6 +378,8 @@ export type CustomsGrantOutcome =
 export type CustomsGrantReason =
   | 'GRANT_OK'
   | 'PAYMENTS_HOLD'
+  | 'UNVERIFIED_PAYMENT_EVIDENCE'
+  | 'QUOTE_EXPIRED'
   | 'EVENT_NOT_PAYMENT_SUCCEEDED'
   | 'QUOTE_ID_MISMATCH'
   | 'ORG_MISMATCH'
@@ -347,7 +390,8 @@ export type CustomsGrantReason =
   | 'DUPLICATE_EVENT';
 
 export interface ApplyPaymentEventInput {
-  notification: CustomsPaymentNotification;
+  /** V2-R1 / CHANGE 02：只接受验签流程产出的证据，不再接受裸 notification。 */
+  evidence: VerifiedPaymentEvidence;
   quote: CustomsUnlockQuote;
   processedEventIds: ReadonlySet<string>;
   now: Date;
@@ -368,6 +412,15 @@ export interface ApplyPaymentEventResult {
 export function applyVerifiedPaymentEvent(
   input: ApplyPaymentEventInput,
 ): ApplyPaymentEventResult {
+  // CHANGE 02：先证明证据可信（运行时兜底，防止 as any 绕过编译期品牌）
+  if (!isVerifiedPaymentEvidence(input.evidence)) {
+    return {
+      outcome: 'HOLD',
+      reasonCodes: ['UNVERIFIED_PAYMENT_EVIDENCE'],
+      entitlement: null,
+      paymentCaptured: false,
+    };
+  }
   if (!input.paymentsEnabled) {
     return {
       outcome: 'HOLD',
@@ -376,8 +429,17 @@ export function applyVerifiedPaymentEvent(
       paymentCaptured: false,
     };
   }
+  const notification = input.evidence.notification;
   const reasons: CustomsGrantReason[] = [];
-  if (input.notification.eventType !== 'PAYMENT_SUCCEEDED') {
+  if (Date.parse(input.quote.expiresAt) <= input.now.getTime()) {
+    return {
+      outcome: 'HOLD',
+      reasonCodes: ['QUOTE_EXPIRED'],
+      entitlement: null,
+      paymentCaptured: false,
+    };
+  }
+  if (notification.eventType !== 'PAYMENT_SUCCEEDED') {
     return {
       outcome: 'HOLD',
       reasonCodes: ['EVENT_NOT_PAYMENT_SUCCEEDED'],
@@ -385,20 +447,20 @@ export function applyVerifiedPaymentEvent(
       paymentCaptured: false,
     };
   }
-  if (input.notification.quoteId !== input.quote.quoteId) reasons.push('QUOTE_ID_MISMATCH');
-  if (input.notification.organizationId !== input.quote.organizationId) reasons.push('ORG_MISMATCH');
-  if (input.notification.opportunityId !== input.quote.opportunityId) {
+  if (notification.quoteId !== input.quote.quoteId) reasons.push('QUOTE_ID_MISMATCH');
+  if (notification.organizationId !== input.quote.organizationId) reasons.push('ORG_MISMATCH');
+  if (notification.opportunityId !== input.quote.opportunityId) {
     reasons.push('OPPORTUNITY_MISMATCH');
   }
-  if (input.notification.productSku !== input.quote.productSku) reasons.push('PRODUCT_MISMATCH');
-  if (input.notification.amountMinor !== input.quote.priceMinor) reasons.push('AMOUNT_MISMATCH');
-  if (input.notification.currency !== input.quote.currency) reasons.push('CURRENCY_MISMATCH');
+  if (notification.productSku !== input.quote.productSku) reasons.push('PRODUCT_MISMATCH');
+  if (notification.amountMinor !== input.quote.priceMinor) reasons.push('AMOUNT_MISMATCH');
+  if (notification.currency !== input.quote.currency) reasons.push('CURRENCY_MISMATCH');
   if (reasons.length > 0) {
     return { outcome: 'HOLD', reasonCodes: reasons, entitlement: null, paymentCaptured: false };
   }
 
   const entitlementId = `ent-${input.quote.quoteId}`;
-  if (input.processedEventIds.has(input.notification.eventId)) {
+  if (input.processedEventIds.has(notification.eventId)) {
     return {
       outcome: 'DUPLICATE_IGNORED',
       reasonCodes: ['DUPLICATE_EVENT'],

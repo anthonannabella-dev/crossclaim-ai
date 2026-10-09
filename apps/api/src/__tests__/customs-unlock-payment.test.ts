@@ -17,6 +17,7 @@ import {
   consumeEntitlementQuota,
   findCustomsUnlockProduct,
   issueCustomsUnlockQuote,
+  isVerifiedPaymentEvidence,
   shouldOfferCustomsUnlock,
   signCustomsWebhookBody,
   validateCustomsUnlockOrder,
@@ -24,6 +25,7 @@ import {
   type CustomsPaymentNotification,
   type CustomsUnlockEntitlement,
   type CustomsUnlockQuote,
+  type VerifiedPaymentEvidence,
 } from '../services/customs/customs-unlock-payment';
 
 const NOW = new Date('2026-10-09T13:00:00.000Z');
@@ -69,6 +71,21 @@ function entitlement(overrides: Partial<CustomsUnlockEntitlement> = {}): Customs
     quoteId: 'quote-1',
     ...overrides,
   };
+}
+
+/** CHANGE 02：权益发放只接受验签产出的证据；测试也走同一条真实验签路径。 */
+function evidence(overrides: Partial<CustomsPaymentNotification> = {}): VerifiedPaymentEvidence {
+  const body = JSON.stringify(notification(overrides));
+  const timestamp = String(Math.floor(NOW.getTime() / 1000));
+  const verified = verifyCustomsPaymentNotification({
+    rawBody: body,
+    timestampHeader: timestamp,
+    signatureHeader: signCustomsWebhookBody(timestamp, body, SECRET),
+    secret: SECRET,
+    now: NOW,
+  });
+  if (!verified.evidence) throw new Error('TEST_EVIDENCE_MISSING');
+  return verified.evidence;
 }
 
 describe('V2-05 服务端报价', () => {
@@ -230,7 +247,7 @@ describe('V2-05 Webhook 验签', () => {
 describe('V2-05 权益发放 — 幂等与 Payment HOLD', () => {
   it('Payment HOLD 生效时 → HOLD，不发放权益', () => {
     const result = applyVerifiedPaymentEvent({
-      notification: notification(),
+      evidence: evidence(),
       quote: quote(),
       processedEventIds: new Set<string>(),
       now: NOW,
@@ -243,7 +260,7 @@ describe('V2-05 权益发放 — 幂等与 Payment HOLD', () => {
 
   it('非支付成功事件 → HOLD', () => {
     const result = applyVerifiedPaymentEvent({
-      notification: notification({ eventType: 'PAYMENT_REFUNDED' }),
+      evidence: evidence({ eventType: 'PAYMENT_REFUNDED' }),
       quote: quote(),
       processedEventIds: new Set<string>(),
       now: NOW,
@@ -255,7 +272,7 @@ describe('V2-05 权益发放 — 幂等与 Payment HOLD', () => {
 
   it('回调字段与报价不一致 → HOLD（伪造回调无法解锁）', () => {
     const result = applyVerifiedPaymentEvent({
-      notification: notification({ organizationId: 'org-2', amountMinor: 1 }),
+      evidence: evidence({ organizationId: 'org-2', amountMinor: 1 }),
       quote: quote(),
       processedEventIds: new Set<string>(),
       now: NOW,
@@ -270,7 +287,7 @@ describe('V2-05 权益发放 — 幂等与 Payment HOLD', () => {
 
   it('字段一致 → 发放权益，entitlementId 由报价确定性派生', () => {
     const result = applyVerifiedPaymentEvent({
-      notification: notification(),
+      evidence: evidence(),
       quote: quote(),
       processedEventIds: new Set<string>(),
       now: NOW,
@@ -285,7 +302,7 @@ describe('V2-05 权益发放 — 幂等与 Payment HOLD', () => {
 
   it('同一 eventId 重复投递 → DUPLICATE_IGNORED（不重复发放）', () => {
     const result = applyVerifiedPaymentEvent({
-      notification: notification(),
+      evidence: evidence(),
       quote: quote(),
       processedEventIds: new Set<string>(['evt-1']),
       now: NOW,
@@ -294,6 +311,42 @@ describe('V2-05 权益发放 — 幂等与 Payment HOLD', () => {
     expect(result.outcome).toBe('DUPLICATE_IGNORED');
     expect(result.reasonCodes).toEqual(['DUPLICATE_EVENT']);
     expect(result.entitlement).toBeNull();
+  });
+
+  // CHANGE 02（P0）：未验签的裸对象即使被强转，也必须被拒。
+  it('自行构造的对象冒充证据 → HOLD(UNVERIFIED_PAYMENT_EVIDENCE)，不发放权益', () => {
+    const forged = { notification: notification() } as unknown as VerifiedPaymentEvidence;
+    expect(isVerifiedPaymentEvidence(forged)).toBe(false);
+    const result = applyVerifiedPaymentEvent({
+      evidence: forged,
+      quote: quote(),
+      processedEventIds: new Set<string>(),
+      now: NOW,
+      paymentsEnabled: true,
+    });
+    expect(result.outcome).toBe('HOLD');
+    expect(result.reasonCodes).toEqual(['UNVERIFIED_PAYMENT_EVIDENCE']);
+    expect(result.entitlement).toBeNull();
+  });
+
+  it('真实验签证据在报价过期后提交 → HOLD(QUOTE_EXPIRED)', () => {
+    const result = applyVerifiedPaymentEvent({
+      evidence: evidence(),
+      quote: quote(),
+      processedEventIds: new Set<string>(),
+      now: new Date(NOW.getTime() + 31 * 60_000),
+      paymentsEnabled: true,
+    });
+    expect(result.outcome).toBe('HOLD');
+    expect(result.reasonCodes).toEqual(['QUOTE_EXPIRED']);
+    expect(result.entitlement).toBeNull();
+  });
+
+  it('验签成功结果携带可信证据，且证据绑定的是同一条通知', () => {
+    const verified = evidence();
+    expect(isVerifiedPaymentEvidence(verified)).toBe(true);
+    expect(verified.notification.eventId).toBe('evt-1');
+    expect(verified.signatureScheme).toBe('HMAC_SHA256_TS_BODY');
   });
 });
 
