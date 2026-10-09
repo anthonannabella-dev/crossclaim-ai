@@ -2990,3 +2990,96 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.47 MSG-20261009-43 裁决归档 = **REVISE**（R18：`67/68/69/72 = PASS WITH REVISE`、`70/71 = REVISE`；**P0 阻断项 75/76/77**；只新增 CHANGE 73–78）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-43] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（259/259，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=6747 / NORM_LINES=259 / FNV=34cfd9c6`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R17=c9ec3eca`、`REVIEWED_HEAD=c391245e`。
+> 取证备注：通道恢复后按「等待生成结束 + 稳定性复核（长度稳定且无停止控件）」取回全文；首次采样 5104 字符仍在增长，未采用。
+
+**审计方独立核验（范围全部 PASS）**：`c9ec3eca..c391245e` = **2 commits / 3 files（符合申报）**、
+`7a1a64b2..c391245e` = **1 commit / 1 file（符合申报）**、文档差异 `+196 / −8`（**符合申报**）、
+`apps/api` 产品代码差异 **0（符合申报）**、**Schema/migration 差异 0（符合申报）**、
+**§26.1–§26.6 确认存在且内容与送审摘要基本一致**；仅 **SHA-256 原始字节复算未独立完成**（`DOCUMENT_SHA256_VERIFIED=NO`）。
+审计方明确：「**设计文档修订 ≠ 产品代码实施 ≠ 运行时能力已验证**」。
+
+**逐项裁决**：`CHANGE 67 = PASS WITH REVISE`、`CHANGE 68 = PASS WITH REVISE`、`CHANGE 69 = PASS WITH REVISE`、
+`CHANGE 70 = REVISE`、`CHANGE 71 = REVISE`、`CHANGE 72 = PASS WITH REVISE`。
+`U2_DESIGN_R18_ACCEPTED = NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED`、`U1_REOPEN = NO`。
+
+#### 2.47.0 审计方对我方事实的更正（必须如实记录）
+
+R18 §26.5 曾把 `VACUUM FREEZE` 描述为「冻结行版本插入事务标识变为冻结标识、与捕获值不匹配」。
+**该描述对现代 PostgreSQL 并不普遍成立**：**9.4 以前**冻结可能直接替换可见 `xmin`；
+**较新版本通常通过标记位实现冻结并保留原始 `xmin` 数值** ⇒ **冻结后 `xmin` 可能仍等于原值，但这不意味着它仍是可靠的提交归因证据**。
+R18 最终「保守返回 `UNKNOWN`」的**方向可接受**，但**依据与检测契约必须更正**（见 CHANGE 77）。
+（我方接受此更正，并在 R19 中按 CHANGE 77 重写冻结与版本身份契约。）
+
+#### 2.47.1 新增 REQUIRED_CHANGES（下一轮 MSG-20261009-44 只做这六项）
+
+- **CHANGE 73（P1）P2 探针独立性**：`P2` 必须是**独立 `open()`** 创建、**不共享 `T1` 的 open file description**
+  的探针（`lock_family=flock`、`file_identity=T1.(st_dev, st_ino)`、`shares_T1_OFD=false`、`lock_request=LOCK_EX|LOCK_NB`）；
+  `P2_ACQUIRED=true ⇒ EXCLUSIVE_WINDOW_CONTRADICTED ⇒ T2_DENIED`；
+  并须增加负面测试：**用 `dup(T1.fd)` 构造的伪独立探针不得被当作有效 `P2` 证据**。
+- **CHANGE 74（P1）协议边界与负面验收**：`CONFIG_VERIFIED` 须覆盖**真实部署清单、参与者版本与数据库写入主体**；
+  固定并核验**文件系统类型、挂载方式、锁文件生命周期与目标 Linux 环境**（NFS/SMB 语义与本地文件系统不同，须列入部署前提）；
+  混合锁族反例必须证明 **`U2_ADMISSION=DENIED`**（而不仅是「两把锁可以同时存在」）；
+  任一**未登记写入主体、未经验证的部署拓扑、不受控锁文件替换** ⇒ fail-closed。
+- **CHANGE 75（P0）FD 边界失效时的写入保证**：**监测到 FD 被释放 ≠ 能在另一进程获锁并写入之前阻止危险行为**——
+  若检测依赖后续扫描、计数器或异步回调，则**检测与数据库写入之间存在 TOCTOU 竞争窗口**；
+  要求：①一旦排他性**可能**失效，**必须禁止启动新的事务提交**（不能仅记录事件）；
+  ②证明持锁边界覆盖**实际数据库提交期间**，而不只是 `INSERT` 调用期间；
+  ③**未验证的原生依赖、FD 共享或间接释放路径不得进入 U2 写入进程**；
+  ④测试包含「**锁刚释放 → 另一进程抢锁成功 → 原执行尝试 `COMMIT`**」的竞态场景；
+  ⑤若无法在所用技术栈中证明该保证，应选择**隔离写入进程 / 缩小可信执行边界 / 引入数据库端 fencing**，
+  而**不是**继续增加扫描规则；⑥更正内核语义：`fcntl(F_UNLCK)` **不能无条件解除一个独立的 `flock` 锁** ⇒
+  威胁列表须区分「直接解除当前协议锁的路径」与「其他锁族的干扰路径」。
+- **CHANGE 76（P0）M1 恢复状态机与去重权威**：
+
+| 恢复状态 | 允许行为 |
+| --- | --- |
+| `PREPARED` + 主库无目标行 | **不得**推断已提交；进入**受控恢复** |
+| `PREPARED` + 主库目标行匹配且因果证据有效 | 可以确认**对应提交** |
+| `COMMIT` 结果未知 + 因果证据不可验证 | `UNKNOWN`；**禁止自动重试 INSERT** |
+| 存在目标行但执行归因不可恢复 | `ATTRIBUTION_UNRECOVERABLE` ⇒ **人工处置** |
+| 两个执行竞争相同 `dedupeKey` | **只能有一个权威创建结果** |
+
+  并须写明：**意图记录的原子写入、文件与父目录持久化、文件身份绑定、密钥可用性、进程崩溃恢复、
+  以及主库查询失败时的处理方法**。在这些条件未得到证明前，**M1 只能是候选机制，不能作为实施授权依据**。
+- **CHANGE 77（P0）PostgreSQL 行版本身份与有效期限**：冻结后**可能保留原始 `xmin`**，
+  **不能仅依赖数值变化检测冻结**；完整 XID、epoch、**目标行版本**与**受信执行记录**必须**共同**构成因果判断；
+  原始行被更新、删除重插、重写或来源不可信 ⇒ 默认 `UNKNOWN`；
+  为 M1 规定**明确的最大归因时间窗口**并给出**超期测试**；
+  使用**目标 PostgreSQL 版本**验证所有 SQL 与 XID 语义；**未通过目标数据库实测，不得声明已证明 epoch 归属**。
+- **CHANGE 78（P1）增加四项反例（U2-50g ~ U2-50j）**：
+  `U2-50g` 外部 `PREPARED` 记录已 fsync、`COMMIT` 前进程崩溃 ⇒ **不得误判 YES**；
+  `U2-50h` 现代 PG 冻结后 `xmin` 数值**未改变**但版本可信性不足 ⇒ `UNKNOWN`；
+  `U2-50i` E1 归因不可恢复、E2 竞争相同 `dedupeKey` ⇒ **不得产生第二个候选**；
+  `U2-50j` 排他锁提前释放、竞争进程取得锁、原进程随后尝试 `COMMIT` ⇒ **不得产生未受控双写**。
+
+**三个实施前提的契约/验证状态**：排他性证明（已定义主要机制，仍缺**竞态与 FD 身份契约**）= `NOT_VERIFIED`；
+提交归因证明（M1 已提出，**恢复与行版本证明仍有 P0 缺口**）= `NOT_VERIFIED`；
+环境证据（已列核验项目，缺目标环境实际证据）= `NOT_VERIFIED`。
+审计方特别指出：**Linux 文件锁属协作式机制，不能单独阻止不遵守协议的其他数据库写入者** ⇒
+U2 最终应同时具备**数据库层面的写入权限隔离、唯一性约束或等价仲裁**，并证明其与本地锁协议的关系。
+
+```text
+MSG-20261009-43_FINAL_VERDICT = REVISE
+MSG-20261009-43_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 259/259；FNV1A 34cfd9c6）
+CHANGE_67=PASS_WITH_REVISE · CHANGE_68=PASS_WITH_REVISE · CHANGE_69=PASS_WITH_REVISE
+CHANGE_70=REVISE · CHANGE_71=REVISE · CHANGE_72=PASS_WITH_REVISE
+P0_BLOCKERS = 75 ; 76 ; 77
+AUDIT_SCOPE_VERIFIED = YES · SINGLE_COMMIT_SCOPE_VERIFIED = YES · PRODUCT_CODE_CHANGES = 0
+DOCUMENT_DIFF_VERIFIED = YES · DOCUMENT_SHA256_VERIFIED = NO
+U2_DESIGN_R18_ACCEPTED = NO · U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED · U1_REOPEN = NO
+REQUIRED_CHANGES = CHANGE_73_P1 ; CHANGE_74_P1 ; CHANGE_75_P0 ; CHANGE_76_P0 ; CHANGE_77_P0 ; CHANGE_78_P1
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R19_READ_ONLY_CHANGES_73_TO_78
+NEXT_AUDIT = MSG-20261009-44
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```

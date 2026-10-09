@@ -179504,3 +179504,628 @@ NEXT_AUDIT=MSG-20261009-43
 
 本次 GitHub 提交差异已独立核对；完整文档 SHA-256、目标 Linux 内核行为、真实 PostgreSQL 环境以及运行测试结果仍未独立验证，不能据此宣称 U2 已具备生产安全性。本次未向仓库写入任何内容。
 ```
+
+### [MSG-20261009-43] U2 设计 R18 = **REVISE**（`CHANGE 67/68/69/72 = PASS WITH REVISE`、`CHANGE 70/71 = REVISE`；**P0 阻断项 = 75/76/77**；只新增 **CHANGE 73–78**）—— **独立核验 P（范围）全部 PASS**：`c9ec3eca..c391245e` = **2 commits / 3 files**（**符合申报**）、`7a1a64b2..c391245e` = **1 commit / 1 file**（**符合申报**）、R18 文档 `+196 / −8`（**符合申报**）、`apps/api` 产品代码差异 **0**（**符合申报**）、**Schema/migration 差异 0**（**符合申报**）、**§26.1–§26.6 确认存在且内容与送审摘要基本一致**；仅 **SHA-256 原始字节复算未独立完成**（DOCUMENT_SHA256_VERIFIED=NO）；审计方结论：**范围核验 PASS**，且明确「设计文档修订 ≠ 产品代码实施 ≠ 运行时能力已验证」；**CHANGE 67 = PASS WITH REVISE**（接受 CONTRADICTED 须能反证本执行持锁、锁族/对象/范围必须匹配、INCONCLUSIVE 不等于放行、O1+O2+O3+P2+授权复验共同构成进入 T2 的必要条件、无关锁族或未知锁身份不得升级 PROVEN）⇒ **新增 CHANGE 73（P1）P2 探针独立性**：P2 必须是**独立 `open()`** 创建且**不共享 T1 的 open file description** 的探针（`lock_family=flock`、`file_identity=T1.(st_dev,st_ino)`、`shares_T1_OFD=false`、`LOCK_EX|LOCK_NB`；`P2_ACQUIRED=true ⇒ EXCLUSIVE_WINDOW_CONTRADICTED ⇒ T2_DENIED`），并须增加「用 `dup(T1.fd)` 构造伪独立探针不得被当作有效 P2 证据」的负面测试；**CHANGE 68 = PASS WITH REVISE**（认可选定 `flock:whole-file:LOCK_EX`、撤回 OFD 记录锁混用；并提示 **NFS/SMB 语义不同 ⇒ 目标文件系统与挂载方式必须列入部署前提**）⇒ **新增 CHANGE 74（P1）协议边界与负面验收**：`CONFIG_VERIFIED` 须覆盖**真实部署清单、参与者版本与数据库写入主体**；固定并核验**文件系统类型、挂载方式、锁文件生命周期与目标 Linux 环境**；混合锁族反例必须证明 **`U2_ADMISSION=DENIED`**（而不仅是证明两把锁可并存）；任一**未登记写入主体/未验证部署拓扑/不受控锁文件替换** ⇒ fail-closed；**CHANGE 69 = PASS WITH REVISE**（七类威胁覆盖更完整）⇒ **新增 CHANGE 75（P0）FD 边界失效时的写入保证**：**监测到 FD 被释放 ≠ 能在另一进程获锁并写入前阻止危险行为**（TOCTOU 窗口）；一旦排他性**可能**失效，必须**禁止启动新的事务提交**（不能仅记录事件）；须证明持锁边界覆盖**实际数据库提交期间**而非仅 INSERT 调用期间；未验证的原生依赖/FD 共享/间接释放路径**不得进入 U2 写入进程**；测试含「锁刚释放→他进程抢锁成功→原执行尝试 COMMIT」竞态；若技术栈无法证明该保证 ⇒ **隔离写入进程 / 缩小可信边界 / 引入数据库端 fencing**，而不是继续加扫描规则；并指出 `fcntl(F_UNLCK)` **不能无条件解除独立的 `flock` 锁** ⇒ 威胁列表须区分「直接解除本协议锁的路径」与「其他锁族的干扰路径」（避免错误内核语义）；**CHANGE 70 = REVISE·P0**（七项必要条件方向正确，但两个 P0 缺口：(A) **持久记录写入后、COMMIT 前崩溃**——`PREPARED` 意图记录落盘 ≠ 数据库提交与文件落盘构成原子事务，须把「意图 PREPARED」与「实际 COMMITTED」区分为独立恢复协议；(B) **缺失外部记录后的重复创建阻断**——`ATTRIBUTION_UNRECOVERABLE` 若仅在执行进程内，崩溃后无法作为跨实例阻断依据，必须证明存在**可信、持久、所有写入者共同遵守的 dedupe 仲裁状态**）⇒ **新增 CHANGE 76（P0）M1 恢复状态机与去重权威**（表：`PREPARED + 主库无目标行 ⇒ 不得推断已提交，进入受控恢复`；`PREPARED + 主库行匹配且因果证据有效 ⇒ 可确认对应提交`；`COMMIT 结果未知 + 因果证据不可验证 ⇒ UNKNOWN，禁止自动重试 INSERT`；`存在目标行但执行归因不可恢复 ⇒ ATTRIBUTION_UNRECOVERABLE，人工处置`；`两执行竞争同一 dedupeKey ⇒ 只能有一个权威创建结果`），并须写明**意图记录的原子写入、文件与父目录持久化、文件身份绑定、密钥可用性、进程崩溃恢复、主库查询失败处理**；未证明前 **M1 只能是候选机制**，不得作为实施授权依据；**CHANGE 71 = REVISE·P0（含审计方对我方事实的更正）**：R18 §26.5 把 VACUUM FREEZE 描述为「冻结行版本插入事务标识变为冻结标识、与捕获值不匹配」**对现代 PostgreSQL 并不普遍成立**——**9.4 以前**冻结可能直接替换可见 `xmin`，**较新版本通常以标记位实现冻结并保留原始 `xmin` 数值** ⇒ **冻结后 `xmin` 可能仍等于原值，但这并不意味着它仍是可靠的提交归因证据**；**保守返回 UNKNOWN 的方向可接受，但依据与检测契约必须更正**；另有效窗口不能只说「不超过 XID 生命周期」，须给出**可运行的期限、适用 PostgreSQL 版本与超期后的机械判定规则** ⇒ **新增 CHANGE 77（P0）PostgreSQL 行版本身份与有效期限**：冻结后可能保留原始 `xmin`，**不能仅依赖数值变化检测冻结**；完整 XID、epoch、目标行版本与受信执行记录必须**共同**构成因果判断；原始行被更新/删除重插/重写/来源不可信 ⇒ 默认 UNKNOWN；为 M1 规定**明确的最大归因时间窗口**并给出**超期测试**；使用**目标 PostgreSQL 版本**验证所有 SQL 与 XID 语义；**未通过目标数据库实测不得声明已证明 epoch 归属**；**CHANGE 72 = PASS WITH REVISE**（六项反例均已写入 §26.6 且方向符合安全优先，无需重写）⇒ **新增 CHANGE 78（P1）增加四项反例**：**U2-50g**（外部 PREPARED 记录已 fsync、COMMIT 前进程崩溃 ⇒ 不得误判 YES）、**U2-50h**（现代 PG 冻结后 `xmin` 数值未改变但版本可信性不足 ⇒ UNKNOWN）、**U2-50i**（E1 归因不可恢复、E2 竞争相同 `dedupeKey` ⇒ 不得产生第二个候选）、**U2-50j**（排他锁提前释放、竞争进程获锁、原进程随后尝试 COMMIT ⇒ 不得产生未受控双写）；**实施前提契约状态**：排他性证明（已定义主要机制，仍缺**竞态与 FD 身份契约**）NOT_VERIFIED / 提交归因证明（M1 已提出，**恢复与行版本证明仍有 P0 缺口**）NOT_VERIFIED / 环境证据（已列核验项目，缺目标环境实际证据）NOT_VERIFIED；审计方特别指出「**Linux 文件锁属协作式机制，不能单独阻止不遵守协议的其他数据库写入者 ⇒ U2 最终应同时具备数据库层面的写入权限隔离、唯一性约束或等价仲裁，并证明其与本地锁协议的关系**」；`U2_DESIGN_R18_ACCEPTED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`U1_REOPEN=NO`、`SCHEMA_MIGRATION=HOLD`、`RUNTIME_WIRING/MODEL_CALL/PROVIDER_CALL=FORBIDDEN`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`；`REQUIRED_CHANGES=CHANGE_73_P1,CHANGE_74_P1,CHANGE_75_P0,CHANGE_76_P0,CHANGE_77_P0,CHANGE_78_P1`、`NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R19_READ_ONLY_CHANGES_73_TO_78` / `NEXT_AUDIT=MSG-20261009-44`；reviewed ref `c391245ea4a1c13471a2318aebade250764ba124`
+
+```text
+MSG-20261009-43｜CrossClaim AI · U2 设计 R18 独立审计裁决
+REVISE — 暂不授权实施
+
+审计对象： SI/RSI INTERNAL CODE REPAIR V1 · PHASE 3-A · U2 DESIGN R18
+
+固定审计 HEAD： c391245ea4a1c13471a2318aebade250764ba124
+
+U1 封板锚点： 9ee36837
+
+一、独立核验结果
+
+我已通过 GitHub 连接器只读查询指定仓库，对两个提交范围进行比较，并取得 R18 提交的实际差异。
+
+核验项
+
+
+
+独立结果
+
+
+
+
+c9ec3eca..c391245e
+
+
+
+2 commits / 3 files，符合申报
+
+
+
+
+7a1a64b2..c391245e
+
+
+
+1 commit / 1 file，符合申报
+
+
+
+
+R18 文档变更
+
+
+
++196 / −8，符合申报
+
+
+
+
+apps/api 产品代码差异
+
+
+
+0，符合申报
+
+
+
+
+Schema / migration 差异
+
+
+
+0，符合申报
+
+
+
+
+R18 §26.1–§26.6
+
+
+
+确认存在，内容与送审摘要基本一致
+
+
+
+
+SHA-256 原始字节复算
+
+
+
+未独立完成
+
+核验来源：
+R18 固定提交
+。
+
+范围核验结论：PASS。 这是一次真实的设计文档修订，并非产品代码实施，也不能视为运行时能力已通过验证。
+
+二、CHANGE 67–72 裁决总表
+
+CHANGE
+
+
+
+裁决
+
+
+
+结果
+
+
+
+
+67 · O3 证据边界
+
+
+
+PASS WITH REVISE
+
+
+
+核心语义正确，探针身份需锁定
+
+
+
+
+68 · 唯一锁协议
+
+
+
+PASS WITH REVISE
+
+
+
+已选定 flock，测试与身份契约尚需收紧
+
+
+
+
+69 · FD 调用路径
+
+
+
+PASS WITH REVISE
+
+
+
+威胁覆盖充分，绕过后的安全保证不足
+
+
+
+
+70 · M1 提交归因
+
+
+
+REVISE · P0
+
+
+
+持久化顺序与恢复原子性仍有缺口
+
+
+
+
+71 · xmin 生命周期
+
+
+
+REVISE · P0
+
+
+
+冻结语义、版本身份与 epoch 证明尚不完整
+
+
+
+
+72 · U2-50a~f
+
+
+
+PASS WITH REVISE
+
+
+
+六项已落地，但还需补充关键反例
+
+本轮认可 R18 的主要设计方向，但不能把“已写入设计约束”等同于“安全性已经得到证明”。
+
+实施授权结论：
+
+纯文本
+U2_DESIGN_R18_ACCEPTED=NO
+U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED
+U1_REOPEN=NO
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+以下详细列出仍然阻止 U2 实施的具体问题及最小修订要求。
+
+三、逐项技术裁决与修订要求
+CHANGE 67（P1）｜O3-CONTRADICTED
+
+裁决：PASS WITH REVISE
+
+R18 已正确修正“他方持有冲突锁就证明本 OFD 提前释放”的逻辑错误。
+
+以下条款接受：
+
+CONTRADICTED 必须具有能够反证本执行持锁状态的证据。
+
+锁族、锁对象、锁范围必须匹配。
+
+O3=INCONCLUSIVE 不意味着放行。
+
+O1、O2、O3、P2、授权复验共同组成进入 T2 的必要条件。
+
+不能把无关锁族或未知锁身份的结果升级为 PROVEN。
+
+但 P2 必须明确是通过独立 open() 创建、且不共享 T1 open file description 的探针。
+
+Linux flock 锁属于 open file description。通过 dup()、fork() 等共享描述获得的 FD，可能操作同一把锁，而不是构成独立竞争。
+Linux manual page
++1
+
+CHANGE 73（P1）— P2 探针独立性
+
+要求 R19 追加：
+
+纯文本
+P2_PROBE:
+  lock_family = flock
+  file_identity = T1.(st_dev, st_ino)
+  acquisition = independent_open
+  shares_T1_OFD = false
+  lock_request = LOCK_EX | LOCK_NB
+
+P2_ACQUIRED = true
+  => EXCLUSIVE_WINDOW_CONTRADICTED
+  => T2_DENIED
+
+应增加负面测试：通过 dup(T1.fd) 构造伪独立探针，确保它不能被当作有效 P2 证据。
+
+CHANGE 68（P0）｜唯一生产锁协议
+
+裁决：PASS WITH REVISE
+
+认可将 flock:whole-file:LOCK_EX 选为唯一生产协议，以及撤回 OFD 记录锁混用方案。
+
+Linux 本地文件系统上，flock 和 fcntl 记录锁通常不互相冲突。NFS、SMB 则可能有不同语义，因此目标文件系统和挂载方式必须列入部署前提。
+Linux manual page
++1
+
+还存在两个问题。
+
+第一，协议声明只能证明已纳入管理的参与者自称使用同一协议，不能证明不存在未登记进程、旧版本进程或拥有数据库写权限的其他组件。
+
+第二，混合锁族测试不能仅以“两个进程都获得锁，所以整个测试失败”结束。该行为在指定 Linux 本地文件系统上是预期反例。真正的安全验收应该是：测试成功重现双锁并存，系统识别该环境或参与者组合不符合自身契约，然后拒绝 U2 写入。
+
+CHANGE 74（P1）— 协议边界与负面验收
+
+明确以下要求：
+
+CONFIG_VERIFIED 覆盖真实部署清单、参与者版本与数据库写入主体。
+
+固定并核验文件系统类型、挂载方式、锁文件生命周期和目标 Linux 环境。
+
+混合锁族反例必须证明 U2_ADMISSION=DENIED，而不只是证明两个锁可以同时存在。
+
+任一未登记写入主体、未经验证的部署拓扑或不受控锁文件替换，均触发 fail-closed。
+
+CHANGE 69（P1）｜FD 调用路径
+
+裁决：PASS WITH REVISE
+
+七类威胁已经纳入文档，设计覆盖较 R17 更完整。
+
+但存在一个重要区别：
+
+监测到 FD 被释放，不等于能在另一个进程获得锁并写入之前阻止危险行为。
+
+例如，未经授权的原生调用执行 LOCK_UN，接着另一进程立即取得锁，而当前执行仍准备提交数据库事务。
+
+如果检测依赖后续扫描、计数器或异步回调，检测与数据库写入之间可能出现 TOCTOU 竞争窗口。
+
+另外，fcntl(F_UNLCK) 并不能无条件解除一个独立的 flock 锁。应区分直接解除当前协议锁的路径与其他锁族的干扰路径，避免把威胁列表写成错误的内核语义。
+
+CHANGE 75（P0）— FD 边界失效时的写入保证
+
+要求明确：
+
+一旦排他性可能失效，必须禁止启动新的事务提交；不能仅记录事件。
+
+证明持锁边界覆盖实际数据库提交期间，而不只是 INSERT 调用期间。
+
+未验证的原生依赖、FD 共享或间接释放路径不得进入 U2 写入进程。
+
+测试包括“锁刚释放、另一进程抢锁成功、原执行尝试 COMMIT”的竞态场景。
+
+若无法在所用技术栈中证明这一保证，应选择隔离写入进程、缩小可信执行边界，或引入数据库端 fencing，而不是继续增加扫描规则。
+
+CHANGE 70（P0）｜M1 提交归因
+
+裁决：REVISE
+
+R18 的七项必要条件方向正确，尤其接受：
+
+在同一真实事务中取得 XID 并执行 INSERT。
+
+外部因果记录必须受信。
+
+外部持久记录不能独立证明 COMMIT 成功。
+
+不可恢复的归因状态必须保持 UNKNOWN。
+
+candidateExists 与 thisExecutionCommitted 分列。
+
+但仍有两个 P0 缺口。
+
+问题 A：持久记录写入之后、COMMIT 之前崩溃
+
+这是一个正常的分布式双存储故障场景。R18 允许将其判定为 UNKNOWN，却还没有把记录中的 PREPARED 状态与实际 COMMITTED 状态区分为独立的恢复协议。
+
+“COMMIT 前 fsync 成功”仅证明意图记录已持久化，不能证明数据库提交与文件系统落盘构成原子事务。
+
+问题 B：缺失外部记录后的重复创建阻断
+
+R18 要求不得由 E2 再次创建相同候选，这个要求正确。
+
+但 ATTRIBUTION_UNRECOVERABLE 如果只存于执行进程内部，崩溃后就不能作为跨实例阻断依据。必须证明存在可信、持久、所有写入者共同遵守的 dedupe 仲裁状态。
+
+CHANGE 76（P0）— M1 恢复状态机及去重权威
+
+要求 R19 明确：
+
+恢复状态
+
+
+
+允许行为
+
+
+
+
+PREPARED + 主库无目标行
+
+
+
+不得推断已提交；进入受控恢复
+
+
+
+
+PREPARED + 主库目标行匹配且因果证据有效
+
+
+
+可以确认对应提交
+
+
+
+
+COMMIT 结果未知 + 因果证据不可验证
+
+
+
+UNKNOWN，禁止自动重试 INSERT
+
+
+
+
+存在目标行但执行归因不可恢复
+
+
+
+ATTRIBUTION_UNRECOVERABLE，人工处置
+
+
+
+
+两个执行竞争相同 dedupeKey
+
+
+
+只能有一个权威创建结果
+
+还须写明：意图记录的原子写入、文件及父目录持久化、文件身份绑定、密钥可用性、进程崩溃恢复，以及主库查询失败时的处理方法。
+
+在这些条件未得到证明前，M1 只能是候选机制，不能作为实施授权依据。
+
+CHANGE 71（P0）｜xmin 与事务身份
+
+裁决：REVISE
+
+这里发现一个需要更正的 PostgreSQL 事实。
+
+R18 §26.5 将 VACUUM FREEZE 描述为“冻结行版本插入事务标识变为冻结标识，与捕获值不匹配”。
+
+这对现代 PostgreSQL 并不普遍成立。
+
+PostgreSQL 官方文档说明：9.4 以前，冻结可能直接替换可见 xmin；较新版本通常通过标记位实现冻结，保留原始 xmin 数值。因此，冻结后 xmin 可能仍然等于原值，但这不意味着它仍是可靠的提交归因证据。
+postgresql.org
++1
+
+R18 最终要求 UNKNOWN 的保守方向可以接受，但依据和检测契约必须更正。
+
+另一个问题是：有效窗口不能只说“不超过 XID 生命周期”，还需要给出可运行的期限、适用 PostgreSQL 版本和超期后的机械判定规则。
+
+CHANGE 77（P0）— PostgreSQL 行版本身份与有效期限
+
+R19 需要明确：
+
+冻结后可能保留原始 xmin；不能仅依赖数值变化检测冻结。
+
+完整 XID、epoch、目标行版本和受信执行记录必须共同构成因果判断。
+
+对原始行已被更新、删除重插、重写或来源不可信的情况，默认 UNKNOWN。
+
+为 M1 规定明确的最大归因时间窗口，并给出超期测试。
+
+使用目标 PostgreSQL 版本验证所有 SQL 及 XID 语义。
+
+没有通过目标数据库的实测，就不能声明已证明 epoch 归属。
+
+CHANGE 72（P1）｜U2-50a 至 U2-50f
+
+裁决：PASS WITH REVISE
+
+通过 GitHub 实际 diff，我确认六项反例均已写入 §26.6，且结果方向符合安全优先原则。
+
+现有六项无需重新编写，但测试矩阵仍缺少能直接挑战 CHANGE 70、71 的案例。
+
+CHANGE 78（P1）— 增加四项反例
+
+编号
+
+
+
+反例
+
+
+
+必须结果
+
+
+
+
+U2-50g
+
+
+
+外部 PREPARED 记录已 fsync，COMMIT 前进程崩溃
+
+
+
+不得误判 YES
+
+
+
+
+U2-50h
+
+
+
+现代 PG 冻结后 xmin 数值未改变，但版本可信性不足
+
+
+
+UNKNOWN
+
+
+
+
+U2-50i
+
+
+
+E1 归因不可恢复，E2 竞争相同 dedupeKey
+
+
+
+不得产生第二个候选
+
+
+
+
+U2-50j
+
+
+
+排他锁提前释放，竞争进程取得锁，原进程随后尝试 COMMIT
+
+
+
+不得产生未受控双写
+
+这些均为未来实施阶段的验收规格，本轮并未运行。
+
+四、U2 实施授权判定
+
+当前三个实施前提已经有较明确的设计方向，但尚不满足实施许可。
+
+实施前提
+
+
+
+契约状态
+
+
+
+验证状态
+
+
+
+
+排他性证明
+
+
+
+已定义主要机制，仍缺竞态与 FD 身份契约
+
+
+
+NOT_VERIFIED
+
+
+
+
+提交归因证明
+
+
+
+M1 已提出，但恢复与行版本证明仍存在 P0 缺口
+
+
+
+NOT_VERIFIED
+
+
+
+
+环境证据
+
+
+
+已列核验项目，但缺目标环境的实际证据
+
+
+
+NOT_VERIFIED
+
+本轮不授权 U2_PLATFORM_ONLY_INSERT_SUBSET。
+
+尤其需要注意：Linux 文件锁属于协作式机制，不能单独阻止不遵守协议的其他数据库写入者。U2 最终应同时拥有数据库层面的写入权限隔离、唯一性约束或等价仲裁，并证明它们与本地锁协议的关系。
+
+五、下一轮最小授权范围
+
+建议 R19 仅处理本次新增的 CHANGE 73–78，不重复已接受的设计条款，也不重新打开 U1。
+
+下一轮可执行范围：
+
+纯文本
+NEXT_AUDIT=MSG-20261009-44
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R19_READ_ONLY_CHANGES_73_TO_78
+
+REQUIRED_CHANGES:
+  CHANGE_73=P1
+  CHANGE_74=P1
+  CHANGE_75=P0
+  CHANGE_76=P0
+  CHANGE_77=P0
+  CHANGE_78=P1
+
+U2_IMPLEMENTATION_AUTHORIZED=NO
+U1_REOPEN=NO
+
+R19 需要给出可检验的契约，而非仅承诺未来通过测试。设计能够约束实施，但目标环境的实际核验必须单独进行。
+
+六、正式机器可读裁决
+纯文本
+AUDIT_ID=MSG-20261009-43
+REVIEWED_HEAD=c391245ea4a1c13471a2318aebade250764ba124
+REPO=anthonannabella-dev/crossclaim-ai
+BRANCH=feat/si-rsi-internal-code-repair-v1
+
+VERDICT=REVISE
+AUDIT_SCOPE_VERIFIED=YES
+SINGLE_COMMIT_SCOPE_VERIFIED=YES
+PRODUCT_CODE_CHANGES=0
+DOCUMENT_DIFF_VERIFIED=YES
+DOCUMENT_SHA256_VERIFIED=NO
+
+CHANGE_67=PASS_WITH_REVISE
+CHANGE_68=PASS_WITH_REVISE
+CHANGE_69=PASS_WITH_REVISE
+CHANGE_70=REVISE
+CHANGE_71=REVISE
+CHANGE_72=PASS_WITH_REVISE
+
+REQUIRED_CHANGES=73,74,75,76,77,78
+P0_BLOCKERS=75,76,77
+
+EXCLUSIVE_WINDOW_PROOF=NOT_VERIFIED
+COMMIT_ATTRIBUTION_PROOF=NOT_VERIFIED
+TARGET_ENVIRONMENT_EVIDENCE=NOT_VERIFIED
+
+U2_DESIGN_R18_ACCEPTED=NO
+U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED
+U1_REOPEN=NO
+
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R19_READ_ONLY_CHANGES_73_TO_78
+NEXT_AUDIT=MSG-20261009-44
+
+SCHEMA_MIGRATION=HOLD
+RUNTIME_WIRING=FORBIDDEN
+MODEL_CALL=FORBIDDEN
+PROVIDER_CALL=FORBIDDEN
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+
+最终裁决：R18 的六项问题已经得到实质性回应，其中锁协议统一、O3 证据边界及 M1 状态区分均取得进展。但 FD 排他窗口的竞态保证、提交归因的故障恢复，以及 PostgreSQL 行版本身份仍存在关键缺口。因此 R18 继续 REVISE，仅允许下一轮只读设计修订，不允许进入 U2 产品代码实施。
+
+本次仅进行了只读审计，没有修改你的 GitHub 仓库。
+```
