@@ -172832,3 +172832,42 @@ PRODUCTION_READY=NO
 
 最终审计意见： U1 当前未发现足以直接否定其关键范围声明机制的证据，但也尚未达到可以独立签署关闭的证据充分性标准。下一轮严格限于 CHANGE 29–31 的核验，不得借此扩大运行时、自动修复、数据库写入或生产部署权限。
 ```
+
+### [MSG-20261009-19] U1 FINAL-R5 证据核验 = **PASS WITH REVISE**（CHANGE 29 = PASS、CHANGE 30/31 = PASS_SCOPED；U1 仍未 CLOSED）；**新增 CHANGE 32（P0）** 并发事务隔离：createPrismaTrustedFactsReadPort 的实例级 activeTransaction 在并发 resolve() 下可能串用事务，要求消除共享句柄、保证每次独立 resolve() 使用自身只读事务（合法同调用嵌套可复用）、新增同一端口实例双组织并发强制交错真实 PostgreSQL 回归（断言事务归属独立 / 无跨调用复用 / 无跨租户串扰 / 异常路径 fail-closed）、重跑 U1 全量测试与 TS 检查并提供固定 HEAD 代码与原始证据；不得新增第二套 Runtime/Scheduler/Controller。NEXT_AUTHORIZED=PHASE3_A_U1_FINAL_R6_CHANGE32_ONLY / NEXT_AUDIT=MSG-20261009-20；reviewed ref e4c2f27d（evidence 16cf7747）
+
+```text
+MSG-20261009-19 · 独立审计裁决
+（来源：HOST 于 2026-10-09 在会话中逐字粘贴的裁决正文；文本中的换行以粘贴原样保留。）
+
+REVIEWED_HEAD = e4c2f27d
+EVIDENCE_HEAD = 16cf7747
+VERDICT = PASS WITH REVISE
+PHASE3_U1_IMPLEMENTATION_CLOSED = NO
+
+本轮裁决
+- CHANGE 29 = PASS：三个完整 U1 文件可从 GitHub 固定提交读取，内容与 evidence.json 一致，SHA-256 独立复算一致。
+- CHANGE 30 = PASS_SCOPED：证据包含 61 条通过记录、原始测试输出和退出码。确认材料完整，但评审方未独立重跑 PostgreSQL。
+- CHANGE 31 = PASS_SCOPED：七张表采用内容级 count:md5 摘要，before/after 相同；独立拒写事务和公共入口拒写探针均有记录。
+
+新增 CHANGE 32（P0）：并发事务隔离
+文件：apps/api/src/services/self-repair/trusted-facts-adapter.ts
+问题：createPrismaTrustedFactsReadPort 使用实例级 activeTransaction 保存当前事务句柄。当多个 resolve() 并发使用同一个 readPort 实例时，后发请求可能错误复用先发请求的事务。现有测试未证明并发隔离。
+要求：
+1. 消除不同请求之间共享事务句柄的可能。
+2. 保证每次独立 resolve() 使用自身的只读事务上下文；合法同调用嵌套可以复用。
+3. 增加同一端口实例、两个组织并发调用的真实 PostgreSQL 回归测试，强制交错执行。
+4. 断言事务归属独立、无跨调用复用、无跨租户事实串扰，异常路径保持 fail-closed。
+5. 重新执行 U1 全量测试、TypeScript 检查，并提供固定 HEAD 代码和原始证据。
+不得为此新增第二套 Runtime、Scheduler 或 Controller。
+
+授权边界
+NEXT_AUTHORIZED = PHASE3_A_U1_FINAL_R6_CHANGE32_ONLY
+NEXT_AUDIT = MSG-20261009-20
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE = FORBIDDEN
+AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+
+将本裁决逐字归档，并更新 checkpoint。修订完成后重新提交独立审计，不得自行宣布 U1 CLOSED。
+```

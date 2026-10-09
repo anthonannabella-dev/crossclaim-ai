@@ -29,6 +29,10 @@ import { testDatabaseMarker } from './si-rsi-test-db.helper';
 const prisma = new PrismaClient();
 const AT = new Date('2026-10-09T04:00:00.000Z');
 const ORG = 'org-u1-db';
+/** CHANGE 32 并发回归使用的第二 / 第三个组织（同一端口实例、不同租户） */
+const ORG_A = 'org-u1-db-a';
+const ORG_B = 'org-u1-db-b';
+const ORG_MISSING = 'org-u1-db-missing';
 const SCOPE: TrustedFactsResourceScope = {
   platformAccountId: 'acct-u1',
   provider: 'AMAZON',
@@ -63,10 +67,10 @@ const adapter = (
   });
 };
 
-async function seedOrganization(): Promise<void> {
+async function seedOrganization(organizationId: string = ORG): Promise<void> {
   await prisma.organization.upsert({
-    where: { id: ORG },
-    create: { id: ORG, name: ORG, slug: ORG },
+    where: { id: organizationId },
+    create: { id: organizationId, name: organizationId, slug: organizationId },
     update: {},
   });
 }
@@ -84,12 +88,14 @@ async function seedAuthorization(
     platformAccountId?: string;
     domain?: string;
     jurisdiction?: string;
+    organizationId?: string;
   } = {},
 ): Promise<void> {
-  await seedOrganization();
+  const organizationId = overrides.organizationId ?? ORG;
+  await seedOrganization(organizationId);
   await prisma.standingAuthorization.create({
     data: {
-      organizationId: ORG,
+      organizationId,
       platformAccountId: overrides.platformAccountId ?? 'acct-u1',
       provider: overrides.provider ?? 'AMAZON',
       allowedActionTypes: overrides.allowedActionTypes ?? ['recovery.read'],
@@ -169,8 +175,10 @@ async function snapshot(): Promise<Record<string, unknown>> {
 }
 
 beforeEach(async () => {
-  await prisma.standingAuthorization.deleteMany({ where: { organizationId: ORG } });
-  await prisma.organization.deleteMany({ where: { id: ORG } });
+  for (const organizationId of [ORG, ORG_A, ORG_B, ORG_MISSING]) {
+    await prisma.standingAuthorization.deleteMany({ where: { organizationId } });
+    await prisma.organization.deleteMany({ where: { id: organizationId } });
+  }
 });
 afterAll(async () => {
   await prisma.$disconnect();
@@ -426,6 +434,146 @@ describe(`PHASE 3-A / U1 可信事实适配器 — 真实 PostgreSQL（${testDat
       scopeSource: 'executionContext.resourceScope（服务端注入）；请求入参无该字段',
       notApplicableSource: 'executionContext.notApplicableScopeDimensions（服务端显式声明）',
       results: observed,
+    });
+  });
+
+  it('U1-DB9（CHANGE 32）同一端口实例、双组织并发交错：事务归属独立 / 无跨调用复用 / 无跨租户串扰 / 异常路径 fail-closed', async () => {
+    const scopeA: TrustedFactsResourceScope = {
+      platformAccountId: 'acct-a',
+      provider: 'AMAZON',
+      domain: 'LOGISTICS',
+      jurisdiction: 'US',
+    };
+    const scopeB: TrustedFactsResourceScope = {
+      platformAccountId: 'acct-b',
+      provider: 'SHOPIFY',
+      domain: 'FINANCE',
+      jurisdiction: 'JP',
+    };
+    await seedAuthorization({ organizationId: ORG_A, platformAccountId: 'acct-a', provider: 'AMAZON', authorizationVersion: 3 });
+    await seedAuthorization({
+      organizationId: ORG_B,
+      platformAccountId: 'acct-b',
+      provider: 'SHOPIFY',
+      domain: 'FINANCE',
+      jurisdiction: 'JP',
+      authorizationVersion: 5,
+    });
+    const rowA = await prisma.standingAuthorization.findFirstOrThrow({ where: { organizationId: ORG_A }, select: { id: true } });
+    const rowB = await prisma.standingAuthorization.findFirstOrThrow({ where: { organizationId: ORG_B }, select: { id: true } });
+
+    // 同一个 readPort 实例被两个租户的调用共用（正是评审指出的场景）
+    const sharedPort = createPrismaTrustedFactsReadPort({ prisma });
+    const txSeq = new WeakMap<object, number>();
+    let nextSeq = 0;
+    const handles: { call: string; seq: number; readOnly: string | null; writeRejected: boolean }[] = [];
+    const gate = { release: (): void => {}, aInside: (): void => {}, bInside: (): void => {} };
+    const bothRelease = new Promise<void>((resolve) => {
+      gate.release = resolve;
+    });
+    const aInside = new Promise<void>((resolve) => {
+      gate.aInside = resolve;
+    });
+    const bInside = new Promise<void>((resolve) => {
+      gate.bInside = resolve;
+    });
+    const timeout = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    const wrap = (call: string): TrustedFactsReadPort => ({
+      findOrganization: (input) => sharedPort.findOrganization(input),
+      listStandingAuthorizations: (input) => sharedPort.listStandingAuthorizations(input),
+      withReadOnlyTransaction: (run) =>
+        sharedPort.withReadOnlyTransaction(async (tx) => {
+          const key = tx as unknown as object;
+          if (!txSeq.has(key)) {
+            nextSeq += 1;
+            txSeq.set(key, nextSeq);
+          }
+          const settings = await tx.$queryRawUnsafe<{ transaction_read_only: string }[]>(
+            `SELECT current_setting('transaction_read_only') AS transaction_read_only`,
+          );
+          // 交错编排：A 先进入自己的只读事务并停住；B 在 A **仍然在事务内**时才开始
+          if (call === 'A') {
+            gate.aInside();
+            await Promise.race([bothRelease, timeout(5000)]);
+          } else if (call === 'B') {
+            gate.bInside();
+            await Promise.race([bothRelease, timeout(5000)]);
+          }
+          const result = await run(tx);
+          // 读完之后再做写入探针（若先写，事务进入 aborted 状态会让后续读取失败）
+          let writeRejected = false;
+          try {
+            await tx.$executeRawUnsafe(`DELETE FROM "StandingAuthorization" WHERE "id" = 'u1-r6-probe-${call}'`);
+          } catch {
+            writeRejected = true;
+          }
+          handles.push({ call, seq: txSeq.get(key)!, readOnly: settings[0]?.transaction_read_only ?? null, writeRejected });
+          return result;
+        }),
+    });
+
+    const mkAdapter = (readPort: TrustedFactsReadPort, scope: TrustedFactsResourceScope) =>
+      createTrustedFactsAdapter({
+        readPort,
+        executionContext: { subjectRef: 'runtime-member-1', caller: 'RUNTIME_MEMBER', operationRecheck: 'CONFIRMED_READ_ONLY', resourceScope: scope },
+        now: () => AT,
+      });
+
+    // 先启动 A，等它确实进入只读事务后，再启动 B（“后发请求”场景）
+    const pendingA = mkAdapter(wrap('A'), scopeA).resolve({ organizationId: ORG_A, actionType: 'recovery.read', monetaryAction: false });
+    await Promise.race([aInside, timeout(5000)]);
+    const pendingB = mkAdapter(wrap('B'), scopeB).resolve({ organizationId: ORG_B, actionType: 'recovery.read', monetaryAction: false });
+    await Promise.race([bInside, timeout(5000)]);
+    gate.release();
+    const [resA, resB] = await Promise.all([pendingA, pendingB]);
+
+    expect(resA.ok && resB.ok).toBe(true);
+    if (resA.ok && resB.ok) {
+      // 无跨租户事实串扰：各自拿到本租户的授权行
+      expect(resA.provenance.authorizationActive?.authorizationId).toBe(rowA.id);
+      expect(resB.provenance.authorizationActive?.authorizationId).toBe(rowB.id);
+      expect(resA.provenance.authorizationActive?.authorizationVersion).toBe(3);
+      expect(resB.provenance.authorizationActive?.authorizationVersion).toBe(5);
+    }
+    // 事务归属独立：并发调用不得复用同一事务句柄
+    expect(handles).toHaveLength(2);
+    const seqA = handles.find((h) => h.call === 'A')!.seq;
+    const seqB = handles.find((h) => h.call === 'B')!.seq;
+    expect(seqA).not.toBe(seqB);
+    expect(handles.every((h) => h.readOnly === 'on')).toBe(true);
+    expect(handles.every((h) => h.writeRejected)).toBe(true);
+
+    // 异常路径 fail-closed：不存在的组织被拒绝，且后续调用获得**全新**独立事务（无残留句柄复用）
+    const missing = await mkAdapter(wrap('C'), scopeA).resolve({
+      organizationId: ORG_MISSING,
+      actionType: 'recovery.read',
+      monetaryAction: false,
+    });
+    expect(!missing.ok && missing.reason).toBe('ORGANIZATION_NOT_FOUND');
+    const afterFailure = await mkAdapter(wrap('D'), scopeA).resolve({
+      organizationId: ORG_A,
+      actionType: 'recovery.read',
+      monetaryAction: false,
+    });
+    expect(afterFailure.ok).toBe(true);
+    const seqC = handles.find((h) => h.call === 'C')!.seq;
+    const seqD = handles.find((h) => h.call === 'D')!.seq;
+    expect(new Set([seqA, seqB, seqC, seqD]).size).toBe(4);
+    expect(afterFailure.ok && afterFailure.provenance.authorizationActive?.authorizationId).toBe(rowA.id);
+
+    evidence({
+      kind: 'CONCURRENT_TRANSACTION_ISOLATION',
+      sameReadPortInstance: true,
+      forcedInterleaving: true,
+      mechanism: 'AsyncLocalStorage（按调用链隔离事务句柄）',
+      handles,
+      distinctHandlesForConcurrentCalls: seqA !== seqB,
+      allReadOnly: handles.every((h) => h.readOnly === 'on'),
+      writeProbeRejectedPerCall: handles.filter((h) => h.writeRejected).length,
+      results: { A_version: 3, B_version: 5, A_authorizationId: rowA.id, B_authorizationId: rowB.id },
+      crossTenantLeak: false,
+      exceptionPath: { org: ORG_MISSING, reason: 'ORGANIZATION_NOT_FOUND', laterCallFreshTransaction: new Set([seqA, seqB, seqC, seqD]).size === 4 },
     });
   });
 });

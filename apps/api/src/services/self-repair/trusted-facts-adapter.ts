@@ -6,6 +6,11 @@
  *           MSG-20261009-16 → **CHANGE 24–25**（U1 FINAL-R3，设计文档 §18）；
  *           MSG-20261009-17 → **CHANGE 26–28**（U1 FINAL-R4：可独立复核的原始材料 + 范围声明链核验）。
  *
+ * **CHANGE 32 要点（并发事务隔离）**
+ *   - 事务句柄**不再**保存在端口实例字段上；改用 `AsyncLocalStorage` 按**调用链**隔离：
+ *     并发 `resolve()` 各自获得自己的只读事务，互不复用；同一调用链内的嵌套调用复用同一事务。
+ *   - 任一调用结束（正常或异常）都不会影响其他调用的读取路径（异常路径 fail-closed，不回落到裸 client）。
+ *
  * **CHANGE 27 要点（范围不给「没传」留放大口子）**
  *   - 必需维度：必须由可信上下文提供，缺失 / 空串 / 声明为不适用 ⇒ fail-closed；
  *   - 可选维度：**必须二选一** —— 要么提供具体值，要么由服务端**显式声明「不适用」**；
@@ -34,6 +39,7 @@
  */
 
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 import type { TriageTrustedFacts } from './fault-triage';
 
@@ -542,8 +548,15 @@ export async function runInReadOnlyTransaction<T>(
  * 不等价于完整单调版本；完整版本单调性属于 U2 及之后的授权范围）。
  */
 export function createPrismaTrustedFactsReadPort(input: { prisma: PrismaClient }): TrustedFactsReadPort {
-  let activeTransaction: Prisma.TransactionClient | null = null;
-  const db = (): Prisma.TransactionClient => activeTransaction ?? (input.prisma as unknown as Prisma.TransactionClient);
+  /**
+   * CHANGE 32：以**调用链**（而非端口实例）为作用域保存当前只读事务句柄。
+   * - 并发请求：各自 `AsyncLocalStorage` 上下文相互隔离，绝不串用事务；
+   * - 同一调用链的嵌套：命中已有句柄 ⇒ 复用（不嵌套开启第二个事务）；
+   * - 异常：上下文随调用链退出自动失效，不存在“残留句柄被后续请求复用”的路径。
+   */
+  const transactionScope = new AsyncLocalStorage<Prisma.TransactionClient>();
+  const db = (): Prisma.TransactionClient =>
+    transactionScope.getStore() ?? (input.prisma as unknown as Prisma.TransactionClient);
 
   return {
     async findOrganization({ organizationId }) {
@@ -594,17 +607,11 @@ export function createPrismaTrustedFactsReadPort(input: { prisma: PrismaClient }
       }));
     },
     async withReadOnlyTransaction(run) {
-      // 已在只读事务内 ⇒ 复用（不得嵌套开启第二个事务）
-      if (activeTransaction !== null) return run(activeTransaction);
-      return runInReadOnlyTransaction(input.prisma, async (tx) => {
-        activeTransaction = tx;
-        try {
-          // 回调收到的是**同一个**只读事务句柄（CHANGE 25：公共入口证据可在该事务内验证写入被拒）
-          return await run(tx);
-        } finally {
-          activeTransaction = null;
-        }
-      });
+      // 同一调用链已在只读事务内 ⇒ 复用（不得嵌套开启第二个事务）
+      const existing = transactionScope.getStore();
+      if (existing !== undefined) return run(existing);
+      // 新调用链 ⇒ 开启只读事务，并把该事务绑定到**本调用链**的上下文
+      return runInReadOnlyTransaction(input.prisma, (tx) => transactionScope.run(tx, () => run(tx)));
     },
   };
 }
@@ -637,4 +644,7 @@ export const TRUSTED_FACTS_ADAPTER_BOUNDARY = {
   requiresExplicitNotApplicableDeclaration: true,
   scopeOmissionCannotWidenMatch: true,
   rejectsUndeclaredScopeDimensions: true,
+  /** CHANGE 32 */
+  isolatesConcurrentTransactionsPerCallChain: true,
+  sharesTransactionHandleAcrossCalls: false,
 } as const;
