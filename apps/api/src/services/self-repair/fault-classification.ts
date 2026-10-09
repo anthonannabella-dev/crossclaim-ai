@@ -235,6 +235,19 @@ function opaqueRef(kind: 'org' | 'provider' | 'tenant', raw: string): string {
   return `${kind}-${digest}`;
 }
 
+/**
+ * 组织 id → 不可逆引用（导出给**读取路径**用：只有拿到服务端可信租户上下文的调用方
+ * 才能推导出同一引用并据此检索；哈希本身**不是授权凭证**）。
+ */
+export function faultOrganizationRef(organizationId: string): string {
+  return opaqueRef('org', organizationId.trim());
+}
+
+/** Provider → 不可逆引用（同组织不同 Provider 的身份区分依据）。 */
+export function faultProviderRef(provider: string): string {
+  return opaqueRef('provider', provider.trim().toUpperCase());
+}
+
 function normalizeToken(value: unknown): string {
   return typeof value === 'string' ? value.trim().toUpperCase() : '';
 }
@@ -651,10 +664,27 @@ function buildDiagnosis(
     summarized === ''
       ? `${rule.faultClass} in ${redactFaultText(observation.sourceModule, 80)}`
       : summarized;
+  /**
+   * 身份规则（MSG-20261009-07 / CHANGE 3）—— 显式、可测、可审计：
+   *   · **租户维度参与身份**：同一错误签名在不同组织之间**绝不合并**（跨租户合并会把 A 的故障
+   *     与 B 的故障混为一条，既误导诊断也构成跨租户信息混合）；无租户上下文的故障记为 `global`。
+   *   · **Provider 维度参与身份**：同组织下不同 Provider 的同类故障**不合并**
+   *     （契约漂移 / 凭据过期 / 解析差异的根因与责任方不同，合并会掩盖归属）；
+   *     无 Provider 上下文的故障记为 `noprovider`。
+   *   · 指纹部分仍只由**确定性证据**构成（类别 / 模块 / 错误码 / 阶段 / 状态码 / 已脱敏摘要）。
+   */
+  const tenantScope =
+    typeof observation.organizationRef === 'string' && observation.organizationRef.trim() !== ''
+      ? faultOrganizationRef(observation.organizationRef)
+      : 'global';
+  const providerScope =
+    typeof observation.providerRef === 'string' && observation.providerRef.trim() !== ''
+      ? faultProviderRef(observation.providerRef)
+      : 'noprovider';
   const dedupeKey = `${INTERNAL_FAULT_INCIDENT_KIND}:${rule.faultClass}:${redactFaultText(
     observation.sourceModule,
     80,
-  )}:${fingerprint([
+  )}:${tenantScope}:${providerScope}:${fingerprint([
     rule.faultClass,
     observation.environment,
     redactFaultText(observation.sourceModule, 80),
@@ -823,11 +853,11 @@ export function buildFaultIncidentIntent(
   const detectedAt = (options.now ?? new Date()).toISOString();
   const organizationRef =
     typeof observation.organizationRef === 'string' && observation.organizationRef.trim() !== ''
-      ? opaqueRef('org', observation.organizationRef.trim())
+      ? faultOrganizationRef(observation.organizationRef)
       : null;
   const providerRef =
     typeof observation.providerRef === 'string' && observation.providerRef.trim() !== ''
-      ? opaqueRef('provider', observation.providerRef.trim().toUpperCase())
+      ? faultProviderRef(observation.providerRef)
       : null;
 
   /**
@@ -887,6 +917,29 @@ export const FAULT_CLASSIFICATION_BOUNDARY = {
   capsPersistedTextLength: true,
   decodesEncodedSecretsBeforeMasking: true,
   logsNothing: true,
+  /** MSG-20261009-07 CHANGE 3 */
+  tenantScopedIdentity: true,
+  providerScopedIdentity: true,
+  hashIsNotAuthorization: true,
   incidentKind: INTERNAL_FAULT_INCIDENT_KIND,
   customerExecutionKind: 'CUSTOMER_GOAL_QUEUE',
+} as const;
+
+/**
+ * Incident 身份规则（**显式登记**，供审计与测试逐项断言）：
+ *   身份 = (faultClass, sourceModule, tenantScope, providerScope, 证据指纹)。
+ *   · 跨租户**不合并**（避免把 A 的故障与 B 的故障混为一条）；
+ *   · 同组织跨 Provider **不合并**（根因与责任方不同）；
+ *   · 无租户 / 无 Provider 的故障分别记为 `global` / `noprovider`；
+ *   · 落库只存不可逆引用，**哈希引用不是授权凭证**（读取必须由服务端可信租户上下文约束）。
+ */
+export const FAULT_INCIDENT_IDENTITY_RULE = {
+  dimensions: ['faultClass', 'sourceModule', 'tenantScope', 'providerScope', 'evidenceFingerprint'],
+  crossTenantMerge: false,
+  crossProviderMerge: false,
+  tenantlessScope: 'global',
+  providerlessScope: 'noprovider',
+  rawTenantIdPersisted: false,
+  rawProviderIdPersisted: false,
+  hashIsNotAuthorization: true,
 } as const;

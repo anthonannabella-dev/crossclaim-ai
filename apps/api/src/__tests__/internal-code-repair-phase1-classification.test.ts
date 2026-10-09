@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FAULT_CLASSES,
   FAULT_CLASSIFICATION_BOUNDARY,
+  FAULT_INCIDENT_IDENTITY_RULE,
   FAULT_REQUIRED_ACTIONS,
   FAULT_SOURCE_REF_FIELDS,
   FAULT_TEXT_LIMITS,
@@ -27,6 +28,7 @@ import {
   annotateUntrustedModelHint,
   buildFaultIncidentIntent,
   classifyFault,
+  faultOrganizationRef,
   hasResidualSecretRisk,
   redactFaultText,
   type FaultClass,
@@ -552,5 +554,59 @@ describe('PHASE 1 / CHANGE 2 结构化白名单与长度上限', () => {
       expect(source.includes('console.')).toBe(false);
       expect(source.includes('process.stdout')).toBe(false);
     }
+  });
+});
+
+/**
+ * MSG-20261009-07 / CHANGE 3 —— 身份规则：租户与 Provider **参与**故障身份。
+ * 目的：① 跨租户绝不合并；② 同组织跨 Provider 不合并；③ 原始 id 永不入键（只入不可逆引用）。
+ */
+describe('PHASE 1 / CHANGE 3 身份规则（租户 / Provider 参与身份）', () => {
+  const sameSignature = (overrides: Partial<FaultObservation> = {}): FaultObservation => ({
+    ...BASE,
+    errorName: 'AdapterMappingError',
+    message: 'identical signature',
+    ...overrides,
+  });
+
+  it('同一错误签名跨组织 ⇒ 绝不合并，且原始组织 id 不入键', () => {
+    const tenantA = classifyFault(sameSignature({ organizationRef: 'org-a' }));
+    const tenantB = classifyFault(sameSignature({ organizationRef: 'org-b' }));
+    expect(tenantA.dedupeKey).not.toBe(tenantB.dedupeKey);
+    expect(tenantA.dedupeKey).toContain(faultOrganizationRef('org-a'));
+    expect(tenantA.dedupeKey).not.toContain(faultOrganizationRef('org-b'));
+    expect(tenantA.dedupeKey).not.toContain('org-a');
+    expect(tenantB.dedupeKey).not.toContain('org-b');
+  });
+
+  it('同组织跨 Provider ⇒ 不合并；Provider 大小写归一 ⇒ 合并', () => {
+    const amazon = classifyFault(sameSignature({ organizationRef: 'org-a', providerRef: 'AMAZON' }));
+    const dhl = classifyFault(sameSignature({ organizationRef: 'org-a', providerRef: 'DHL' }));
+    const amazonLower = classifyFault(sameSignature({ organizationRef: 'org-a', providerRef: 'amazon' }));
+    expect(amazon.dedupeKey).not.toBe(dhl.dedupeKey);
+    expect(amazon.dedupeKey).toBe(amazonLower.dedupeKey);
+  });
+
+  it('无租户 / 无 Provider ⇒ global / noprovider 作用域（不冒充某租户）', () => {
+    const diagnosis = classifyFault(sameSignature({ organizationRef: null, providerRef: null }));
+    expect(diagnosis.dedupeKey).toContain(':global:');
+    expect(diagnosis.dedupeKey).toContain(':noprovider:');
+  });
+
+  it('身份规则显式登记，且明确「哈希引用不是授权凭证」', () => {
+    expect(FAULT_INCIDENT_IDENTITY_RULE).toMatchObject({
+      crossTenantMerge: false,
+      crossProviderMerge: false,
+      tenantlessScope: 'global',
+      providerlessScope: 'noprovider',
+      rawTenantIdPersisted: false,
+      rawProviderIdPersisted: false,
+      hashIsNotAuthorization: true,
+    });
+    expect(FAULT_CLASSIFICATION_BOUNDARY).toMatchObject({
+      tenantScopedIdentity: true,
+      providerScopedIdentity: true,
+      hashIsNotAuthorization: true,
+    });
   });
 });

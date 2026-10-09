@@ -117,7 +117,7 @@ Incident 跨租户访问或误合并（P0，CHANGE 3）／可重试故障被误�
 | --- | --- | --- | --- |
 | 1 Incident 并发创建 / 去重原子性 | P0 | **本轮完成** | 见下 |
 | 2 脱敏边界补强（对抗测试 + 结构化白名单） | P0 | **本轮完成** | 见下 |
-| 3 Incident 生命周期与租户边界 | P0 | NOT_STARTED | — |
+| 3 Incident 生命周期与租户边界 | P0 | **本轮完成** | 见下 |
 | 4 分类安全重试语义 | P1 | NOT_STARTED | — |
 
 **CHANGE 1 实现口径**（`apps/api/src/services/self-repair/fault-incident-intake.ts`）：
@@ -211,7 +211,31 @@ INDEPENDENT_AUDIT = MSG-20261009-07 = PASS WITH REVISE（逐字归档 FULL_COPY_
 PHASE0_CLOSED = YES
 PHASE1_CLOSED = NO（待 PHASE1-FINAL-R2：CHANGE 1–4 后复审）
 PHASE2_IMPLEMENTATION_AUTHORIZED = NO
-NEXT_UNIT = PHASE1-FINAL-R2（CHANGE 1 ✅ / CHANGE 2 ✅ → NEXT = CHANGE 3 P0 真实 PG 生命周期与租户边界 → CHANGE 4 P1 安全重试语义 → 复审）
+**CHANGE 3 实现口径**：
+
+- **显式身份规则**（`FAULT_INCIDENT_IDENTITY_RULE` + 键结构）：
+  `INTERNAL_FAULT:<faultClass>:<sourceModule>:<tenantScope>:<providerScope>:<证据指纹>`。
+  · **租户参与身份** ⇒ 不同组织的同一错误签名**绝不合并**（避免跨租户信息混合）；无租户上下文记为 `global`。
+  · **Provider 参与身份** ⇒ 同组织跨 Provider **不合并**（契约漂移/凭据过期/解析差异的根因与责任方不同）；无 Provider 记为 `noprovider`。
+  · 落库/入键只用**不可逆引用**（`org-<sha16>` / `provider-<sha16>`），原始 id 永不入键、不落库。
+- **租户范围读取** `listForOrganization({ organizationId })`：必须由**服务端可信租户上下文**提供原始组织 id，
+  内部推导引用后只返回该组织的故障 Incident；空上下文 **fail-closed 返回空**（不是"返回全部"）。
+  导出 `faultOrganizationRef()` 供读取路径推导同一引用 —— 并明确登记：**哈希引用不是授权凭证**。
+- 生命周期：`OPEN` 聚合时按既有 `rsi-lifecycle` 合法跃迁转为 `DIAGNOSED`；`CLOSED` / `REJECTED` / `TASKED`
+  一律**拒绝且不复活、不加计数**。
+
+**CHANGE 3 验收（真实 PostgreSQL，隔离库 `crossclaim_p3r2_iso`）**：
+
+| 用例 | 结果 |
+| --- | --- |
+| DB-P10 生命周期矩阵 | `OPEN`（计数 5）⇒ 聚合为 6 且转 `DIAGNOSED`；`CLOSED`/`REJECTED`/`TASKED` 三态各判 `INCIDENT_NOT_OPEN` 且状态/计数不变；回到 `DIAGNOSED` 继续聚合为 7 |
+| DB-P11 跨租户隔离 | 同签名不同组织 ⇒ **2 行不同键**；租户视图只含本租户；`global` 故障不进入任何租户视图；视图内**不含原始组织 id** |
+| DB-P12 哈希不是授权 | 用不可逆引用冒充租户 id ⇒ 查询 0 行；空/空白租户上下文 ⇒ fail-closed 0 行 |
+| DB-P13 Provider 身份 | 同组织跨 Provider ⇒ 2 行、各带自己的 provider 引用、组织引用一致 |
+| DB-P14 伪造无权限 | 即便伪造「客户任务前缀形状的 dedupeKey + 客户容器形状的 sourceRefs（含 ACTIVE 长期授权）」仍被既有 `claim()` 以 kind 拒绝：领取 0 条、任务持久化 `BLOCKED`、零租约；修复平面读取也不认该形状 |
+| 纯函数身份规则 | 跨组织/跨 Provider 键分离、大小写归一、`global`/`noprovider` 作用域、规则登记项逐条断言 |
+
+NEXT_UNIT = PHASE1-FINAL-R2（CHANGE 1 ✅ / CHANGE 2 ✅ / CHANGE 3 ✅ → NEXT = CHANGE 4 P1 安全重试语义 → 复审）
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```

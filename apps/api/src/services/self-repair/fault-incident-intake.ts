@@ -30,6 +30,7 @@ import { transition } from '../autonomy/rsi-lifecycle';
 
 import {
   buildFaultIncidentIntent,
+  faultOrganizationRef,
   INTERNAL_FAULT_INCIDENT_KIND,
   type FaultDiagnosis,
   type FaultObservation,
@@ -66,6 +67,41 @@ export type FaultIncidentIntakeResult = FaultIncidentIntakeOk | FaultIncidentInt
 
 export interface FaultIncidentIntake {
   record(observation: FaultObservation): Promise<FaultIncidentIntakeResult>;
+  /**
+   * 租户范围读取（MSG-20261009-07 / CHANGE 3）：
+   *   必须传入**服务端可信**的组织 id（来自会话 / 授权上下文），由其推导不可逆引用后再检索；
+   *   只返回**该组织**的故障 Incident（不含其它租户，也不含无租户的 `global` 故障）。
+   *   **哈希引用本身不是授权凭证** —— 拿不到原始 id 就查不到任何行。
+   */
+  listForOrganization(input: {
+    organizationId: string;
+    limit?: number;
+  }): Promise<readonly FaultIncidentTenantView[]>;
+}
+
+/** 租户视角的只读视图（不含其它租户数据，也不含原始组织 id）。 */
+export interface FaultIncidentTenantView {
+  incidentId: string;
+  dedupeKey: string;
+  status: string;
+  riskClass: string;
+  faultClass: string | null;
+  severity: string | null;
+  detectedAt: string;
+  occurrenceCount: number;
+  summary: string | null;
+}
+
+interface TenantIncidentRow {
+  id: string;
+  dedupeKey: string;
+  status: string;
+  riskClass: string;
+  detectedAt: Date;
+  faultClass: string | null;
+  severity: string | null;
+  summary: string | null;
+  occurrenceCount: number;
 }
 
 interface AtomicIncidentRow {
@@ -172,6 +208,38 @@ export function createPrismaFaultIncidentIntake(input: {
 
       return { ok: false, reason: 'CONTENTION', incidentId: null, status: null };
     },
+
+    async listForOrganization(input2: {
+      organizationId: string;
+      limit?: number;
+    }): Promise<readonly FaultIncidentTenantView[]> {
+      // fail-closed：没有可信租户上下文就不返回任何行（不是"返回全部"）
+      if (typeof input2.organizationId !== 'string' || input2.organizationId.trim() === '') return [];
+      const limit = Number.isInteger(input2.limit) && (input2.limit ?? 0) > 0 ? (input2.limit as number) : 50;
+      const rows = await input.prisma.$queryRaw<TenantIncidentRow[]>`
+        SELECT "id", "dedupeKey", "status", "riskClass", "detectedAt",
+               ("sourceRefs" ->> 'faultClass') AS "faultClass",
+               ("sourceRefs" ->> 'severity') AS "severity",
+               ("sourceRefs" ->> 'summary') AS "summary",
+               COALESCE(("sourceRefs" ->> 'occurrenceCount')::int, 0) AS "occurrenceCount"
+          FROM "AutonomyIncident"
+         WHERE "kind" = ${INTERNAL_FAULT_INCIDENT_KIND}
+           AND "sourceRefs" ->> 'organizationRef' = ${faultOrganizationRef(input2.organizationId)}
+         ORDER BY "detectedAt" DESC, "id" ASC
+         LIMIT ${limit}
+      `;
+      return rows.map((row) => ({
+        incidentId: row.id,
+        dedupeKey: row.dedupeKey,
+        status: row.status,
+        riskClass: row.riskClass,
+        faultClass: row.faultClass,
+        severity: row.severity,
+        detectedAt: row.detectedAt.toISOString(),
+        occurrenceCount: row.occurrenceCount,
+        summary: row.summary,
+      }));
+    },
   };
 }
 
@@ -189,4 +257,7 @@ export const FAULT_INCIDENT_INTAKE_BOUNDARY = {
   atomicUpsert: true,
   /** 冲突分支带 kind/status 前置条件 ⇒ 终态行与外来容器在 SQL 层就不可写。 */
   guardedConflictClause: true,
+  /** MSG-20261009-07 CHANGE 3：读取必须由服务端可信租户上下文约束。 */
+  tenantScopedReads: true,
+  hashIsNotAuthorization: true,
 } as const;

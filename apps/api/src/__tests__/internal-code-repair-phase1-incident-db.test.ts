@@ -15,7 +15,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -25,8 +25,10 @@ import {
   createAutonomyTaskSource,
 } from '../runtime/rsi-durable-task-source';
 import {
-  INTERNAL_FAULT_INCIDENT_KIND,
   buildFaultIncidentIntent,
+  faultOrganizationRef,
+  faultProviderRef,
+  INTERNAL_FAULT_INCIDENT_KIND,
   type FaultObservation,
 } from '../services/self-repair/fault-classification';
 import { createPrismaFaultIncidentIntake } from '../services/self-repair/fault-incident-intake';
@@ -284,5 +286,171 @@ describe(`PHASE 1 故障 Incident 持久化（真实 PG：${testDatabaseMarker()
     expect(serialized).not.toContain('sk-live-9f8e7d6c5b4a3210');
     expect(refsOf(row.sourceRefs).organizationRef).toMatch(/^org-[0-9a-f]{16}$/);
     expect(String(refsOf(row.sourceRefs).summary)).toContain('[redacted');
+  });
+
+  it('DB-P10 生命周期矩阵（CHANGE 3）：OPEN 聚合并转 DIAGNOSED；CLOSED/REJECTED/TASKED 一律拒绝', async () => {
+    const observation = faultObservation({ message: 'lifecycle matrix' });
+    const dedupeKey = dedupeKeyOf(observation);
+    const { intent } = buildFaultIncidentIntent(observation, { now: T0 });
+    // 手工种一条 OPEN（计数 5），模拟"先建后诊断"的既有行
+    await prisma.autonomyIncident.create({
+      data: {
+        kind: INTERNAL_FAULT_INCIDENT_KIND,
+        dedupeKey,
+        status: 'OPEN',
+        riskClass: intent.riskClass,
+        sourceRefs: { ...intent.sourceRefs, occurrenceCount: 5 } as unknown as Prisma.InputJsonValue,
+        detectedAt: T0,
+      },
+    });
+
+    const opened = await intake().record(observation);
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) throw new Error('expected OPEN incident to be aggregated');
+    expect(opened.created).toBe(false);
+    expect(opened.occurrenceCount).toBe(6);
+    expect(opened.status).toBe('DIAGNOSED'); // OPEN → DIAGNOSED（既有合法跃迁）
+
+    for (const terminal of ['CLOSED', 'REJECTED', 'TASKED']) {
+      await prisma.autonomyIncident.update({ where: { dedupeKey }, data: { status: terminal } });
+      const rejected = await intake().record(observation);
+      expect(rejected.ok).toBe(false);
+      if (rejected.ok) throw new Error('expected terminal incident to reject');
+      expect(rejected.reason).toBe('INCIDENT_NOT_OPEN');
+      const row = await prisma.autonomyIncident.findUniqueOrThrow({ where: { dedupeKey } });
+      expect(row.status).toBe(terminal);
+      expect(refsOf(row.sourceRefs).occurrenceCount).toBe(6); // 终态不被加计数、不被复活
+    }
+
+    // 回到 DIAGNOSED 仍可继续聚合
+    await prisma.autonomyIncident.update({ where: { dedupeKey }, data: { status: 'DIAGNOSED' } });
+    const again = await intake().record(observation);
+    expect(again.ok).toBe(true);
+    if (!again.ok) throw new Error('expected DIAGNOSED incident to aggregate');
+    expect(again.occurrenceCount).toBe(7);
+  });
+
+  it('DB-P11 跨租户隔离（CHANGE 3）：同签名不同组织 ⇒ 2 行、互不可见', async () => {
+    const base = faultObservation({ message: 'tenant scoped fault', providerRef: 'AMAZON' });
+    const tenantA = { ...base, organizationRef: 'org-tenant-a' };
+    const tenantB = { ...base, organizationRef: 'org-tenant-b' };
+    const keyA = dedupeKeyOf(tenantA);
+    const keyB = dedupeKeyOf(tenantB);
+    expect(keyA).not.toBe(keyB);
+
+    expect((await intake().record(tenantA)).ok).toBe(true);
+    expect((await intake().record(tenantB)).ok).toBe(true);
+    // 全局（无租户）故障：既不与租户故障合并，也不出现在任何租户视图里
+    const globalFault = { ...base, organizationRef: null };
+    expect((await intake().record(globalFault)).ok).toBe(true);
+
+    expect(await prisma.autonomyIncident.count()).toBe(3);
+    const viewA = await intake().listForOrganization({ organizationId: 'org-tenant-a' });
+    const viewB = await intake().listForOrganization({ organizationId: 'org-tenant-b' });
+    expect(viewA.map((row) => row.dedupeKey)).toEqual([keyA]);
+    expect(viewB.map((row) => row.dedupeKey)).toEqual([keyB]);
+    // 租户视图里不得出现其它租户，也不得出现 global 故障
+    expect(viewA.map((row) => row.dedupeKey)).not.toContain(keyB);
+    expect(viewA.map((row) => row.dedupeKey)).not.toContain(dedupeKeyOf(globalFault));
+    // 视图字段是脱敏后的摘要，不含原始组织 id
+    expect(JSON.stringify(viewA)).not.toContain('org-tenant-a');
+    expect(viewA[0]!.faultClass).toBe('PARSER_FAILURE');
+  });
+
+  it('DB-P12 哈希不是授权（CHANGE 3）：拿哈希当租户 id 查不到任何行；空租户上下文 fail-closed', async () => {
+    const tenant = faultObservation({ message: 'hash is not authorization' });
+    expect((await intake().record(tenant)).ok).toBe(true);
+    expect(await intake().listForOrganization({ organizationId: 'org-self-repair' })).toHaveLength(1);
+
+    // 用「不可逆引用本身」冒充租户 id ⇒ 会推导出另一个引用 ⇒ 什么都查不到
+    const asHash = await intake().listForOrganization({
+      organizationId: faultOrganizationRef('org-self-repair'),
+    });
+    expect(asHash).toHaveLength(0);
+    // 空 / 缺失租户上下文 ⇒ 不返回任何行（不是"返回全部"）
+    expect(await intake().listForOrganization({ organizationId: '   ' })).toHaveLength(0);
+  });
+
+  it('DB-P13 Provider 参与身份（CHANGE 3）：同组织跨 Provider ⇒ 2 行，各自带自己的 Provider 引用', async () => {
+    const base = faultObservation({ message: 'provider identity', organizationRef: 'org-provider-scope' });
+    const amazon = { ...base, providerRef: 'AMAZON' };
+    const dhl = { ...base, providerRef: 'DHL' };
+    expect(dedupeKeyOf(amazon)).not.toBe(dedupeKeyOf(dhl));
+
+    expect((await intake().record(amazon)).ok).toBe(true);
+    expect((await intake().record(dhl)).ok).toBe(true);
+    const rows = await prisma.autonomyIncident.findMany({ orderBy: { dedupeKey: 'asc' } });
+    expect(rows).toHaveLength(2);
+    const refs = rows.map((row) => refsOf(row.sourceRefs).providerRef);
+    expect(new Set(refs)).toEqual(new Set([faultProviderRef('AMAZON'), faultProviderRef('DHL')]));
+    // 两行都属于同一组织（身份只在 Provider 维度分流）
+    expect(new Set(rows.map((row) => refsOf(row.sourceRefs).organizationRef))).toEqual(
+      new Set([faultOrganizationRef('org-provider-scope')]),
+    );
+    expect(await intake().listForOrganization({ organizationId: 'org-provider-scope' })).toHaveLength(2);
+  });
+
+  it('DB-P14 同名键 / 伪造型 sourceRefs 不产生执行权限（CHANGE 3）', async () => {
+    const organizationId = 'org-forge-' + suffix();
+    await prisma.organization.upsert({
+      where: { id: organizationId },
+      create: { id: organizationId, name: organizationId, slug: organizationId },
+      update: {},
+    });
+    await prisma.standingAuthorization.deleteMany({ where: { organizationId } });
+    await prisma.standingAuthorization.create({
+      data: {
+        organizationId,
+        platformAccountId: 'acct-forge',
+        provider: 'AMAZON',
+        allowedActionTypes: ['recovery.read'],
+        monetaryLimitUsd: '0',
+        currency: 'USD',
+        domain: 'LOGISTICS',
+        jurisdiction: 'US',
+        effectiveAt: new Date('2026-10-08T00:00:00.000Z'),
+        expiresAt: new Date('2026-11-08T00:00:00.000Z'),
+        authorizationVersion: 1,
+        termsPolicyVersion: 'v1',
+        consentEvidenceRef: 'evidence://forge-seed',
+        scopeDigest: 'b'.repeat(64),
+        revocationState: 'ACTIVE',
+        createdAt: T0,
+      },
+    });
+
+    /**
+     * 伪造最优条件：kind 仍是 INTERNAL_FAULT，但 dedupeKey 用客户任务前缀形状、
+     * sourceRefs 用**客户容器形状**（数组 + organizationId）、且该组织确有 ACTIVE 长期授权。
+     * 预期：既有 claim() 仍以 kind 为准拒绝（结构隔离），不产生任何执行权限。
+     */
+    const incident = await prisma.autonomyIncident.create({
+      data: {
+        kind: INTERNAL_FAULT_INCIDENT_KIND,
+        dedupeKey: `${RECOVERY_QUEUE_TASK_PREFIX}FORGED:${suffix()}`,
+        status: 'DIAGNOSED',
+        riskClass: 'LOW',
+        sourceRefs: [{ organizationId }],
+        detectedAt: T0,
+      },
+    });
+    const task = await prisma.autonomyTask.create({
+      data: {
+        incidentId: incident.id,
+        status: 'READY',
+        riskClass: 'LOW',
+        ownerGateRequired: false,
+        dedupeKey: `${RECOVERY_QUEUE_TASK_PREFIX}FORGED-TASK:${suffix()}`,
+      },
+    });
+
+    const claimed = await createAutonomyTaskSource({ prisma, ownerRef: 'self-repair-plane', now: () => T0 }).claim(5);
+    expect(claimed).toHaveLength(0);
+    const after = await prisma.autonomyTask.findUniqueOrThrow({ where: { id: task.id } });
+    expect(after.status).toBe('BLOCKED');
+    expect(after.lastErrorCode).toBe(CLAIM_AUTHORIZATION_DENY.UNTRUSTED_INCIDENT_KIND);
+    expect(await prisma.autonomyLease.count({ where: { taskId: task.id } })).toBe(0);
+    // 修复平面自己的读取也只认自己的形状（数组式 sourceRefs 不会被当成本租户的故障）
+    expect(await intake().listForOrganization({ organizationId })).toHaveLength(0);
   });
 });
