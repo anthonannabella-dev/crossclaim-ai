@@ -168984,3 +168984,437 @@ NEXT = PHASE2_SAFE_IMPLEMENTATION → FULL_REGRESSION → PHASE2_INDEPENDENT_AUD
 
 最终决定：PHASE 1 准予阶段性收口，PHASE 2 准予在内部安全边界内启动。 不授权真实外部写入、自动代码发布、生产部署或任何未经单独审计的 PHASE 3–7 能力。
 ```
+
+### [MSG-20261009-09] PHASE 2 独立复审裁决 = PASS WITH REVISE（安全范围获认可；PHASE2_CLOSED=NO；CHANGE 1–3 P1；PHASE3 仅授权只读设计）reviewed ref ad1bfd5b
+
+```text
+MSG-20261009-09｜SI/RSI INTERNAL AUTONOMOUS CODE REPAIR V1 · PHASE 2 独立复审裁决
+
+REVIEWED_HEAD：ad1bfd5b
+审计范围：PHASE 2 · SAFE SCOPE ONLY
+前置裁决：MSG-20261009-08 · PASS WITH REVISE
+
+一、最终裁决
+
+FINAL VERDICT
+
+PASS WITH REVISE
+PHASE2_CLOSED	
+
+NO
+
+
+PHASE2_SAFE_SCOPE_ACCEPTED	
+
+YES，附修订条件
+
+
+PHASE3_IMPLEMENTATION_AUTHORIZED	
+
+NO
+
+
+PHASE3_DESIGN_AUTHORIZED	
+
+YES，限只读设计与审计
+
+
+PHASE4_TO_7_AUTHORIZED	
+
+NO
+
+
+EXTERNAL_WRITE	
+
+HOLD
+
+
+PRODUCTION_READY	
+
+NO
+
+本次裁决依据送审材料及其中报告的测试结果作出，未直接读取仓库源码、测试日志或运行测试。因此，对通过项的认可属于提交证据层面的审查结论，不等于独立复现。
+
+核心判断：
+
+PHASE 2 的确定性分流、安全阻断、可信事实检查、只读扫描及持久化登记，已经形成符合设计方向的安全范围实现。
+
+但仍存在两个需要收口的问题：
+
+GATE-5 未完成真实持久化/消费边界的脱敏负向验证。
+
+GATE-4 对并发登记幂等性的证据描述不足以确认最终登记状态具有严格确定性，尤其是 triagedAt 与并发竞争语义。
+
+这两个问题不要求重构分流层，也不构成已证明的安全漏洞，但在关闭 PHASE 2 前应补齐。
+
+二、七项独立审计结果
+
+审计项目
+
+	
+
+裁决
+
+	
+
+审计意见
+
+
+
+
+1. TRIAGE_DETERMINISM_AND_SAFETY_PATHS
+
+	
+
+PASS
+
+	
+
+五类封闭结果及阻断优先级合理
+
+
+
+
+2. TRUSTED_FACTS_BOUNDARY
+
+	
+
+PASS
+
+	
+
+接口要求可信事实注入，缺省阻断；真实来源还需接线验证
+
+
+
+
+3. READ_ONLY_SWEEP_AND_REGISTRATION
+
+	
+
+PASS
+
+	
+
+扫描不执行、不建任务、不建租约；并发状态前置条件合理
+
+
+
+
+4. GATE1_FULL_REGRESSION_EVIDENCE
+
+	
+
+PASS
+
+	
+
+接受本机 490 文件、4926 用例全绿的提交记录
+
+
+
+
+5. GATE2_GATE3_COVERAGE
+
+	
+
+PASS
+
+	
+
+租户、授权、生命周期和外写阻断覆盖充分
+
+
+
+
+6. GATE4_LAYERING
+
+	
+
+REVISE
+
+	
+
+分层方式可接受，但登记并发的严格语义需补证
+
+
+
+
+7. SCOPE_HONESTY
+
+	
+
+PASS
+
+	
+
+对未执行、未验证、未接线的范围披露清楚
+
+GATE-5 单独裁决：REVISE。
+
+GATE-6：PASS / NOT APPLICABLE，本轮未变更 Schema，无需迁移审批。
+
+三、关键架构裁决
+1. 五路分流：认可
+
+INTERNAL_FAULT · DIAGNOSED
+
+已持久化故障 + 服务端可信事实复核
+
+Deterministic Fault Triage
+
+纯函数 · 零 IO · 禁止模型裁决
+
+BLOCK_HUMAN_REVIEW
+
+安全阻断 / 人工审查
+
+NEEDS_CLASSIFICATION
+
+等待分类 / 不自动恢复
+
+RECONCILE
+
+先对账 / 不直接重放
+
+CODE_REPAIR_CANDIDATE
+
+仅登记代码修复候选
+
+AUTO_RECOVER_VIA_RUNTIME
+
+仅候选资格，不是执行授权；后续仍需 ONE SI Runtime 复核
+
+PHASE 2 全部分流仅登记，不触发执行
+
+特别认可将 runtimeHandoffAuthorized 限定为再次校验的资格，而不是任务提交或执行权限。
+
+FORBIDDEN + CODE_REPAIR_CANDIDATE 只能进入未来的代码修复审查路径，不得借此升级为自动代码修改或运行时重放。
+
+2. GATE-4：允许复用既有 SI/RSI 恢复门禁
+
+认可分层证明原则：
+
+PHASE 2 证明分流纯度、登记幂等、状态竞争安全。
+
+既有 ONE SI Runtime 负责 lease、fencing、crash recovery、reconcile。
+
+不要求 PHASE 2 复制运行时恢复机制或新增第二套调度器。
+
+但是，既有 FAILURE_RECOVERY PASS 不能自动证明尚未建立的 PHASE 2 → Runtime 消费通道安全。未来接线时必须独立验证其身份绑定、复核和重复消费语义。
+
+四、必须执行的 CHANGES
+CHANGE 1 — P1：完成 GATE-5 脱敏负向验收
+
+针对实际登记写入路径及未来可读取该登记结果的现有接口，增加验证：
+
+构造含 token、API key、邮箱、任意攻击文本的故障载荷。
+
+检查 triageDecision、triageReason、triagedAt 是否只接受规范值。
+
+检查扫描返回结果、现有审计日志和可读取的投影是否意外泄露敏感内容。
+
+证明恶意自由文本不会通过 triage 新增的三个字段写入。
+
+验收要求：GATE5_NEGATIVE = PASS。
+
+不要因此擅自修改现有历史故障载荷的保留策略；该项只验证本轮新增登记边界。
+
+CHANGE 2 — P1：明确并发登记与时间戳语义
+
+当前报告的“重复登记逐字稳定”需要明确是哪种稳定性：
+
+同一条已登记故障再次扫描时，是否更新 triagedAt？
+
+四路并发扫描是否只有一次有效登记？
+
+并发后是否可能发生旧决策覆盖新决策？
+
+故障从 DIAGNOSED 转为 CLOSED 时是否绝对禁止后续登记？
+
+可信事实在计算与写入之间发生变化时，登记结果是否仍被错误视为有效执行资格？
+
+建议采取首次登记写入、后续无变化即不更新的幂等语义，或提供具备同等保证的明确版本化机制。
+
+特别注意，sourceRefs 的 JSON 字段更新必须避免并发丢失其他引用。仅凭 kind/status 条件不足以证明 JSON 对象中的无关字段不会被覆盖。
+
+验收要求：GATE4_TRIAGE_REGISTRATION = PASS。
+
+CHANGE 3 — P1：固定可信事实来源契约
+
+不要求在 PHASE 2 建立运行时消费通道，但需要将契约写入文档和测试：
+
+organizationIdResolved 必须由可信持久化身份关系解析。
+
+authorizationActive 必须由服务端当前授权状态得出。
+
+operationRecheck 必须来自可信执行上下文，而非调用方自报。
+
+resolveTrustedFacts 的实现不得把请求参数、客户端字段、模型输出直接映射为可信事实。
+
+任何未来的适配器都需要证明上述数据来源。
+
+特别要求：当前分流结果只能作为快照，不得在将来被运行时无条件信任。
+
+此项可以通过契约测试和来源边界审查完成，不需要新增实际执行能力。
+
+五、下一步授权范围
+
+NEXT_AUTHORIZED：PHASE2_FINAL_R2_FIXES + PHASE3_READ_ONLY_DESIGN_ONLY
+
+允许执行：
+
+修复上述 CHANGE 1–3，并提交 PHASE 2 FINAL-R2 最小范围复审。
+
+开展 PHASE 3 代码修复代理的只读方案设计，包括故障输入来源、允许修改范围、沙箱隔离、补丁审批、独立 Judge 门禁、回滚与审计证据。
+
+保持原有 ONE SI Runtime 架构不变。
+
+暂不允许：
+
+实施自动代码修复代理。
+
+赋予修复代理仓库写入、shell 执行或生产部署能力。
+
+自动提交 PR、自动合并、自动部署。
+
+将 CODE_REPAIR_CANDIDATE 直接作为代码修改授权。
+
+将 AUTO_RECOVER_VIA_RUNTIME 候选直接派发到执行队列。
+
+实施 PHASE 4–7。
+
+PHASE 3 的实现授权应在 PHASE 2 FINAL-R2 关闭，并通过独立设计审计后单独给出。
+
+六、剩余风险 RISKS
+
+风险
+
+	
+
+等级
+
+	
+
+处置
+
+
+
+
+新增登记字段潜在脱敏遗漏
+
+	
+
+P1
+
+	
+
+CHANGE 1
+
+
+
+
+并发 JSON 更新及时间戳漂移
+
+	
+
+P1
+
+	
+
+CHANGE 2
+
+
+
+
+可信事实调用方未来错误接线
+
+	
+
+P1
+
+	
+
+CHANGE 3
+
+
+
+
+历史隔离测试债与 broker hook 超时债
+
+	
+
+P2
+
+	
+
+保留观察，不因单次全绿关闭
+
+
+
+
+未验证 CI / Linux / systemd
+
+	
+
+P2
+
+	
+
+后续集成及部署门禁验证
+
+
+
+
+Phase 3 代理越权修复代码
+
+	
+
+P0（未来）
+
+	
+
+独立 Judge、隔离执行及明确审批
+
+
+
+
+生产真实 Provider / 外写未验证
+
+	
+
+P0（上线）
+
+	
+
+继续 HOLD
+
+当前没有材料证明 PHASE 2 已发生外部副作用，也没有材料证明新增第二套 Runtime。
+
+七、机器可登记裁决
+
+MSG-20261009-09 · Verdict
+
+复制裁决
+
+REVIEWED_HEAD=ad1bfd5b
+FINAL_VERDICT=PASS_WITH_REVISE
+PHASE2_SAFE_SCOPE_ACCEPTED=YES
+PHASE2_CLOSED=NO
+PHASE3_DESIGN_AUTHORIZED=YES_READ_ONLY
+PHASE3_IMPLEMENTATION_AUTHORIZED=NO
+PHASE4_TO_7_AUTHORIZED=NO
+EXTERNAL_WRITE=HOLD
+PRODUCTION_READY=NO
+
+CHANGE_1=GATE5_NEGATIVE_REDACTION
+CHANGE_2=GATE4_REGISTRATION_CONCURRENCY_AND_IDEMPOTENCY
+CHANGE_3=TRUSTED_FACTS_SOURCE_CONTRACT
+
+NEXT=PHASE2_FINAL_R2_FIXES_AND_PHASE3_READ_ONLY_DESIGN
+NEXT_AUDIT=MSG-20261009-10
+
+最终意见： PHASE 2 的安全分流主体已得到认可，不需要推倒重做。完成三项限定修订后可以申请 PHASE 2 关闭审计。
+
+现阶段最重要的是保持“诊断 → 分流 → 登记”与“自动修改代码 → 执行 → 部署”的权限隔离。前者已具备较好的安全基础；后者仍必须经过独立授权，不能因本次 PASS WITH REVISE 而提前开放。
+```

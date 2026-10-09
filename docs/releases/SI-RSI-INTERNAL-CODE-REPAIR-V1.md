@@ -302,6 +302,49 @@ GATE-4 原文要求「真实运行时测试异常重投、重复分流、断连�
 这些属于既有 ONE SI Runtime 路径，已由既有 SI/RSI 门禁（PHASE 3 收官 / `FAILURE_RECOVERY` 门禁 MSG-20261009-06）覆盖；
 PHASE 2 本层不执行任何动作，故不重复实现第二套恢复机制。
 
+### 2.4 独立复审裁决（MSG-20261009-09 = PASS WITH REVISE；PHASE 2 安全范围获认可）
+
+**裁决原文**：`AI-ARCHITECT-INBOX.md` → `### [MSG-20261009-09]`（逐字归档，FNV1A `1d735f7f`，`FULL_COPY_OK`：167 行 / 缺失 0 / 多出 0）。
+会话：`https://chatgpt.com/c/6ac8403a-f6a4-83ec-9507-72d05dba4f0f`。
+
+| 审计项 | 裁决 |
+| --- | --- |
+| 1 TRIAGE_DETERMINISM_AND_SAFETY_PATHS | **PASS** |
+| 2 TRUSTED_FACTS_BOUNDARY | **PASS**（真实来源仍需接线验证） |
+| 3 READ_ONLY_SWEEP_AND_REGISTRATION | **PASS** |
+| 4 GATE1_FULL_REGRESSION_EVIDENCE | **PASS** |
+| 5 GATE2_GATE3_COVERAGE | **PASS** |
+| 6 GATE4_LAYERING | **REVISE**（登记并发的严格语义需补证） |
+| 7 SCOPE_HONESTY | **PASS** |
+| GATE-5 单独裁决 | **REVISE** |
+| GATE-6 | PASS / NOT APPLICABLE（本轮无 Schema 变更） |
+
+机器裁决：`PHASE2_SAFE_SCOPE_ACCEPTED = YES`、**`PHASE2_CLOSED = NO`**、
+`PHASE3_DESIGN_AUTHORIZED = YES_READ_ONLY`、`PHASE3_IMPLEMENTATION_AUTHORIZED = NO`、`PHASE4_TO_7_AUTHORIZED = NO`、
+`EXTERNAL_WRITE = HOLD`、`PRODUCTION_READY = NO`。`NEXT = PHASE2_FINAL_R2_FIXES_AND_PHASE3_READ_ONLY_DESIGN`、`NEXT_AUDIT = MSG-20261009-10`。
+
+审计方特别认可：`runtimeHandoffAuthorized` 被限定为**再次校验的资格**而非任务提交/执行权限；
+`FORBIDDEN + CODE_REPAIR_CANDIDATE` 只能进入未来修复审查路径，不得升级为自动改码或运行时重放；
+GATE-4 允许「PHASE 2 证明分流纯度/登记幂等/状态竞争安全 + 既有 ONE SI Runtime 负责 lease/fencing/crash/reconcile」的分层证明。
+
+**必须执行的 CHANGES（三项，均为 P1）**：
+
+| CHANGE | 内容（审计原文要点） | 验收 |
+| --- | --- | --- |
+| 1 GATE-5 脱敏负向验收 | 针对**实际登记写入路径**与未来可读取该登记结果的既有接口：构造含 token / API key / 邮箱 / 攻击文本的故障载荷；检查 `triageDecision` / `triageReason` / `triagedAt` 是否**只接受规范值**；检查扫描返回、现有审计日志与可读投影是否意外泄露；证明恶意自由文本不会经 triage 新增的三个字段写入。**不要**擅自修改历史故障载荷的保留策略 | `GATE5_NEGATIVE = PASS` |
+| 2 并发登记与时间戳语义 | 明确：重复扫描是否更新 `triagedAt`？4 路并发是否只有一次有效登记？旧决策是否会覆盖新决策？`DIAGNOSED → CLOSED` 后是否绝对禁止登记？可信事实在计算与写入之间变化时登记是否仍被当作有效资格？建议采用**首次写入、后续无变化即不更新**的幂等语义（或等效版本化机制）。**并特别指出：`sourceRefs` 的 JSON 更新必须避免并发丢失其它引用 —— 仅凭 kind/status 条件不足以证明无关字段不被覆盖** | `GATE4_TRIAGE_REGISTRATION = PASS` |
+| 3 可信事实来源契约 | 将契约写入文档与测试：`organizationIdResolved` 必须由可信持久化身份关系解析；`authorizationActive` 必须由服务端当前授权状态得出；`operationRecheck` 必须来自可信执行上下文而非调用方自报；`resolveTrustedFacts` 实现不得把请求参数 / 客户端字段 / 模型输出直接映射为可信事实。并明确：**当前分流结果是快照，未来运行时不得无条件信任** | 契约与来源边界审查 |
+
+**明确暂不允许（照录）**：实施自动代码修复代理；赋予修复代理仓库写入 / shell 执行 / 生产部署能力；
+自动提交 PR / 自动合并 / 自动部署；把 `CODE_REPAIR_CANDIDATE` 直接作为代码修改授权；
+把 `AUTO_RECOVER_VIA_RUNTIME` 候选直接派发到执行队列；实施 PHASE 4–7。
+PHASE 3 的实现授权须在 PHASE 2 FINAL-R2 关闭并通过独立设计审计后单独给出。
+
+**RISKS（原文）**：新增登记字段潜在脱敏遗漏（P1，CHANGE 1）/ 并发 JSON 更新及时间戳漂移（P1，CHANGE 2）/
+可信事实调用方未来错误接线（P1，CHANGE 3）/ 历史隔离测试债与 broker hook 超时债（P2，保留观察）/
+未验证 CI·Linux·systemd（P2）/ PHASE 3 代理越权修复代码（P0 未来）/
+生产真实 Provider 与外写未验证（P0 上线，继续 HOLD）。
+
 ## 3. 状态（截至本文件提交）
 
 ```
@@ -390,8 +433,11 @@ PHASE1_REVIEW_VERDICT = MSG-20261009-08 = PASS WITH REVISE（逐字归档 FULL_C
 
 GATE1_FULL_REGRESSION = PASS（490/490 文件、4926/4926 用例、exit 0；隔离库；证据 tools/verification/self-repair/phase2-gate1-full-regression.json）
 GATE4_PHASE2_LAYER = PASS（重复分流幂等 / 并发扫描 / 状态竞争登记保护；运行时层 fencing 与断连由既有运行时门禁覆盖）
-PHASE2_PROGRESS = TRIAGE_MODULE_IMPLEMENTED + SWEEP_IMPLEMENTED + GATE1_PASS + GATE4_PHASE2_LAYER_PASS
-NEXT_UNIT = PHASE 2 收口（接线到既有运行时入口的**只读候选登记**）→ GATE-1 全量 API 回归 → PHASE 2 独立复审
+PHASE2_REVIEW_VERDICT = MSG-20261009-09 = PASS WITH REVISE（逐字归档 FULL_COPY_OK / FNV1A 1d735f7f）
+PHASE2_SAFE_SCOPE_ACCEPTED = YES
+PHASE2_CLOSED = NO（待 CHANGE 1–3 后 FINAL-R2 复审 MSG-20261009-10）
+PHASE3_DESIGN_AUTHORIZED = YES_READ_ONLY（仅只读方案设计；实现授权 NO）
+NEXT_UNIT = PHASE 2 FINAL-R2：CHANGE 1（GATE-5 脱敏负向）→ CHANGE 2（并发登记与时间戳幂等语义，含 JSON 不丢失其它引用）→ CHANGE 3（可信事实来源契约文档+测试）→ 送 MSG-20261009-10
 PRODUCTION_READY = NO
 HOST_ACTION_REQUIRED = 真实模型凭据（用于 PHASE 3/7 真实联调）；Linux 隔离执行环境（用于真实沙箱补丁验证）
 ```
