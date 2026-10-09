@@ -1840,3 +1840,63 @@ EXTERNAL_WRITE = HOLD
 AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
 PRODUCTION_READY = NO
 ```
+
+---
+
+### 2.29 MSG-20261009-25 裁决归档 = **U1 FINAL CLOSURE = YES —— PHASE 3-A U1 正式 CLOSED**
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-25] …`，外层用 4 反引号围栏以容纳裁决内的 ```ini 块），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（137/137，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=3548 / NORM_LINES=137 / FNV=5bcb6f32`。
+> 关闭锚点：`U1_CODE_HEAD = 9ee36837`、`CURRENT_HEAD = c9437e0d`。
+
+**正式裁决**
+
+```text
+FINAL_VERDICT = PASS
+U1_FINAL_CLOSURE = YES（PHASE 3-A U1 只读可信事实适配器正式关闭）
+REQUIRED_CHANGES = NONE_FOR_U1（CHANGE 17–39 不再构成关闭阻断项）
+INDEPENDENT_REPOSITORY_VERIFIED = YES
+INDEPENDENT_TEST_RERUN = NO
+U1_READ_ONLY_BOUNDARY_FINAL = PASS_SCOPED
+U1_TEST_EVIDENCE_FINAL = PASS_ARCHIVED_EVIDENCE
+U1_ARCHIVE_COMPLETENESS_FINAL = PASS_SCOPED
+SCOPE_HONESTY = PASS
+PHASE3_A_U2_TO_U5_AUTHORIZED = NO
+U2_IMPLEMENTATION_AUTHORIZED = NO
+U3_TO_U5_IMPLEMENTATION_AUTHORIZED = NO
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_READ_ONLY_AND_IMPLEMENTATION_PREPARATION_ONLY
+NEXT_AUDIT = MSG-20261009-26
+```
+
+**审计方独立复核（GitHub 直读）**：`U1_CODE_HEAD`/`CURRENT_HEAD` 均存在；
+`9ee36837 → c9437e0d` 前进 7 个提交、涉及 16 个文件；**`apps/api` 变化 0 个**
+⇒ 「U1 产品代码自 `9ee36837` 后保持不变」成立，本轮关闭申请未引入新的产品/测试改动。
+
+**评审方保留的三点限定（不得外推）**
+
+1. 这是「基于固定代码版本与既有测试证据的最终关闭裁决」，**不是**独立重新执行 PostgreSQL 测试，
+   也**不是**整个 SI/RSI 自主代码修复系统的完成验收；
+2. `PASS_SCOPED` 的只读边界「不构成对所有数据库访问路径的全局只读保证」；
+3. `FULL_COPY_OK 155/155` 与 `FNV1A 7e261bb0` 属仓库记录，评审方本轮**未再次独立执行** `compare.mjs`，
+   因此「归档完整性在本次指定范围内通过，不声明全部历史裁决已逐字重新计算」。
+
+**U2 启动条件（评审方原文要点）**：仅授权 PHASE 3-A U2 的**只读设计与实施准备**——
+固定 U1 关闭锚点且不得隐式修改 U1 可信事实契约；提交 U2 功能定义、输入输出契约、调用关系与
+数据权限矩阵；明确是否新增持久化/数据库写入/Runtime 接线/模型调用（无证据不得声称具备）；
+列出确定性验收用例、失败关闭路径、负向对照与证据归档方案；如涉及代码写入/自动生成补丁/执行测试，
+必须限定隔离环境、受控候选分支与人类审批边界。**U2 设计通过独立评审后**才允许授权其最小安全实施单元，
+且不得据此自动启动 U3–U5。
+
+```text
+MSG-20261009-25_FINAL_VERDICT = PASS
+MSG-20261009-25_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 137/137；FNV1A 5bcb6f32）
+U1_STATUS = CLOSED（PHASE 3-A U1，封板于 U1_CODE_HEAD=9ee36837）
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_READ_ONLY_AND_IMPLEMENTATION_PREPARATION_ONLY
+U2_IMPLEMENTATION_AUTHORIZED = NO
+U3_TO_U5_IMPLEMENTATION_AUTHORIZED = NO
+NEXT_AUDIT = MSG-20261009-26（须提交 U2 设计与最小实施边界审计，而非 U2 实施验收）
+EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN
+PRODUCTION_READY = NO
+```

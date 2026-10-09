@@ -173868,3 +173868,252 @@ PRODUCTION_READY=NO
 
 给 Codex 的执行口径： CHANGE 39 已经关闭。下一轮只需针对固定的 U1 代码 HEAD 提交正式关闭申请，复用本轮已验证的仓库证据，并清楚声明未重新执行测试的边界。不得把此次证据验收扩展解释为 U2–U5 的实施许可或生产上线批准。
 ```
+
+### [MSG-20261009-25] **U1 FINAL CLOSURE = YES（PHASE 3-A U1 正式 CLOSED）** —— 裁决 `FINAL_VERDICT=PASS`：GitHub 直读确认 `U1_CODE_HEAD=9ee36837` 与 `CURRENT_HEAD=c9437e0d` 均存在、`9ee36837→c9437e0d` 前进 7 个提交、涉及 16 个文件、**apps/api 变化 0 个**（U1 产品代码自 9ee36837 后保持不变）；六项 = `U1_READ_ONLY_BOUNDARY_FINAL=PASS_SCOPED`、`U1_TEST_EVIDENCE_FINAL=PASS_ARCHIVED_EVIDENCE`（65/65、2/2、负向 2 预期失败/63 通过、tsc exit 0 空输出、九文件指纹沿用上轮 9/9）、`U1_ARCHIVE_COMPLETENESS_FINAL=PASS_SCOPED`、`SCOPE_HONESTY=PASS`、`U1_FINAL_CLOSURE=YES`、`PHASE3_A_U2_TO_U5_AUTHORIZED=NO`；`REQUIRED_CHANGES=NONE_FOR_U1`、`INDEPENDENT_REPOSITORY_VERIFIED=YES`、`INDEPENDENT_TEST_RERUN=NO`；**下一步仅授权 U2 只读设计与实施准备**（`NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_READ_ONLY_AND_IMPLEMENTATION_PREPARATION_ONLY`，`U2_IMPLEMENTATION_AUTHORIZED=NO`，`U3_TO_U5_IMPLEMENTATION_AUTHORIZED=NO`），下一轮 MSG-20261009-26 须提交 U2 设计与最小实施边界审计而非 U2 实施验收；审计方并声明未再次独立执行 compare.mjs（FULL_COPY_OK 155/155 为仓库记录）；reviewed ref c9437e0d / code ref 9ee36837
+
+````text
+MSG-20261009-25｜SI/RSI U1 FINAL CLOSURE 独立审计裁决
+FINAL VERDICT：PASS
+
+裁决：同意关闭 PHASE 3-A U1（只读可信事实适配器），但关闭范围严格限定为 U1。
+
+本轮已通过 GitHub 连接器直接读取 anthonannabella-dev/crossclaim-ai 的相关提交、跨提交差异、证据索引及归档文档。
+
+这是一项基于固定代码版本与既有测试证据的最终关闭裁决，不是独立重新执行 PostgreSQL 测试，也不是整个 SI/RSI 自主代码修复系统的完成验收。
+
+一、代码版本与变更范围
+
+对以下两个真实 Git 提交执行了独立比较：
+
+U1_CODE_HEAD = 9ee36837
+
+CURRENT_HEAD = c9437e0d
+
+GitHub 返回：
+
+核验项目
+
+独立核验结果
+
+BASE 提交存在
+
+复用上一轮已确认结果
+
+U1_CODE_HEAD 存在
+
+PASS
+
+CURRENT_HEAD 存在
+
+PASS
+
+9ee36837 → c9437e0d
+
+前进 7 个提交
+
+比较结果涉及文件
+
+16 个
+
+apps/api 下文件变化
+
+0 个
+
+本轮修改范围
+
+文档、测试证据、负向对照归档
+
+U1 产品代码自 9ee36837 后保持不变
+
+PASS
+
+这确认了本轮关闭申请未引入新的 U1 产品代码或测试文件修改，也不存在需要因此重新开启 U1 代码审查的新增差异。
+
+GitHub 固定提交：
+
+查看 CURRENT_HEAD c9437e0d
+
+。
+
+二、U1 六项正式裁决
+
+审计项目
+
+最终结果
+
+1. U1_READ_ONLY_BOUNDARY_FINAL
+
+PASS_SCOPED
+
+2. U1_TEST_EVIDENCE_FINAL
+
+PASS_ARCHIVED_EVIDENCE
+
+3. U1_ARCHIVE_COMPLETENESS_FINAL
+
+PASS_SCOPED
+
+4. SCOPE_HONESTY
+
+PASS
+
+5. U1_FINAL_CLOSURE
+
+YES
+
+6. PHASE3_A_U2_TO_U5_AUTHORIZED
+
+NO
+
+1. U1 只读边界：PASS_SCOPED
+
+已归档的 PostgreSQL 测试证据包含：
+
+U1-DB6：独立只读事务和公共入口写入拒绝，SQLSTATE 25006。
+
+U1-DB7：七张相关数据库表在解析前后的内容摘要一致。
+
+U1-DB9：并发事务句柄隔离。
+
+U1-DB10：事务复用与嵌套事务边界。
+
+U1-DB11：事务结束后拒绝继续使用失效句柄。
+
+U1-DB12：DELETE、CREATE TABLE、UPDATE、INSERT 四类拒写测试。
+
+此外，负向对照使用旧适配器实现时，U1-DB9 和 U1-DB11 出现预期断言失败，证明这些测试能够识别对应回归。
+
+裁决：本次 U1 适配器的只读及事务隔离边界满足限定范围的关闭条件。
+
+这不构成对所有数据库访问路径的全局只读保证。
+
+2. 测试证据：PASS_ARCHIVED_EVIDENCE
+
+通过 GitHub 核对归档结果，并沿用 MSG-20261009-24 已独立验证的文件指纹结论：
+
+验证项目
+
+结果
+
+正向 Vitest
+
+65/65 PASS
+
+测试文件
+
+2/2 PASS
+
+负向对照
+
+2 个预期失败、63 个通过
+
+TypeScript
+
+exit 0，空输出
+
+PostgreSQL
+
+本机隔离库运行记录
+
+九文件指纹
+
+上轮 9/9 已验证
+
+本轮独立测试重跑
+
+NO
+
+原始运行记录还显示，临时替换的负向对照实现已恢复为原始代码字节。
+
+裁决：历史验收记录足以支持 U1 的归档级关闭，但不得将其表述成审计方重新执行了测试。
+
+3. 归档完整性：PASS_SCOPED
+
+仓库已具备以下归档材料：
+
+AI-ARCHITECT-INBOX.md 中的历次审计裁决；
+
+checkpoint 中 CHANGE 32–39 的实施与裁决记录；
+
+CHANGE 37–39 的 HEAD 绑定及证据索引；
+
+Vitest、TSC、负向对照与运行记录。
+
+本轮成功直接读取 CHANGE 39 索引、CHANGE 38 绑定文件、checkpoint 及历史审计裁决正文。最新索引的 allMatch=true 与本轮 GitHub 文件比较结果一致。
+
+不过，FULL_COPY_OK 155/155 与 FNV1A 7e261bb0 属于仓库记录的校验结果，本轮并未再次独立执行 compare.mjs。
+
+因此，归档完整性在本次指定范围内通过，不声明全部历史裁决已逐字重新计算。
+
+4. SCOPE_HONESTY：PASS
+
+申请书清楚区分了历史证据核验、独立测试重跑及生产验证，并保留全部原有安全边界。
+
+没有发现以 U1 关闭为理由申请解除真实 Provider 外写、自动合并、自动部署、支付或生产门禁的情况。
+
+三、U1 正式关闭与 U2 启动条件
+
+正式裁决：U1_FINAL_CLOSURE=YES。
+
+U1 代码与证据可以封板。此前针对 U1 的 CHANGE 17–39 不再构成本次关闭阻断项。没有新增必须修复的 U1 代码问题。
+
+但 U1 CLOSED 不等于 U2–U5 全部获准实施。
+
+下一步仅授权 PHASE 3-A U2 的只读设计与实施准备，具体条件如下：
+
+固定 U1 关闭锚点，U2 不得隐式修改 U1 的可信事实契约。
+
+提交 U2 的功能定义、输入输出契约、调用关系与数据权限矩阵。
+
+明确 U2 是否新增持久化、数据库写入、Runtime 接线或模型调用；没有证据不得声称具备相应能力。
+
+列出 U2 的确定性验收用例、失败关闭路径、负向对照和证据归档方案。
+
+如涉及代码写入、自动生成补丁或执行测试，必须限定隔离环境、受控候选分支及人类审批边界。
+
+U2 设计通过独立评审之后，才允许授权其最小安全实施单元；不得据此自动启动 U3–U5。
+
+这意味着 Codex 可以开始 U2 的设计工作，但不能直接进入 U2 的产品代码实施。下一轮 MSG-20261009-26 应提交 U2 设计与最小实施边界审计，而非 U2 实施完成验收。
+
+四、最终机器可读裁决
+
+以下可直接复制给 Codex，作为本轮独立审计结论。
+
+MSG-20261009-25
+
+复制
+
+```ini
+AUDIT_ID=MSG-20261009-25
+REPO=anthonannabella-dev/crossclaim-ai
+BRANCH=feat/si-rsi-internal-code-repair-v1
+U1_CODE_HEAD=9ee36837
+EVIDENCE_HEAD=aa730476
+MANIFEST_HEAD=23584224
+CURRENT_HEAD=c9437e0d
+FINAL_VERDICT=PASS
+U1_FINAL_CLOSURE=YES
+U1_READ_ONLY_BOUNDARY_FINAL=PASS_SCOPED
+U1_TEST_EVIDENCE_FINAL=PASS_ARCHIVED_EVIDENCE
+U1_ARCHIVE_COMPLETENESS_FINAL=PASS_SCOPED
+SCOPE_HONESTY=PASS
+INDEPENDENT_REPOSITORY_VERIFIED=YES
+INDEPENDENT_TEST_RERUN=NO
+U1_TEST_RECORD=65_PASS_2_FILES
+U1_NEGATIVE_CONTROL=2_EXPECTED_FAIL_63_PASS
+REQUIRED_CHANGES=NONE_FOR_U1
+PHASE3_A_U2_TO_U5_AUTHORIZED=NO
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_READ_ONLY_AND_IMPLEMENTATION_PREPARATION_ONLY
+U2_IMPLEMENTATION_AUTHORIZED=NO
+U3_TO_U5_IMPLEMENTATION_AUTHORIZED=NO
+NEXT_AUDIT=MSG-20261009-26
+EXTERNAL_WRITE=HOLD
+AUTO_MERGE=FORBIDDEN
+AUTO_DEPLOY=FORBIDDEN
+PRODUCTION_READY=NO
+```
+
+最终结论：U1 正式 CLOSED，下一阶段进入 U2 设计审计。 U1 不需要因本次申请重新修改产品代码，也没有授权扩大自主修复系统的执行权限。
+
+本次审计仅在当前会话出具裁决，未修改或写入 GitHub 仓库。
+````
