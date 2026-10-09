@@ -3859,3 +3859,50 @@ AUTO_MERGE / AUTO_DEPLOY=FORBIDDEN · U1_REOPEN=NO · U2_DESIGN_R21_REOPEN=NO
 BUSINESS_HEARTBEAT_RESTORED=NO · OS_TIMER_RESTORED=NO · PRODUCTION_READY=NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.59 R5 只读收口交付（授权 `PHASE3_A_U2_PRECONDITION_R5_READ_ONLY_CLOSURE`）
+
+> 交付物：①`docs/releases/SI-RSI-R4-WRITE-DOMAIN-MAP.md`（**v2 修订**，按 CHANGE 94）
+> ②`docs/releases/SI-RSI-R4-F01-EVIDENCE-MATRIX.md`（**v2 修订**，按 CHANGE 95/96/97）
+> ③新增 `docs/releases/SI-RSI-R5-CARRIER-COMPARISON-AND-EXPERIMENT-APPLICATION.md`（路线 A/B 比较 + 实验申请草案，**未执行**）
+> 基线 `bbc7536e`；U1 封板 `9ee36837` 未改动；冻结条件全部保持。
+> 本轮仅**只读勘验 + 文档修订**：未连接任何数据库（含未执行只读查询）、未运行实验、未修改产品代码、未启动业务调度器/Runtime/OS 定时任务。
+
+**CHANGE 94（写入路径清点 + 绝对断言更正）**
+
+1. 补齐三条路径：**`fail()`**（`:397-438`，显式 `$transaction`：读租约/任务 → 租约 CAS 释放 → 任务 CAS `IN_PROGRESS → READY|DEAD_LETTER`，写 `attempts+1`/`nextAttemptAt`，失败路径无部分写入）、
+   **`renew()`**（`:440-459`，**无显式 `$transaction`**：`findUnique` → `updateMany` CAS，`FENCED_LEASE_RACE`）、
+   **`rsi-restart-reconcile`**（契约 6 条收敛规则；幂等由 store 侧带状态前置条件 update 保证；**不创建/删除行**；**与租约代际无关联** ⇒ 缺口）。
+2. **更正我方绝对断言**：R4 初版「`apps/api/src` 不存在原始 SQL 写入」**不成立**——审计方指出 `fault-incident-intake.ts` 使用 `INSERT ... ON CONFLICT`；
+   只读检索另确认多处原始 SQL（`server.ts`、`appeals`/`claims`、`config-execution-durability`、`billing`、`consistency`）。
+   ⇒ 覆盖声明改为 **`RSI_CORE_PATHS_MAPPED_PARTIAL · ALL_REPO_WRITERS_NOT_EXHAUSTIVELY_PROVEN`**。
+3. **附带发现**：`services/billing/invoice-issue.ts:129` 在 `$transaction` 内使用 **`pg_advisory_xact_lock(hashtext(...))`** ⇒ 仓库内**已存在**「以稳定业务身份为键的数据库端事务级互斥」先例（对载体评估有直接价值）。
+
+**CHANGE 95（载体分级）**：维度① 改为 **`PARTIAL_PROVEN / IDENTITY_MISMATCH`**；维度② 拆为 `CAS_PATTERN = CODE_VERIFIED`、`ROW_LOCK_OR_SERIALIZABLE_EQUIVALENCE = NOT_PROVEN`、`COMMIT_TIME_FENCING = NOT_PROVEN`；
+并写明**权限闭环与切换语义不是可推后的次要条件**（载体获批时同属必要条件）。`CARRIER_DECISION = HOLD` 维持。
+
+**CHANGE 96（双层证据分级）**：仓库侧 / 目标运行侧分列——E-10 = `CODE_VERIFIED_PARTIAL` / `NOT_PROVEN`；E-12 = `MIGRATION_TEXT_VERIFIED` / `NOT_PROVEN`；
+E-08/E-09 = `NOT_PROVEN` / `BLOCKED`；E-14 = `DESIGN_ONLY` / `NOT_AVAILABLE`；E-01/E-03/E-11 = 声明可读 / `WAITING_ON_HOST`；E-02 = `PARTIAL_REPO` / `NOT_PROVEN`。
+
+**CHANGE 97（新增不变量）**：**U-11 执行身份唯一性与 ABA 防护**、**U-12 部分失败/回滚/负结果的可归因性**（不得把"未抛异常"当作协议完成；`reclaimExpired` 两 CAS 须整体成立；结果未知不得重复外部副作用）。
+
+**R5 新增文档要点**：路线 A（数据库端 fencing）**优先**——仓库已有 CAS+事务基础与 advisory lock 先例；路线 B（隔离部署/文件锁）需全新引入且与现网 lease 互斥形成两套互斥域；
+实验申请**草案**在 S1–S11 基础上新增 **S12（ABA）**、**S13（部分失败/回滚/负结果）**，并写明环境/数据/时长/退出与回滚要求；**未执行、未获批**。
+
+```text
+CHANGE_94=ADDRESSED（补齐 fail/renew/reconcile + 更正原生 SQL 绝对断言 + 覆盖声明限定）
+CHANGE_95=ADDRESSED（维度①/②重新分级；必要条件声明）
+CHANGE_96=ADDRESSED（双层证据分级表）
+CHANGE_97=ADDRESSED（新增 U-11/U-12）
+R5_HOST_EVIDENCE_RECEIVED = NONE（WAITING_ON_HOST：E-01/E-02外/E-03/E-08/E-09/E-11/E-12实际/E-14）
+R5_EXPERIMENT_APPLICATION = DRAFTED（S12/S13 新增；未执行）
+CARRIER_DECISION = HOLD · F01_STATUS = OPEN_P0
+P3_EXPERIMENT_AUTHORIZED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · PRODUCTION_WRITE_AUTHORIZED = NO
+MULTI_INSTANCE_AUTOMATED_WRITE = NOT_AUTHORIZED · SCHEMA_MIGRATION = HOLD
+RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN · EXTERNAL_WRITE = HOLD
+AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · U1_CODE_CLOSURE = UNCHANGED · U2_DESIGN_R21 = 未重开
+BUSINESS_HEARTBEAT_RESTORED = NO · OS_TIMER_RESTORED = NO · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+```
