@@ -1,11 +1,11 @@
-# PHASE 3-A · U2 设计 R12（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R13（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-34 = REVISE` → `MSG-20261009-35 = REVISE` → `MSG-20261009-36 = REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R12_READ_ONLY_CHANGES_40_TO_43`。
-> 本文件是 **U2 设计 R12** 送审材料（MSG-20261009-37），**不含任何产品代码改动**。
-> **R12 的修订集中在 §20（活体排他 / 精确事务归因 / 状态语义收口 / digest 测试向量）；
-> §1–§19 保留历史；凡冲突者以 §20 为准。**
+> `MSG-20261009-35 = REVISE` → `MSG-20261009-36 = REVISE` → `MSG-20261009-37 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R13_READ_ONLY_CHANGES_44_TO_46`。
+> 本文件是 **U2 设计 R13** 送审材料（MSG-20261009-38），**不含任何产品代码改动**。
+> **R13 的修订集中在 §21（活体排他时序 / 全局不可变性 / refs 摘要字节规范）；
+> §1–§20 保留历史；凡冲突者以 §21 为准。**
 
 | 锚点 | 值 |
 | --- | --- |
@@ -21,7 +21,8 @@
 | U2 设计 R9 | `d9172daa` |
 | U2 设计 R10 | `35a50c63` |
 | U2 设计 R11 | `b02a92de` |
-| U2 设计 R12 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R12 | `c9b167c7` |
+| U2 设计 R13 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -1443,3 +1444,133 @@ interface U2SideEffectReport {
 不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
 `SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
 本文件仍为**纯设计 R12**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+
+---
+
+## 21. R13 修订（对应 MSG-20261009-37 的 CHANGE 44–46）
+
+> 授权来源：`MSG-20261009-37 = REVISE` ⇒ `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R13_READ_ONLY_CHANGES_44_TO_46`。
+> 本轮**只改设计文本与审计归档**：不新增产品代码、不建表、不执行迁移、不接 Runtime/Queue、不调用模型/Provider；
+> `U2_IMPLEMENTATION_AUTHORIZED=NO` 保持不变。R12 中已 PASS 的 §20.3（CHANGE 42）语义**原样保留**，本轮**不改动**。
+
+| CHANGE | R12 位置 | R13 修订位置 | 变更性质 |
+| --- | --- | --- | --- |
+| **CHANGE 44（P0）** | §20.1 第 5 条（`T0 → T1 → T2 → T3`） | **§21.1** | 时序重构 + **锁所有权证明**（新增 `T1A`） |
+| **CHANGE 45（P0）** | §20.2.3 前提②（「U2 路径无 UPDATE/DELETE」） | **§21.2** | 局部论证 → **全局不可变性**前置 |
+| **CHANGE 46（P1）** | §20.4.1 / §20.4.2 / §20.4.4 | **§21.3** | 字节与排序规范、统一 fail-closed、`signerAuthRef` 生命周期 |
+| 验收矩阵 | §13.2 / §20.1.6 / §20.2.5 | **§21.4** | 新增 **U2-33 ~ U2-40** 正反例 |
+
+### 21.1 CHANGE 44（P0）—— 活体排他的**时序**与**锁所有权证明**
+
+**承认审计方的判断**：R12 §20.1 的 `T0（校验活体排他）→ T1（取锁）` **时序自相矛盾**。
+`T0` 的外部探针失败只能证明**探测时刻存在持锁者**，**不能**证明 **U2 在 `T1` 持锁**；
+若锁在 `T0` 时已由 U2 自己持有，则 `T1` 是否**复用同一已持锁 FD**、如何证明该 FD 属于**当前执行实例**，R12 均未定义。
+
+**R13 规则（严格按序执行；任一步失败 ⇒ 立即 fail-closed，零写入）**
+
+1. **阶段定义（重排后）**
+
+| 阶段 | 必须完成的事 | 失败语义（拒绝码） |
+| --- | --- | --- |
+| **`T0`** | 校验**受控启动身份**（专用运行账户 + 既有服务管理单元）、**隔离前提** `SAME_UID_FS_ISOLATION` + `sameUidIsolationRef`、**配置证明** `CONFIG_VERIFIED`；并完成 §21.3.4 的 `signerAuthRef` **首次验证** | `EXCLUSIVE_WINDOW_UNAVAILABLE` |
+| **`T1`** | **当前 U2 实例**取得锁，并记录：①**持锁 FD 号** ②**实例身份**（`instanceId` + 启动凭证） ③**锁对象标识** `(st_dev, st_ino)` 与 `ownerToken` | `LOCK_ACQUIRE_FAILED` |
+| **`T1A`** | **独立探针进程**用**独立打开的 FD**对**同一锁对象**做**非阻塞**获取并**断言失败**；探针必须同时验证 **(a)** 锁对象身份一致（`(dev,inode)` 与 `T1` 记录相同）与 **(b)** 「当前 U2 实例**确实持锁**」这一事实成立 | `LOCK_OWNERSHIP_UNPROVEN` / `PROBE_OBJECT_MISMATCH` |
+| **`T2`** | **仅当 `T1` 与 `T1A` 均成功且证明仍有效**（未过期、未被释放、锁对象未被替换、`signerAuthRef` 复验通过）才进入数据库事务；进入前须**最后一次**复检锁对象 `(dev,inode)`、FD 有效性与「持有者仍是本实例」 | `LOCK_RELEASED_EARLY` / `LOCK_OBJECT_REPLACED` / `SIGNER_AUTH_INVALID` |
+| **`T3`** | 事务 + 必要对账 + 释放（§18.1 全链校验）。**释放失败必须保留异常事实** `lockReleaseFailed=true`，**不得**声称正常释放（优先级见 §20.3.3） | `LOCK_RELEASE_FAILED` |
+
+2. **`T1A` 探针的独立性要求**：探针必须是**与 U2 不同的进程**（独立 `fork`+`exec` 或独立可执行文件），**独立打开**锁文件，
+   **不得**通过 FD 继承 / `SCM_RIGHTS` / `dup` 复用 U2 的 FD；探针须输出结构化结果（时间戳、`(dev,inode)`、尝试结果、探针自身实例标识），
+   该输出作为 `LIVE_EXCLUSIVITY_VERIFIED` 的**证据引用**。
+3. **锁对象身份必须以 `(st_dev, st_ino)` 比对**，**不得只比对路径字符串**（路径可被替换/重绑）；`T1` 与 `T1A` 的对象标识不一致 ⇒ 不得进入 `T2`。
+4. **`flock` 的 FD 语义（必须显式实现）**：`flock` 锁绑定在**打开文件描述（open file description）**上，**不是**绑定在 FD 号上：
+   - `dup`/`fork` **共享**同一描述 ⇒ 父进程退出**不会**释放锁（只要仍有副本存在）；
+   - `exec` 派生的子进程若未设置 close-on-exec 会**继承**该描述 ⇒ **锁意外持续**（探针将一直失败，实例形同「幽灵持锁」）；
+   - **规定**：锁 FD **一律** `O_CLOEXEC`（`FD_CLOEXEC`）；**禁止** `dup` 该 FD；派生任何子进程前必须确认该 FD 不在继承集合内；
+   - **释放手段**：`flock(LOCK_UN)` **与** `close(fd)` **同时**执行，且以 **`close()`** 为最终释放依据（仅 `LOCK_UN` 不能解决副本问题）；
+   - 持锁进程被 `SIGKILL` ⇒ 内核释放全部副本 ⇒ **不依赖任何时间戳抢占规则**（§20.1.4 保留）。
+5. **证明有效性窗口**：`T1`/`T1A` 的证明与 `T2` 的事务之间不得存在可被其他实例利用的窗口；
+   `T2` 前的复检（第 1 条 `T2` 行）是**必需**步骤，**不得省略**，也**不得**仅以 `T0` 的结论代替。
+6. **负例（必须纳入 §21.4 矩阵）**：
+   - 探针**取得**锁（即 U2 **实际未持锁**）⇒ 拒绝；
+   - 探针与 U2 锁定**不同 inode** ⇒ 拒绝；
+   - 证明通过后锁被**提前释放**（同 UID 进程 `LOCK_UN`/`close`，或锁对象被替换）⇒ 拒绝。
+
+### 21.2 CHANGE 45（P0）—— COMMIT 归因前提升级为**全局不可变性**
+
+**承认审计方的判断**：§20.2.3 前提②以「**U2** 路径不存在 UPDATE/DELETE」论证「记录不会被替换」，这是**局部**论证。
+U2 自身不改记录，**不等于**其他模块、管理员或数据库作业不改；
+因此「未知 `COMMIT` 后按 `id` 在主库重读到匹配行」仍缺少**全局不可变性**保证。
+
+**R13 规则（不新增 schema）**
+
+1. **全局写入者清单（必须建立并逐项核实，不得只限 U2 模块）**：至少覆盖
+   ①U2 候选记录器自身 ②**任何既有服务/后台作业** ③**迁移与运维脚本** ④**人工/管理员访问**（含 DBA 与 Prisma Studio 类工具）
+   ⑤**数据库级对象**（触发器 / 规则 / 级联）。
+   每一项须给出**来源证据**（仓库内引用 + 生产库对象查询结果），并标注**是否可能 UPDATE/DELETE 候选行**；
+   **清单不完整 ⇒ 视为不可证明**。
+2. **`AutonomyCandidate.id` 生成与不复用机制的核对**：必须对照**实际 Schema**（Prisma `@id`）、**数据库约束**（主键 / 唯一索引 / 默认值与生成方式）
+   与**写入路径**逐项核实：
+   - `uuid`/`cuid` 一类生成器在**不重放先前值**的前提下可判定为不复用；
+   - **序列/自增**类须考虑**回绕与重置**（`ALTER SEQUENCE RESTART`、恢复/克隆库）⇒ 默认**不**判定为不复用；
+   - 上述任一项**无法核实** ⇒ 归因前提**不成立**。
+3. **`returnedCandidateId` 的保存时机（关键）**：事务内取到 `RETURNING` 的 `id` 后，必须在 **`COMMIT` 之前**把它写入**事务外的执行上下文**
+   （可持久化载体：结构化日志 / 对账日志；写入失败即视为**未保存**）。
+   必须明确：该值**本身不等于已提交证明**——它只证明「本事务**执行过**插入并取得主键」，提交与否仍须按下条对账。
+4. **未知 `COMMIT` 对账的严格前提**：只有在 ①全局写入者清单完成且**不可变性**在**整个观察窗口**内成立、
+   ②`id` 不复用机制已核实、③`returnedCandidateId` 已按第 3 条保存 之后，
+   才允许在**权威主库**上执行 §20.2.2 的重读校验，并据此得出 `candidateInsertCommitState='COMMITTED'`、`newRowsCommitted=1`。
+5. **无法证明全局不可变性 ⇒ 只允许 `UNKNOWN`**：`candidateInsertCommitState='UNKNOWN'`、`newRowsCommitted='UNKNOWN'`、`candidateId=null`；
+   **不得**认定 `THIS_INSERT_COMMITTED`，也**不得**据此推进任何自动化动作（`outcome='REJECTED'`、`reason='COMMIT_NOT_CONFIRMED'`）。
+6. **必须覆盖「`RETURNING` 得一行、随后事务显式 `ROLLBACK`」**：由于第 3 条已在事务外保存 `returnedCandidateId`，
+   对账在**主库**读不到该 `id`（或读到但**必要不变字段** `taskId`/`baselineRef`/`builderRef` 不匹配）⇒
+   结论必须是 `NOT_COMMITTED`（或 `UNKNOWN`），**禁止**把「执行过 INSERT」解释为「已提交」。
+
+### 21.3 CHANGE 46（P1）—— refs 摘要的**字节规范**收口
+
+1. **`git rev-parse` 原始输出的处理**：**只去除命令自身产生的行尾换行**（末尾 `0x0A`；若为 `0x0D 0x0A` 则一并去除），
+   **不得**做 `trim()`、空白折叠、路径规范化或大小写处理——**不得损伤路径名中的有效字符**（含空格、`\t`、非 ASCII 与结尾空白）。
+   若输出被 Git 以 **C 风格引号包裹**（首/末为 `"`，`core.quotePath` 场景）⇒ 视为**路径解析失败** ⇒ `BASELINE_*` 拒绝，**不得**自行解码猜测。
+2. **排序算法固定（消除 locale 依赖）**：非 ASCII `refname` 的「**码点排序**」与「**原始字节排序**」**可能不同**，故固定为
+   **`refname` 原始字节（UTF-8）的无符号字节升序**（逐字节 `memcmp` 语义，短者在前）；
+   **禁止**使用任何 locale 相关比较（`strcoll` / `localeCompare`）或大小写折叠。
+   **区域设置不得影响输出**：读取前固定 `LC_ALL=C`（等价做法：完全不调用 locale 相关比较），并**显式**传 `--sort=refname`、**不依赖**默认排序；
+   证据中须记录所用排序为「UTF-8 原始字节序」。同一 `refname` 出现两次 ⇒ 视为异常输入（见第 3 条）。
+3. **统一 fail-closed（无部分结果）**：下列情形一律产生 `BASELINE_*` 类拒绝（如 `BASELINE_UNREADABLE` / `BASELINE_PARSE_FAILED`），
+   **不产生 digest**，且**不得**以「部分输出 + 空值」替代：
+   ①`git for-each-ref` / `git rev-parse` **非零退出码**；
+   ②输出**解析失败**（字段数 ≠ 3、含 NUL、`refname` 为空、`refname` 重复）；
+   ③**路径解析失败**（第 1 条）；
+   ④`packed-refs` **存在但不可读**（只有**确认不存在**才允许零长度）。
+4. **`signerAuthRef` 的验证时机 / 有效期 / 防重放**：
+   - **验证时机**：`T0` 验证一次；进入 `T2` 事务前**再次验证**；两次之间失效 ⇒ 拒绝（`SIGNER_AUTH_INVALID`）；
+   - **有效期**：必须携带**签发时刻与明确有效期**，**不得无限期**，且窗口**不得长于**单次 U2 执行窗口；过期 ⇒ 拒绝；
+   - **防重放**：必须绑定**一次性 `nonce`**（或等价一次性挑战）并纳入签名/摘要覆盖范围；**同一 `signerAuthRef` 不得被两次执行复用**
+     （第二次使用 ⇒ 拒绝并保留证据）；
+   - 仍绑定 `{signerIdentity, instanceId, attestationDigest}`（§20.4.4 保留）。
+5. **哈希证据口径（维持诚实表述）**：34 字节规范向量**保留为基准**；文档 SHA-256 与该向量的双实现复算**仍属送审方报告**，
+   **不得**记为本轮**独立**哈希验证通过（一律 `*_VERIFICATION=NOT_INDEPENDENTLY_VERIFIED`）。
+   本轮**未改变**编码规则（§20.4.1 的 v3 长度前缀编码原样保留）⇒ 现有向量**仍然适用**，无需重算。
+
+### 21.4 R13 正反例验收矩阵（新增 U2-33 ~ U2-40）
+
+| 编号 | 场景（正例/反例） | 期望断言（fail-closed） |
+| --- | --- | --- |
+| **U2-33** | 反例：`T1A` 探针**成功**取得锁（说明当前实例**未真正持锁**） | 拒绝，`LOCK_OWNERSHIP_UNPROVEN`，**零写入** |
+| **U2-34** | 反例：探针锁定的对象与 `T1` 记录 **inode 不同**（路径被替换/重绑） | 拒绝，`PROBE_OBJECT_MISMATCH`，**零写入** |
+| **U2-35** | 反例：`T1A` 通过后、`T2` 之前锁被**提前释放**（同 UID `LOCK_UN`/`close`，或对象被替换） | `T2` 前复检必须发现 ⇒ 拒绝，`LOCK_RELEASED_EARLY`，**零写入** |
+| **U2-36** | 反例：**子进程继承锁 FD**（父进程退出后探针仍取锁失败） | 断言实现**不允许**该状态（`O_CLOEXEC`）；被观测到 ⇒ 记为缺陷 `LOCK_FD_LEAKED`；释放以 `close()` 为准 |
+| **U2-37** | 正/反例：`RETURNING` 得一行后事务**显式 `ROLLBACK`** | `candidateInsertCommitState ∈ {NOT_COMMITTED, UNKNOWN}`，**禁止** `THIS_INSERT_COMMITTED` |
+| **U2-38** | 反例：对账窗口内**非 U2 写入者**修改/删除候选行（模拟管理员/作业） | 结论 `UNKNOWN`/`NOT_COMMITTED`，**禁止** `THIS_INSERT_COMMITTED`，并保留对账证据 |
+| **U2-39** | 反例：`git for-each-ref` 失败 / `refname` 重复 / 路径被引号包裹 | `BASELINE_*` 拒绝、**不产生 digest**、**无部分结果** |
+| **U2-40** | 反例：`signerAuthRef` **过期**、或在 `T0`/`T2` 之间失效、或**被重放**（同一 ref 第二次执行使用） | 拒绝，`SIGNER_AUTH_INVALID`；且非 ASCII `refname` 在 `LC_ALL=C` 与 `LC_ALL=ja_JP.UTF-8` 下 digest **必须相同** |
+
+### 21.5 R13 未变部分
+
+§12 候选键 v2 与 digest 概念、§13.1 接口（本节点收紧语义）、§13.2 矩阵（另加 **U2-33 ~ U2-40**）、
+§16.1 `CONTROLLED_FIXED_WORKTREE`、§17.1 隔离证明框架、§17.2 U2-20A/B/C、§17.3 零行冲突复用路径、
+§18.1 释放全链校验、§18.2 行锁与重试边界、§19.4 通道/签发者分离、
+**§20.3（CHANGE 42）已 PASS 的状态语义原样保留**、**§20.4.1 编码规则（v3 长度前缀）本轮未改**（向量仍适用）、
+`builderRef` 固定常量、仅 INSERT、无 UPDATE/DELETE、不新增 schema/migration、不接 Runtime/Queue、
+不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
+`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+本文件仍为**纯设计 R13**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
