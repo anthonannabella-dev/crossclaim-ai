@@ -177802,3 +177802,532 @@ PRODUCTION_READY=NO
 
 下一轮仅授权 R14 设计修订和只读证据核验。此前已封板的 U1 不重新打开。本轮未修改仓库，也未将本次设计评审冒充真实数据库或生产环境验证。
 ```
+
+### [MSG-20261009-39] U2 设计 R14 = **REVISE**（`U2_DESIGN_R14_ACCEPTED=NO`；七项中 CHANGE 49 = PASS（设计清单）、48 = PASS WITH REVISE，47 维持 REVISE，50/51/52/53 = PASS WITH REVISE，新增 CHANGE 54–60 其中 **54/55/60 为 P0**）—— **独立核验属实项**：读取固定提交 `b57e5cb8` 的 U2 设计文档 / Prisma Schema / RSI Autonomy 迁移；**Git blob SHA `66549c714a7c43316bacb3608bfc758462e64e9e` 匹配**、`AutonomyCandidate` 模型字段匹配、候选状态 CHECK 已确认、**所查迁移未为 `AutonomyCandidate` 建 append-only 触发器**；**未验证**：数据库运行时权限、数据库实际部署状态、U2 实施测试；**送审范围声明不一致（已承认并更正）**：GitHub 比较 `8c42cfc2...b57e5cb8` 为 `ahead_by=2 / total_commits=2`，变更文件为 `AI-ARCHITECT-INBOX.md`、U2 设计文档、`docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1.md`，与送审材料所写「1 个提交、1 个文件」不符——事实上送审误把 R14 设计提交单独的范围（`1c7d51ac..b57e5cb8` = 1 提交 / 1 文件）当成了 R13→R14 审计范围；**更正口径**：R13→R14 **审计范围 = 2 提交 / 3 文件**（`1c7d51ac` 裁决归档 + `b57e5cb8` R14 设计），其中 R14 设计提交本身 = 1 文件 / 0 产品代码，`apps/api` 全历史至 HEAD 零产品代码变更；**七项裁决**：CHANGE 47（P0 锁所有权）= REVISE（E1/E2 合理，**E3 持续持锁证明仍不充分**）、CHANGE 48（P0 flock 释放与继承）= PASS WITH REVISE（核心 Linux 语义已纠正，生命周期控制仍有缺口）、CHANGE 49（P1 Linux 多进程测试）= PASS（设计清单；执行仍未验证）、CHANGE 50（P1 COMMIT 归因）= PASS WITH REVISE、CHANGE 51（P1 全局不可变性）= PASS WITH REVISE（准入门禁成立；仓库级事实大体得到支持，但**不得扩大为运行库证明**）、CHANGE 52（P1 字节级契约）= PASS WITH REVISE（规范基本统一，解析边界仍需明确）、CHANGE 53（P0 signerAuthRef）= PASS WITH REVISE（原子消费方向正确，须明确实际消费存储与副作用边界）；**新增 REQUIRED_CHANGES**：**CHANGE 54（P0）** T0 扫描与 T1 取锁**时序矛盾**（T0 尚未持锁，不能要求「恰好一个命中 = 当前实例锁 FD」，须按 T0/T1/T2 分阶段定义检查对象、合法 FD 集合、失败码与检测证据局限，并区分「同一 inode 的其他 FD」与「同一 OFD 的复制 FD」）、**CHANGE 55（P0）** E3 未闭环（E1/E2 是**历史观察**，FD 扫描不证明锁仍有效：T1 取锁→LOCK_UN→FD 仍开、inode 未变、T2 扫描仍可能通过；**T2 门禁须加入新的独立打开 FD 的排他冲突探针**并记录结果，同时声明探针只是**时点证明**，最终探针到 COMMIT 之间须由可信生命周期控制维持 OFD 锁状态，无法证明则拒绝写入）、CHANGE 56（P1）进程派生与 FD 扫描须区分「**检测**」与「**保证**」（/proc 扫描有竞态、inode 相同 ≠ OFD 相同、同 UID 进程可在两次扫描间开关 FD、fork 后子进程关闭复制 FD 也会影响生命周期假设 ⇒ 锁生命周期由受控执行环境与 FD 操作约束负责，扫描只负责发现异常，不可控派生继续 fail-closed）、CHANGE 57（P1）COMMIT 归因不能仅凭主库记录存在性（**只有第 1 类「数据库确认完成显式 ROLLBACK」可直接推出 NOT_COMMITTED**；COMMIT 请求失败但事务终态未知 / 查询无匹配 / 存在其他写入者创建的同键记录，均须满足严格归因前提才可升级结论，否则保持 UNKNOWN）、CHANGE 58（P1）全局不可变性证据不得超出仓库范围（认可仓库核验方向，但结论严格限定为 `REPOSITORY_SCHEMA_EVIDENCE_PARTIALLY_VERIFIED`；实际数据库的权限、触发器、角色、写入者全集与观察窗口不可变性仍为 NOT_VERIFIED）、CHANGE 59（P1）字节编码与 Git 命令边界三项断言（字段/记录分隔必须字节级无歧义，不得把 Git 文本输出当一般字符串表格解析；规范排序须基于原始字节，不允许解码后重编码改变非 ASCII 字节；原始字节保存、长度前缀计算与摘要生成必须使用同一字节序列；任何解析异常 ⇒ `BASELINE_PARSE_FAILED` 且不产生部分 digest）、**CHANGE 60（P0）** `signerAuthRef` 原子消费的**持久化边界**（须落实到现有可核验存储对象：T0 占用成功后 T1/T2 失败时 nonce 是否永久保持已消费、崩溃时消费记录是否已持久提交、未提交的消费记录能否宣称已消费、若用数据库该写入是否与「U2 仅 INSERT 候选记录」的实施范围冲突；规范语义 = 一经成功且持久确认的消费不得恢复可用，后续失败只能重新签发授权、不得抢占旧 nonce；且必须区分「已成功消费的授权状态」与「尚未发生的候选业务写入」；在权威存储、唯一约束与事务边界无证据前不得开放实施）；**授权结论**：`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED`、`U2_IMPLEMENTATION_AUTHORIZED=NO`、`U2 R15 只读修订=AUTHORIZED`、`SCHEMA_MIGRATION=HOLD`、`RUNTIME_WIRING/MODEL_CALL/PROVIDER_CALL=FORBIDDEN`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`；`REQUIRED_CHANGES=CHANGE_54_TO_60`、`NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R15_READ_ONLY_CHANGES_54_TO_60` / `NEXT_AUDIT=MSG-20261009-40`；reviewed ref `b57e5cb8e10c0b4665c97197613f3297fcd7d71f`
+
+```text
+MSG-20261009-39｜CrossClaim AI · U2 设计 R14 独立审计裁决
+REVISE — 暂不授权实施
+
+审计对象： SI/RSI INTERNAL CODE REPAIR V1
+审计范围： PHASE 3-A · U2 DESIGN R14
+固定审计提交： b57e5cb8e10c0b4665c97197613f3297fcd7d71f
+审计方式： GitHub 只读核验 + 设计安全性评审
+
+一、首先确认的独立核验结果
+
+已通过 GitHub 连接器读取固定提交下的 U2 设计文档、Prisma Schema 和 RSI Autonomy 迁移文件。
+
+核验项目
+
+
+
+独立结果
+
+
+
+
+R14 设计文档
+
+
+
+已读取
+
+
+
+
+Git blob SHA
+
+
+
+66549c714a7c43316bacb3608bfc758462e64e9e，匹配
+
+
+
+
+Schema 中的候选模型
+
+
+
+已读取，匹配所报字段
+
+
+
+
+候选状态 CHECK
+
+
+
+已确认
+
+
+
+
+候选表 append-only 触发器
+
+
+
+所查迁移未包含
+
+
+
+
+数据库运行时权限
+
+
+
+未验证
+
+
+
+
+数据库实际部署状态
+
+
+
+未验证
+
+
+
+
+U2 实施测试
+
+
+
+未执行
+
+发现一项重要的提交范围差异。
+
+GitHub 对 8c42cfc2...b57e5cb8 的比较结果显示：
+
+ahead_by=2
+
+total_commits=2
+
+变更文件为 AI-ARCHITECT-INBOX.md、U2 设计文档以及 docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1.md
+
+这与送审材料声称的“1 个提交、1 个文件”不一致。
+
+这不自动意味着 R14 产品代码被修改，但意味着当前提供的 R13→R14 差异声明尚不能通过独立核验。需要将实际审计提交范围与单个 R14 提交的变更范围明确区分。
+
+仓库当前可确认的事实同样不支持放开数据库写入：AutonomyCandidate 存在可更新的状态字段和 updatedAt，已检查的迁移只为三个其他证据表建立 append-only 触发器。候选记录的全局不可变性不能由这些文件推导出来。
+
+因此：
+
+U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED
+
+该裁决不影响已经封板的 U1，也不授权 schema migration、Runtime wiring、模型调用、Provider 调用、自动合并或部署。
+
+二、CHANGE 47–53 逐项裁决
+
+CHANGE
+
+
+
+等级
+
+
+
+裁决
+
+
+
+核心原因
+
+
+
+
+47 锁所有权
+
+
+
+P0
+
+
+
+REVISE
+
+
+
+E1/E2 合理，但 E3 持续持锁证明仍不充分
+
+
+
+
+48 flock 释放与继承
+
+
+
+P0
+
+
+
+PASS WITH REVISE
+
+
+
+核心 Linux 语义已纠正，生命周期控制仍有缺口
+
+
+
+
+49 Linux 多进程测试
+
+
+
+P1
+
+
+
+PASS（设计清单）
+
+
+
+测试场景覆盖主要失效模式，执行仍未验证
+
+
+
+
+50 COMMIT 归因
+
+
+
+P1
+
+
+
+PASS WITH REVISE
+
+
+
+四条件、ROLLBACK、持久化方向正确，归因规则需进一步收紧
+
+
+
+
+51 全局不可变性
+
+
+
+P1
+
+
+
+PASS WITH REVISE
+
+
+
+准入门禁成立；仓库级事实大体得到支持，但不能扩大为运行库证明
+
+
+
+
+52 字节级契约
+
+
+
+P1
+
+
+
+PASS WITH REVISE
+
+
+
+规范已基本统一，解析边界仍需明确
+
+
+
+
+53 signerAuthRef
+
+
+
+P0
+
+
+
+PASS WITH REVISE
+
+
+
+原子消费设计方向正确，须明确实际消费存储与副作用边界
+
+总裁决：REVISE。
+
+这不是否定 R14 的整体设计。R14 对前一轮七项问题均作出了实质性回应，其中多项可以在设计层面有条件接受。但 CHANGE 47 仍涉及直接影响数据库写入安全性的 P0 问题，不能关闭全部门禁。
+
+三、必须继续修订的问题
+CHANGE 54（P0）— T0 扫描与 T1 取锁的时序矛盾
+
+R14 §22.1.6 要求：
+
+T0 在取锁前执行全进程 FD 扫描；
+
+T0 与 T2 都期望恰好一个命中，即当前实例的锁 FD。
+
+但 T0 尚未取得锁，也不能合理要求此刻已存在一个“当前实例的持锁 FD”。
+
+应将两个阶段的验收条件分开：
+
+T0： 验证不存在未经授权的既有锁对象访问者；不得要求当前实例已持锁。
+
+T1： 当前实例创建并持有锁 FD，执行 flock，取得 E1。
+
+T2： 验证受控 FD 生命周期及持续互斥状态。
+
+还须区分扫描发现“同一 inode 的其他 FD”和发现“同一 OFD 的复制 FD”。仅通过 (dev,inode) 相同，不能判定两个 FD 是否引用同一个打开文件描述。
+
+修订要求： 明确各阶段检查对象、合法 FD 集合、失败代码及检测证据的局限。
+
+CHANGE 55（P0）— E3 持续持锁证明仍未闭环
+
+R14 规定 E1、E2 成功，加上 FD 扫描和授权复验后即可进入 T2。
+
+问题是，E1/E2 是历史观察，FD 扫描不能直接证明锁仍有效。
+
+例如：
+
+T1 成功取得锁。
+
+T1A 观察到排他互斥。
+
+锁随后因程序错误被执行 LOCK_UN。
+
+原始 FD 仍打开、inode 未变。
+
+T2 扫描可能仍然通过。
+
+此时不能把 FD 存在等同于锁仍被持有。
+
+R14 在 §22.3 中要求测试能检测这种情况，但 §22.1.7 的正式门禁没有明确规定 T2 必须再次执行独立互斥探针。
+
+修订要求：
+
+在 T2 门禁加入新的、独立打开 FD 的排他锁冲突探针，并记录其检查结果。
+
+同时明确：探针是时点证明，而不是永久保证；从最终探针到 COMMIT 期间，还需要由可信生命周期控制维持原 OFD 的锁状态。
+
+若无法证明这个控制边界，应拒绝写入，不能仅依赖重复探测。
+
+CHANGE 56（P1）— 进程派生与 FD 扫描必须区分“检测”与“保证”
+
+R14 已明确指出 O_CLOEXEC 不阻止 fork 继承，这是正确的。
+
+但是：
+
+扫描 /proc/*/fd/* 存在竞态；
+
+inode 相同不能证明 OFD 相同；
+
+同 UID 进程可以在两次扫描之间打开或关闭 FD；
+
+fork 后子进程关闭复制 FD，也可能影响设计中假定的文件描述生命周期。
+
+建议在设计中明确锁生命周期由受控执行环境和 FD 操作约束负责，/proc 扫描只负责发现异常，不承担完整性证明。
+
+对于无法受控的进程派生，继续执行现有 fail-closed 规则。
+
+CHANGE 57（P1）— COMMIT 归因不能仅凭主库记录存在性
+
+R14 已正确区分：
+
+执行过 INSERT；
+
+得到了 RETURNING id；
+
+真正完成 COMMIT。
+
+但 §22.4 中“查询某条记录或 dedupeKey 对应行”的证明边界仍应更严格。
+
+尤其需要区分：
+
+数据库确认完成显式 ROLLBACK。
+
+COMMIT 请求失败，但事务终态未知。
+
+查询时主库无匹配记录。
+
+查询时存在其他写入者创建的同键记录。
+
+建议仅允许第 1 类可靠回滚确认直接推出 NOT_COMMITTED。
+
+其余场景必须满足严格归因前提才能升级结论；否则继续保持 UNKNOWN。
+
+CHANGE 58（P1）— 全局不可变性证据不能超出仓库范围
+
+已独立确认现有迁移不为 AutonomyCandidate 建立 append-only 触发器，但这只说明所审查的迁移未提供该保护。
+
+不能据此证明实际数据库：
+
+没有其他后续触发器；
+
+没有额外权限策略；
+
+没有 DBA 手工配置；
+
+没有仓库外的写入渠道。
+
+因此我认可本轮的主要仓库核验方向，但将结论严格限定为：
+
+REPOSITORY_SCHEMA_EVIDENCE_PARTIALLY_VERIFIED
+
+实际数据库中的权限、触发器、角色、写入者全集和观察窗口不可变性，仍保持 NOT_VERIFIED。
+
+CHANGE 59（P1）— 字节编码与 Git 命令的边界需要明确
+
+R14 §22.6 已经消除了大量歧义，但建议增加三项断言：
+
+for-each-ref 的字段分隔、记录分隔必须在字节级无歧义，特别是不得把 Git 的文本输出当作一般字符串表格解析。
+
+规范排序必须基于原始字节，不允许解码后重新编码造成非 ASCII 字节变化。
+
+原始字节的保存、长度前缀计算以及摘要生成必须使用相同字节序列。
+
+其中任何解析异常必须得到 BASELINE_PARSE_FAILED，并保证不会产生部分 digest。
+
+CHANGE 60（P0）— signerAuthRef 原子消费的持久化边界
+
+R14 §22.7 提出的唯一约束 + INSERT ... ON CONFLICT DO NOTHING RETURNING，是正确的并发控制方向。
+
+但“由什么权威存储完成这次消费”尚未落实到现有可核验的存储对象。
+
+尤其要明确：
+
+若 T0 原子占用成功，之后 T1 或 T2 失败，该 nonce 是否永久保持已消费；
+
+若发生崩溃，如何保证消费记录已经持久提交；
+
+如果消费记录没有提交，能否仍宣称该 nonce 已消费；
+
+若使用数据库，该写入是否与本轮限定的“U2 仅 INSERT 候选记录”的实施范围冲突。
+
+建议采用的设计语义： 一经成功且持久确认的消费不得恢复为可用；后续失败只能重新签发授权，不允许抢占旧 nonce。
+
+但是，必须明确区分“已成功消费的授权状态”和“尚未发生的候选业务写入”。
+
+在现有权威存储、唯一约束以及事务边界没有证据之前，不能据此开放 U2 实施。
+
+四、下一轮授权边界
+
+本轮允许继续进行纯设计修订和只读证据收集，不允许进入候选 INSERT 实施。
+
+权限项
+
+
+
+裁决
+
+
+
+
+U1 封板状态
+
+
+
+保持不变
+
+
+
+
+U2 R14 设计
+
+
+
+REVISE
+
+
+
+
+U2 R15 只读修订
+
+
+
+AUTHORIZED
+
+
+
+
+U2 PLATFORM ONLY INSERT
+
+
+
+NOT AUTHORIZED
+
+
+
+
+Schema / Migration
+
+
+
+HOLD
+
+
+
+
+Runtime / Queue
+
+
+
+FORBIDDEN
+
+
+
+
+Model / Provider 调用
+
+
+
+FORBIDDEN
+
+
+
+
+External Write
+
+
+
+HOLD
+
+
+
+
+Auto Merge / Deploy
+
+
+
+FORBIDDEN
+
+
+
+
+Production Ready
+
+
+
+NO
+
+下一轮建议仅处理 CHANGE 54–60，同时补齐固定提交的差异说明。无需重新设计已通过的全部章节。
+
+五、机器可读正式裁决
+
+MSG-20261009-39
+
+复制裁决
+
+以下为供 Code / SI 使用的独立审计结论。
+
+AUDIT_DECISION=REVISE
+U2_DESIGN_R14_ACCEPTED=NO
+REQUIRED_CHANGES=CHANGE_54_TO_60
+NEXT_AUTHORIZED=PHASE3_A_U2_DESIGN_R15_READ_ONLY_CHANGES_54_TO_60
+NEXT_AUDIT=MSG-20261009-40
+U2_PLATFORM_ONLY_INSERT_SUBSET=NOT_AUTHORIZED
+U2_IMPLEMENTATION_AUTHORIZED=NO
+PRODUCTION_READY=NO
+
+最终意见： R14 已经把主要问题推进到了可审计的技术契约，但锁的持续有效性、提交归因与授权消费仍有未闭合的安全边界。因此批准下一轮 R15 只读设计修订，暂不批准 U2 的任何候选写入实施。
+
+本次只读取了仓库，没有修改任何文件、提交或分支。
+```

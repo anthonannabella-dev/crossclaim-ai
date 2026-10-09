@@ -2704,3 +2704,85 @@ SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDD
 EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
 POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
 ```
+
+---
+
+### 2.43 MSG-20261009-39 裁决归档 = **REVISE**（七项：CHANGE 49 PASS、48/50/51/52/53 PASS WITH REVISE、47 仍 OPEN；新增 CHANGE 54–60，其中 54/55/60 为 P0）
+
+> 逐字归档：`AI-ARCHITECT-INBOX.md`（段落 `### [MSG-20261009-39] …`），
+> `tools/verdict-diff/compare.mjs` = **FULL_COPY_OK（187/187，缺失 0，多出 0）**；
+> 规范化指纹 = `NORM_CHARS=4676 / NORM_LINES=187 / FNV=6db509f7`。
+> 锚点：`U1_CODE_HEAD=9ee36837`、`U2_DESIGN_COMMIT_R13=8c42cfc2`、`REVIEWED_HEAD=b57e5cb8`。
+
+#### 2.43.0 送审范围声明不一致 —— **已承认并更正（诚信修正）**
+
+本轮送审材料写「R13 → R14：提交数 1；文件数 1」，并把这写成 `git diff --name-only 8c42cfc2 b57e5cb8` 的结果。
+**审计方独立比对 GitHub 后指出：`8c42cfc2...b57e5cb8` 为 `ahead_by=2 / total_commits=2`，变更 3 个文件**
+（`AI-ARCHITECT-INBOX.md`、U2 设计文档、`docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1.md`）。
+**审计方判断正确，送审方声明有误**：被误当作 R13→R14 范围的，其实是 **R14 设计提交自身** 的范围
+（`1c7d51ac..b57e5cb8` = **1 提交 / 1 文件**）。
+
+更正后的准确口径（本仓库实测）：
+
+```text
+R13_TO_R14_AUDIT_SCOPE   = 8c42cfc2..b57e5cb8 = 2 commits / 3 files
+  1) 1c7d51ac  MSG-20261009-38 裁决逐字归档 + checkpoint §2.42（AI-ARCHITECT-INBOX.md、SI-RSI-INTERNAL-CODE-REPAIR-V1.md）
+  2) b57e5cb8  U2 设计 R14（SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md）
+R14_DESIGN_COMMIT_ONLY    = 1c7d51ac..b57e5cb8 = 1 commit / 1 file
+PRODUCT_CODE_CHANGES      = 0（git diff b57e5cb8 -- apps/api 无输出；全历史至 HEAD 亦为零）
+```
+
+后续送审**必须**同时给出「审计范围」与「单提交范围」两个口径，避免再次混淆。
+
+**审计方独立核验（属实项）**：Git blob SHA `66549c714a7c43316bacb3608bfc758462e64e9e` **匹配**、
+`AutonomyCandidate` 模型字段匹配、候选状态 CHECK 已确认、**所查迁移未为 `AutonomyCandidate` 建 append-only 触发器**。
+**未验证**：数据库运行时权限、数据库实际部署状态、U2 实施测试。
+
+**七项裁决**：`CHANGE 47（P0）= REVISE`（E1/E2 合理，**E3 持续持锁证明仍不充分**）、
+`CHANGE 48（P0）= PASS WITH REVISE`（核心 Linux 语义已纠正；生命周期控制仍有缺口）、
+`CHANGE 49（P1）= PASS（设计清单）`（测试场景覆盖主要失效模式，**执行仍未验证**）、
+`CHANGE 50（P1）= PASS WITH REVISE`、`CHANGE 51（P1）= PASS WITH REVISE`（准入门禁成立；仓库级事实大体得到支持，
+但**不得扩大为运行库证明**）、`CHANGE 52（P1）= PASS WITH REVISE`（规范基本统一，解析边界仍需明确）、
+`CHANGE 53（P0）= PASS WITH REVISE`（原子消费方向正确，须明确实际消费存储与副作用边界）。
+`U2_DESIGN_R14_ACCEPTED = NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET = NOT_AUTHORIZED`。
+
+**新增 REQUIRED_CHANGES（下一轮 MSG-20261009-40 只做这七项；`R15` 纯设计修订 + 只读证据收集）**
+
+- **CHANGE 54（P0）`T0` 扫描与 `T1` 取锁的时序矛盾**：`T0` 尚未取得锁，**不能**要求此刻「恰好一个命中＝当前实例的持锁 FD」；
+  须按 `T0`（不得要求本实例已持锁）/`T1`（创建并持有锁 FD、取得 `E1`）/`T2`（验证受控 FD 生命周期与持续互斥）分阶段定义：
+  检查对象、**合法 FD 集合**、失败码与检测证据的**局限**；并区分「**同一 inode 的其他 FD**」与「**同一 OFD 的复制 FD**」
+  （仅凭 `(dev,inode)` 相同**不能**判定是否引用同一打开文件描述）。
+- **CHANGE 55（P0）`E3` 持续持锁证明未闭环**：`E1`/`E2` 是**历史观察**，FD 扫描**不能**证明锁仍有效
+  （T1 取锁 → 程序错误 `LOCK_UN` → FD 仍开、inode 未变 → `T2` 扫描仍可能通过）。**须在 `T2` 门禁加入新的、独立打开 FD 的排他冲突探针**并记录结果；
+  同时写明**探针是时点证明**：从最终探针到 `COMMIT` 之间须由**可信生命周期控制**维持原 OFD 的锁状态；无法证明该控制边界 ⇒ **拒绝写入**，不得仅依赖重复探测。
+- **CHANGE 56（P1）进程派生与 FD 扫描须区分「检测」与「保证」**：`/proc` 扫描有竞态；inode 相同 ≠ OFD 相同；
+  同 UID 进程可在两次扫描之间打开/关闭 FD；`fork` 后子进程关闭复制 FD 也会影响生命周期假设
+  ⇒ 锁生命周期由**受控执行环境与 FD 操作约束**负责，扫描**只负责发现异常**、不承担完整性证明；不可控派生继续 fail-closed。
+- **CHANGE 57（P1）COMMIT 归因不能仅凭主库记录存在性**：**仅「数据库确认完成显式 ROLLBACK」可直接推出 `NOT_COMMITTED`**；
+  「COMMIT 请求失败但事务终态未知」「查询时主库无匹配记录」「查询时存在其他写入者创建的同键记录」三类
+  均须满足**严格归因前提**才可升级结论，否则保持 `UNKNOWN`。
+- **CHANGE 58（P1）全局不可变性证据不得超出仓库范围**：认可仓库核验方向，结论严格限定为
+  `REPOSITORY_SCHEMA_EVIDENCE_PARTIALLY_VERIFIED`；实际数据库的权限、触发器、角色、写入者全集与观察窗口不可变性仍 `NOT_VERIFIED`。
+- **CHANGE 59（P1）字节编码与 Git 命令边界三项断言**：①字段/记录分隔须**字节级无歧义**（不得把 Git 文本输出当一般字符串表格解析）；
+  ②规范排序须基于原始字节，**不允许**解码后重新编码改变非 ASCII 字节；③原始字节的保存、长度前缀计算与摘要生成须使用**同一字节序列**；
+  任何解析异常 ⇒ `BASELINE_PARSE_FAILED` 且**不产生部分 digest**。
+- **CHANGE 60（P0）`signerAuthRef` 原子消费的持久化边界**：须落实到**现有可核验的存储对象**——
+  ①`T0` 占用成功后 `T1`/`T2` 失败时 nonce 是否永久保持已消费；②崩溃时消费记录是否**已持久提交**；③消费记录**未提交**时能否宣称该 nonce 已消费；
+  ④若使用数据库，该写入是否与「U2 仅 INSERT 候选记录」的实施范围**冲突**。
+  规范语义：**一经成功且持久确认的消费不得恢复为可用**；后续失败只能**重新签发授权**，不得抢占旧 nonce；
+  且须明确区分「**已成功消费的授权状态**」与「**尚未发生的候选业务写入**」；在权威存储、唯一约束与事务边界无证据前**不得开放实施**。
+
+```text
+MSG-20261009-39_FINAL_VERDICT = REVISE
+MSG-20261009-39_ARCHIVED = AI-ARCHITECT-INBOX.md（FULL_COPY_OK 187/187；FNV1A 6db509f7）
+R13_TO_R14_AUDIT_SCOPE = 2 commits / 3 files（送审误写为 1/1，已按 2.43.0 更正）
+U2_DESIGN_R14_ACCEPTED = NO · U2_IMPLEMENTATION_AUTHORIZED = NO · U2_PLATFORM_ONLY_INSERT_SUBSET = NOT AUTHORIZED
+REQUIRED_CHANGES = CHANGE_54_P0 ; CHANGE_55_P0 ; CHANGE_56_P1 ; CHANGE_57_P1 ; CHANGE_58_P1 ;
+                   CHANGE_59_P1 ; CHANGE_60_P0
+NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R15_READ_ONLY_CHANGES_54_TO_60
+NEXT_AUDIT = MSG-20261009-40
+SCHEMA_MIGRATION = HOLD · RUNTIME_WIRING / MODEL_CALL / PROVIDER_CALL = FORBIDDEN
+EXTERNAL_WRITE = HOLD · AUTO_MERGE / AUTO_DEPLOY = FORBIDDEN · PRODUCTION_READY = NO
+POSTGRESQL_INTEGRATION_TEST / VITEST / TSC / LINUX_SYSTEMD / CI / PRODUCTION = NOT_VERIFIED
+DB_RUNTIME_PRIVILEGE_VERIFICATION / GLOBAL_IMMUTABILITY_PROOF = NOT_VERIFIED
+```
