@@ -1,11 +1,13 @@
-# PHASE 3-A · U2 设计 R13（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
+# PHASE 3-A · U2 设计 R14（候选记录与 Incident↔Candidate↔Task 关联）—— **仅设计，未实施**
 
 > 授权来源：`MSG-20261009-25 = PASS / U1_FINAL_CLOSURE=YES` →
-> `MSG-20261009-35 = REVISE` → `MSG-20261009-36 = REVISE` → `MSG-20261009-37 = REVISE`
-> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R13_READ_ONLY_CHANGES_44_TO_46`。
-> 本文件是 **U2 设计 R13** 送审材料（MSG-20261009-38），**不含任何产品代码改动**。
-> **R13 的修订集中在 §21（活体排他时序 / 全局不可变性 / refs 摘要字节规范）；
-> §1–§20 保留历史；凡冲突者以 §21 为准。**
+> `MSG-20261009-36 = REVISE` → `MSG-20261009-37 = REVISE` → `MSG-20261009-38 = REVISE`
+> → `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R14_READ_ONLY_CHANGES_47_TO_53`。
+> 本文件是 **U2 设计 R14** 送审材料（MSG-20261009-39），**不含任何产品代码改动**。
+> **R14 的修订集中在 §22**（锁所有权证据链 / flock 释放与继承语义修正 / 归因证据有效性 /
+> 清单完整性作为准入条件 / 字节级输入契约统一 / `signerAuthRef` 原子消费），
+> **并含本仓库范围内的只读证据核验**；§1–§21 保留历史；凡冲突者以 §22 为准
+> （§22.6 明确 **R13/R14 优先于 §20.4.1**）。
 
 | 锚点 | 值 |
 | --- | --- |
@@ -22,7 +24,8 @@
 | U2 设计 R10 | `35a50c63` |
 | U2 设计 R11 | `b02a92de` |
 | U2 设计 R12 | `c9b167c7` |
-| U2 设计 R13 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
+| U2 设计 R13 | `8c42cfc2` |
+| U2 设计 R14 | 本提交（同一个仓库路径 `docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1-PHASE3A-U2-DESIGN.md`） |
 | 本设计所在分支 | `feat/si-rsi-internal-code-repair-v1` |
 | U2 实施授权 | **NO** · `SCHEMA_MIGRATION=HOLD` · `RUNTIME_WIRING/MODEL_CALL=FORBIDDEN` |
 | 外部副作用 | `EXTERNAL_WRITE=HOLD` · `AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN` · `PRODUCTION_READY=NO` |
@@ -1574,3 +1577,225 @@ U2 自身不改记录，**不等于**其他模块、管理员或数据库作业�
 不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、U1 封板 `9ee36837` 不变、
 `SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
 本文件仍为**纯设计 R13**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+
+---
+
+## 22. R14 修订（对应 MSG-20261009-38 的 CHANGE 47–53）
+
+> 授权来源：`MSG-20261009-38 = REVISE` ⇒ `NEXT_AUTHORIZED = PHASE3_A_U2_DESIGN_R14_READ_ONLY_CHANGES_47_TO_53`。
+> 本轮**只做**：①设计文本修订；②**本仓库范围内的只读证据核验**（仓库/迁移只读查询，不写产品代码）；
+> ③审计归档。`U2_IMPLEMENTATION_AUTHORIZED=NO`、`U2_PLATFORM_ONLY_INSERT_SUBSET=NOT AUTHORIZED` **保持不变**。
+> §21.3.4 的「验证时机/有效期」保留，其「一次性 nonce」表述由 §22.7 **收紧为原子消费**。
+
+| CHANGE | R13 位置 | R14 修订位置 | 变更性质 |
+| --- | --- | --- | --- |
+| **CHANGE 47（P0）** | §21.1.1 的 `T1`/`T1A`/`T2` | **§22.1** | 锁**所有权证据链**（E1+E2）与 `T2` 前**持续持锁**验证 |
+| **CHANGE 48（P0）** | §21.1.4（`close()` 为最终释放依据） | **§22.2** | **撤回并修正** flock 释放/继承语义；未受控复制 FD 检测 |
+| **CHANGE 49（P1）** | §21.4 的 U2-33 ~ U2-36 | **§22.3** | 真实 **Linux 多进程**测试用例 |
+| **CHANGE 50（P1）** | §21.2.2 / §21.2.3 / §21.2.4 | **§22.4** | 归因证据有效性（不复用四条件 / ROLLBACK / 持久化载体） |
+| **CHANGE 51（P1）** | §21.2.1 / §21.2.2 | **§22.5** | 清单完整性升级为**准入条件** + 只读核验结果 |
+| **CHANGE 52（P1）** | §21.3.1 / §21.3.2 | **§22.6** | 字节级输入契约**统一**（R13/R14 优先于 §20.4.1） |
+| **CHANGE 53（P0）** | §21.3.4 | **§22.7** | `signerAuthRef` **原子消费**语义 |
+| 验收矩阵 | §21.4 | **§22.3 / §22.8** | 新增 U2-33a ~ U2-36b、U2-40a/b、U2-41a/b |
+
+### 22.1 CHANGE 47（P0）—— 锁**所有权证据链**（内核事实 + 独立互斥 + 持续持锁）
+
+**承认审计方的判断**：独立探针**取锁失败**最多证明**该锁对象当前存在冲突锁**，
+**不能**证明持锁者**就是当前实例**；`ownerToken` / `instanceId` / `(st_dev, st_ino)` 只是**身份关联**，
+**不是**内核层面的锁所有权证明。R13 把「证明持锁者身份」的负担放在 `T1A` 上，是**归因错误**。
+
+**R14 规则（三段证据，缺一不可）**
+
+1. **`E1`（内核事实·必须由当前实例产生）**：`T1` 由**当前实例**在**指定 FD** 上执行
+   `flock(fd, LOCK_EX | LOCK_NB)`，并**保留系统调用结果**（返回值与 `errno`）：
+   - 返回 `0` ⇒ **内核**保证「**本实例的这个打开文件描述（OFD）**持有该锁对象的排他锁」——这是锁**所有权**的**最强证据**；
+   - 返回 `EWOULDBLOCK`/`EINTR`/其他 ⇒ **拒绝**（`LOCK_ACQUIRE_FAILED`），零写入。
+   `E1` 记录：**FD 号**、调用时刻、返回值/`errno`、`fstat(fd)` 的 `(st_dev, st_ino)`、
+   进程 **PID + 启动时刻**（`/proc/<pid>/stat` 的第 22 字段，用于排除 **PID 复用**造成的身份误判）。
+2. **`E2`（独立互斥·由独立进程观测）**：`T1A` 在**独立打开的文件描述**上执行
+   `flock(fd2, LOCK_EX | LOCK_NB)` 并**断言失败**（`EWOULDBLOCK`）。
+   `E2` 提供**第三方视角的互斥事实**，用于交叉验证 `E1` 未被误读（例如实现缺陷、错误 FD、错误锁对象）。
+3. **证据链语义（明确写下）**：**`E1` 与 `E2` 组合**才构成锁所有权证据链——
+   `E1` 证明「**本实例**持有」，`E2` 证明「**此刻该锁对象确实被持有**」；
+   **禁止**让 `T1A` **单独**承担「证明持锁者是当前实例」的职责（这正是本轮被判 REVISE 的原因）。
+   若 `E1` 与 `E2` 的 `(st_dev, st_ino)` 不一致 ⇒ `PROBE_OBJECT_MISMATCH`；若 `E1` 未成功而 `E2` 失败 ⇒
+   `LOCK_OWNERSHIP_UNPROVEN`（持锁者是**别人**），两种情况均**拒绝**。
+
+**`E3`（`T2` 前必须完成：打开文件描述**仍持续持有**排他锁）**
+
+4. **明确不足**：仅做 `fstat(fd)` 与路径一致性检查**不足以**证明「该 OFD **此刻仍**持有排他锁」——
+   这些只是元数据读取，既不能观测锁状态，也不能排除「同一 OFD 的复制 FD 上已执行 `LOCK_UN`」（见 §22.2）。
+5. **可信 FD 生命周期控制（必需）**：
+   ① 锁 FD 由**单一线程/单次调用**创建并持有，**禁止** `dup`/`dup2`/`dup3` 该 FD；
+   ② **禁止**通过 `SCM_RIGHTS` 传递该 FD；
+   ③ 派生任何子进程**之前**必须保证该 FD 不在继承集合（`O_CLOEXEC` + 显式 `closefrom`/`close_range`，或先派生后取锁）；
+   ④ 锁文件**只**在本进程内以该 FD 打开，路径本身不得被用作「再次打开」的入口。
+6. **检测式复核（detective control，如实标注其性质）**：`T0`（取锁**前**）与 `T2`（进入事务**前**）各执行一次
+   **同 UID 全进程 FD 扫描**：枚举 `/proc/*/fd/*`，以 `readlink` 取目标并比对 `(st_dev, st_ino)`：
+   - **期望恰为 1 个命中**（本实例的锁 FD）；**任何额外命中** ⇒ `LOCK_FD_LEAKED`，**拒绝**并保留扫描快照证据；
+   - 该扫描**不是**原子保证，须与 §20.1.3 的 `SAME_UID_FS_ISOLATION = TRUSTED_ASSUMPTION` **共同**成立，
+     并在证据中如实标注为「检测式控制」；
+   - 平台**无法**提供 `/proc` 或无权限枚举 ⇒ **`EXCLUSIVE_WINDOW_UNAVAILABLE`**（不进入 `T2`）。
+7. **`T2` 门禁**：`E1` 成功 **且** `E2` 成功 **且** 第 6 条扫描通过 **且** `signerAuthRef` 复验通过（§22.7.2）
+   ⇒ 才允许进入数据库事务；任一不满足 ⇒ **拒绝**（不得以「反复读取元数据」代替）。
+8. **降级路径（必须显式声明）**：若目标平台**无法**提供上述 FD 生命周期控制或检测式复核，
+   U2 **不得**假设锁安全，必须返回 `EXCLUSIVE_WINDOW_UNAVAILABLE` 并零写入；
+   **不得**以「更频繁地 `fstat`」作为补偿。
+
+### 22.2 CHANGE 48（P0）—— **撤回并修正** flock 的释放与继承语义
+
+**承认审计方的判断**：R13 §21.1.4 的「以 `close()` 为**最终释放依据**」**不准确**。
+Linux 上 `flock` 锁关联的是 **open file description（OFD）**：
+
+- **显式 `LOCK_UN` 可以解除该锁**，**即使**仍存在引用同一描述的**复制 FD**（锁状态属于该描述，`LOCK_UN` 清除它）；
+- 反之，**只关闭其中一个 FD 并不保证解锁**（仍有副本 ⇒ 描述仍存在 ⇒ 锁仍然有效）。
+
+**R14 规则（取代 §21.1.4 中与该结论冲突的表述）**
+
+1. **锁的归属单位是 OFD，不是 FD 号**：`dup` / `fork` / `SCM_RIGHTS` 产生的**复制 FD 共享同一把锁**。
+2. **释放必须同时满足并留下证据**：①`flock(fd, LOCK_UN)` **且** ②`close(fd)`；
+   并须用**独立观测**确认「已释放」——**`T1A` 式独立探针能够成功取锁（随后立即 `LOCK_UN`/`close`）**；
+   任一步失败、或探针**仍失败** ⇒ `lockReleaseFailed=true`，**保留状态与证据**（fd、`errno`、扫描结果、探针结果）。
+3. **不得**声明「`close(fd)` 一定是最终释放依据」（**撤回** R13 表述）；释放结论必须来自第 2 条的独立观测。
+4. **必须验证不存在未受控的复制 FD**：按 §22.1.6 的 `/proc` 扫描；发现额外副本 ⇒ `LOCK_FD_LEAKED`，**拒绝**并保留快照。
+5. **`O_CLOEXEC` 的边界（必须写明）**：它**防止 FD 跨 `exec` 继承**，**不阻止 `fork` 时继承**
+   ⇒ `fork` 前必须确保锁 FD 不在子进程继承集合（或子进程**立即** `close`），并在每次派生后**复查**（§22.1.6）。
+6. **`SIGKILL` 的边界**：结束**持锁进程**并**不**代表其他仍持有同一 OFD 副本的进程也结束——
+   **锁可能继续存在** ⇒ **不得**把「持锁进程已死」当作「锁已释放」。
+7. **释放异常一律保留状态与证据**，**不得以时间戳推断锁已释放**（延续 §20.1.4；`residual lock file` 仍**不是**锁）。
+
+### 22.3 CHANGE 49（P1）—— 真实 **Linux 多进程**测试（U2-33 ~ U2-36 扩展）
+
+| 编号 | 场景（反例） | 期望断言 |
+| --- | --- | --- |
+| **U2-33a** | **U2 未持锁、其他进程持锁**（探针失败，但持锁者不是本实例） | 断言**不产生**「本实例持锁」结论：`E1` 未成功 ⇒ `LOCK_OWNERSHIP_UNPROVEN`，**零写入** |
+| **U2-34a** | **同一 OFD 的复制 FD 上执行 `LOCK_UN`** | 断言**能检出**排他锁已丧失（`E3`/探针复检失败）⇒ **不得**进入或继续 `T2` |
+| **U2-35a** | **`fork` 子进程继承锁 FD、父进程退出** | 断言**不误判**「锁已释放」（子进程仍持 OFD ⇒ 探针仍失败）；且实现须已按 §22.2 阻止/消除该副本（否则 `LOCK_FD_LEAKED`） |
+| **U2-36a** | **证明完成 → 提交期间**锁被释放或路径/对象被替换 | 断言拒绝或安全中止（`LOCK_RELEASED_EARLY` / `LOCK_OBJECT_REPLACED`），**无写入** |
+| **U2-36b** | 同 UID 扫描检出**额外 FD** 副本 | 断言 `LOCK_FD_LEAKED`，拒绝，并保留 `/proc` 扫描快照 |
+
+**执行环境（必须如实标注）**：以上用例要求**真实 Linux 多进程**环境（真实 `flock`、真实 `/proc`）。
+本开发机为 **Windows**，**无法**执行 ⇒ `U2_LINUX_MULTIPROCESS_TESTS=NOT_VERIFIED`、`LINUX_SYSTEMD=NOT_VERIFIED`。
+**实施时必须**在 Linux 实机（或等价容器）上运行并留存原始输出作为证据。
+
+### 22.4 CHANGE 50（P1）—— COMMIT 归因的**证据有效性**收紧
+
+1. **低碰撞概率 ≠ 形式化绝对不复用**：不得仅凭 `id` 类型断言「全局不可复用」。设计须限定
+   **数据库实例、恢复历史、ID 写入权限、观察窗口**四个条件（见第 2 条）。
+2. **不复用的四条件（全部必需；任一无法核实 ⇒ 只能 `UNKNOWN`）**：
+   ①**数据实例**：对账与写入针对**同一主库实例**（克隆/恢复出的历史库不得并发写入）；
+   ②**恢复历史**：不存在 PITR/还原把旧行「重放」进观察窗口；
+   ③**ID 写入权限**：只有受控写入者可 `INSERT`，且**不得**写入重复的 `id` 文本；
+   ④**观察窗口**：窗口内不发生上述任一变更。
+3. **显式 `ROLLBACK` 的判定**：只有在**可靠确认回滚完成**时，才可判定本次 INSERT **未提交**
+   （例如驱动/连接层明确返回事务已回滚；或对账在**同一主库**观察到「该 `id` 不存在」且
+   「同一 `dedupeKey` 的现存行具有不同的不可变字段」）；
+   **连接异常、事务终态未知且查询未命中** ⇒ 仍为 `UNKNOWN`（**不得**推断为未提交，也不得推断为已提交）。
+4. **跨进程恢复对账的证据载体**：只有**稳定、可持久化、可重新读取**的事务外记录（落盘日志/对账表）才能用于对账；
+   **进程内变量**或**未确认落盘的日志**不构成持久化证据 ⇒ 等价于「`returnedCandidateId` 未保存」（§21.2.3 收紧）。
+
+### 22.5 CHANGE 51（P1）—— 清单完整性是**准入条件**（含本仓库只读核验结果）
+
+**R14 规则**：§21.2.1 的「全局写入者清单」由「未来须核对」**升级为写入前置门禁**。
+
+1. **门禁项（全部必需；任一缺失 ⇒ `GLOBAL_IMMUTABILITY_UNPROVEN` / `EXCLUSIVE_WINDOW_UNAVAILABLE`，零写入）**：
+   ①全部写入者已列举并附来源证据；②数据库**权限与触发器**已核验；
+   ③**全观察窗口**不存在未记录的 `UPDATE`/`DELETE`；④`id` 不复用前提在**实际运行环境**成立。
+2. **只读核验结果（本仓库范围；以下均为可复核的事实引用）**：
+   - **候选表没有 append-only 触发器**：迁移仅对 `AutonomyMetricResult`、`AutonomyPromotionDecision`、
+     `AutonomyRollbackRecord` 创建 `cc_append_only__*` 触发器
+     （`apps/api/prisma/migrations/20261005000000_rsi_autonomy_state_persistence/migration.sql:297-310`）
+     ⇒ `AutonomyCandidate` 行在**数据库层面可被 `UPDATE`/`DELETE`**（仅当存在子行时由 FK
+     `ON DELETE RESTRICT` 阻止删除：同文件 `:179-191`）。
+   - **表结构明确预期候选行会被更新**：`status` 有 10 态检查约束（同文件 `:233-235`），
+     schema 含 `updatedAt @updatedAt`（`apps/api/prisma/schema.prisma:3311,3318`；迁移列为
+     `"updatedAt" TIMESTAMP(3) NOT NULL`）⇒ 这与「U2 路径不 `UPDATE`/`DELETE`」不冲突，
+     但**恰好证伪**「记录不会被替换」的**全局**说法。
+   - **`id` 由客户端生成，数据库无默认值**：`id String @id @default(uuid())`
+     （`schema.prisma:3309`）而迁移列为 `"id" TEXT NOT NULL`（**无 `DEFAULT`、无序列**，同文件 `:39`）
+     ⇒ 「不复用」是**写入者行为属性**，**不是**数据库强制的不变量。
+   - **当前 `apps/api/src` 中不存在候选写入/更新路径**（`prisma.autonomyCandidate.create` 仅出现在
+     `apps/api/src/__tests__/` 下：`rsi-persistence-db.test.ts:51`、`rsi-reboot-reconcile-db.test.ts:107,152,277,304`）
+     ⇒ 现时风险来自**未来/外部写入者与运维通道**，而非现存服务代码。
+   - **迁移中未发现任何 `GRANT`/`REVOKE`/角色定义** ⇒ 数据库权限核验**在本仓库范围内无证据**。
+3. **结论（如实标注）**：门禁项 ①②③④ **当前均未达成**（①部分、②④无证据、③无证据）
+   ⇒ `DB_PRIVILEGE_VERIFICATION=NOT_VERIFIED`、`GLOBAL_IMMUTABILITY_PROOF=NOT_VERIFIED`；
+   R14 **不得**据此授权任何写入；实施前必须补齐并在审计中给出**证据引用**（含目标库的权限/触发器查询输出）。
+
+### 22.6 CHANGE 52（P1）—— 字节级输入契约**统一**（R13/R14 优先于 §20.4.1）
+
+1. **优先级（明确）**：**§21.3.1、§22.6 优先于 §20.4.1**；§20.4.1 中「路径解析」「统一去除尾部分隔符」
+   等与本章冲突的表述**作废**（避免同一文档出现两种可能产生不同 digest 的规定）。
+2. **唯一路径字节来源（固定）**：`commonGitDirBytes` / `worktreeGitdirBytes` 取
+   `git -C <worktreeRoot> rev-parse --path-format=absolute --git-common-dir`（及 `--git-dir`）
+   **stdout 的原始字节**，**仅**去除命令产生的行尾换行（末尾 `0x0A`；CRLF 一并去除）；
+   **不做**其他任何转换（**不**相对化、**不**去尾部分隔符、**不** `realpath`、**不**做字符串规范化、**不**改大小写）。
+   `--path-format=absolute` 用以消除「相对 vs 绝对」的二义性；若 Git 不支持该选项、命令非零退出、
+   或输出被 **C 风格引号包裹** ⇒ `BASELINE_*` 拒绝（**不**自行解码猜测）。
+3. **完整调用参数与环境（必须固定并记录）**：`LC_ALL=C`、`GIT_OPTIONAL_LOCKS=0`、`-c core.quotePath=false`；
+   两条 `rev-parse` 如上；`for-each-ref` 使用显式 `--sort=refname` 与
+   `--format='%(refname)%1F%(objectname)%1F%(objecttype)'`（字段 `0x1F`、行 `0x0A`）；
+   证据须记录实际 `git --version`、平台与 shell 环境。
+4. **排序**：实现**必须**在读取后按**原始字节**重新排序（`memcmp` 语义，短者在前）；
+   **不得**依赖区域设置，**不得**以 Git 输出顺序**未经校验**地替代规范排序
+   （若选择信任 Git 顺序，则须增加一次「与字节排序结果一致」的校验，不一致即 `BASELINE_PARSE_FAILED`）。
+5. **拒绝不能无损表示的输入**：`refname`/路径含 `NUL`、Git 以 C 风格引号包裹、或字节序列无法无损解析
+   ⇒ `BASELINE_PARSE_FAILED`（**不产生 digest**、**无部分结果**）。
+6. **编码版本与向量口径（本轮不改编码）**：编码仍为 **v3（长度前缀）**；
+   现存的 **34 字节向量**保留为**编码器基准向量**，其输入为**合成字符串**（`.git` / `.git` / 空 / 空），
+   **不代表**生产路径字节；
+   **另须新增**一个「**绝对路径 + 非 ASCII**」向量（实施时补），并以**两种独立实现**复算；
+   所有哈希结论在本轮**仍属送审方报告**（`NOT_INDEPENDENTLY_VERIFIED`）。
+
+### 22.7 CHANGE 53（P0）—— `signerAuthRef` 防重放：**原子消费语义**
+
+**承认审计方的判断**：一次性 `nonce` **仅被签名/摘要覆盖**，**不能**阻止两个实例**并发**使用同一 `nonce`
+（签名只证明「该 `nonce` 曾由签发者签发」，**不**证明「只被消费一次」）。
+
+**R14 规则**
+
+1. **消费状态载体**：必须是**权威、跨进程可见、带唯一约束**的存储（例如以 `nonce` 为主键/唯一索引的一行，
+   或既有等价受控面）；**禁止**以实现进程内的内存标记充当消费状态。
+2. **`T0` 原子占用（一次性、仅一个获胜者）**：以**原子原语**占用该 `nonce`，例如
+   `INSERT ... ON CONFLICT ("nonce") DO NOTHING RETURNING "id"`：
+   - **返回一行** ⇒ **本次执行**取得该 `nonce` 的消费权；
+   - **返回零行** ⇒ 已被占用 ⇒ **拒绝**（`SIGNER_AUTH_REPLAY`），**不得**继续。
+3. **`T2` 复验（只读复核，不再消费）**：进入事务前仅**只读复核**「该 `nonce` 的占用者 **=** 本次执行的执行标识」
+   且授权**仍在有效期**内；不满足 ⇒ `SIGNER_AUTH_INVALID`。
+4. **崩溃后不得重生**：占用记录**不得**因进程崩溃而自动回到「未占用」
+   （**禁止**用「进程存活 + TTL 抢占」把旧 `nonce` 变回可用）；若授权本身已过期，则**另行签发新 `nonce`**，
+   **不得**复用旧 `nonce`。
+5. **实例不匹配 / 过期** ⇒ 拒绝；**并发双实例**使用同一 `signerAuthRef` ⇒ **恰好一个**成功（由原子原语保证），
+   另一个必须失败。
+6. **能力缺失的处理（fail-closed）**：若现有可信控制面**不支持**原子占用（无唯一约束、只能「读-改-写」）
+   ⇒ **保持 `EXCLUSIVE_WINDOW_UNAVAILABLE`**，默认拒绝；**不得**以「先读后写」模拟原子性。
+
+### 22.8 R14 验收矩阵增补（除 §22.3 的 Linux 多进程用例外）
+
+| 编号 | 场景 | 期望断言 |
+| --- | --- | --- |
+| **U2-40a** | 两个执行实例**并发**使用同一 `signerAuthRef`/`nonce` | **恰好一个**成功占用，另一个 **拒绝**（`SIGNER_AUTH_REPLAY`），且失败方零写入 |
+| **U2-40b** | 占用后**进程崩溃并重启** | 旧 `nonce` **不可**再次使用（不得因崩溃/TTL 回退为可用）；须重新签发 |
+| **U2-40c** | 控制面**无唯一约束**（只能读-改-写） | 保持 `EXCLUSIVE_WINDOW_UNAVAILABLE`，默认拒绝 |
+| **U2-41a** | 非 ASCII `refname` + **绝对路径**输入，在 `LC_ALL=C` 与 `LC_ALL=ja_JP.UTF-8` 下分别计算 | 两次 digest **必须相同**（排序与编码不依赖区域设置） |
+| **U2-41b** | 路径被 C 风格引号包裹 / 含 `NUL` / 非零退出码 | `BASELINE_*` 拒绝、**不产生 digest**、**无部分结果** |
+
+### 22.9 R14 未变部分与未验证项
+
+§12 候选键 v2 与 digest 概念、§13.1 接口、§13.2 矩阵（另加 **U2-33a ~ U2-41b**）、
+§16.1 `CONTROLLED_FIXED_WORKTREE`、§17.1 隔离证明框架、§17.2 U2-20A/B/C、§17.3 零行冲突复用路径、
+§18.1 释放全链校验、§18.2 行锁与重试边界、§19.4 通道/签发者分离、
+§20.3（CHANGE 42）已 PASS 的状态语义、**§21.2（CHANGE 45）方向（本轮加严而非推翻）**、
+§21.3.4 的验证时机与有效期、`builderRef` 固定常量、仅 INSERT（U2 路径）、无 `UPDATE`/`DELETE`（U2 路径）、
+不新增 schema/migration、不接 Runtime/Queue、不调用模型/Provider、ACCOUNT 保持 `NOT_AUTHORIZED`、
+U1 封板 `9ee36837` 不变、`SCHEMA_MIGRATION=HOLD`、`EXTERNAL_WRITE=HOLD`、
+`AUTO_MERGE/AUTO_DEPLOY=FORBIDDEN`、`PRODUCTION_READY=NO`。
+
+```text
+R14_NOT_VERIFIED = U2_LINUX_MULTIPROCESS_TESTS ; DB_PRIVILEGE_VERIFICATION ;
+                   GLOBAL_IMMUTABILITY_PROOF ; POSTGRESQL_INTEGRATION_TEST ; VITEST ; TSC ;
+                   LINUX_SYSTEMD ; CI ; PRODUCTION ; U2_DESIGN_DOC_SHA256（送审方报告）
+```
+
+本文件仍为**纯设计 R14**：未新增产品代码、未建表、未执行迁移、未接线运行时、未调用模型。
+本轮只读核验**仅**读取 `apps/api/prisma/schema.prisma` 与既有迁移文件，**未**连接任何数据库、**未**执行任何写入。
