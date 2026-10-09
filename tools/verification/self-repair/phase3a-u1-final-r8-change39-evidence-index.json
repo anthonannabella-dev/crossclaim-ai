@@ -1,0 +1,172 @@
+{
+  "schema": "crossclaim.si-rsi.u1-final-r8-change39/1",
+  "generatedAt": "2026-10-09T04:34:25.719Z",
+  "branch": "feat/si-rsi-internal-code-repair-v1",
+  "heads": {
+    "BASE_23604DCB": "23604dcb",
+    "REVIEWED_HEAD_9EE36837": "9ee36837",
+    "EVIDENCE_HEAD_AA730476": "aa730476",
+    "MANIFEST_HEAD_23584224": "23584224"
+  },
+  "workingHeadAtBuild": "cfa061e7f0e413de36f55097e9f50c26ef5f28c9",
+  "files": [
+    {
+      "path": "apps/api/src/services/self-repair/trusted-facts-adapter.ts",
+      "group": "PRODUCT_OR_TEST",
+      "boundCommit": "9ee36837",
+      "existsIn": {
+        "BASE_23604DCB": true,
+        "REVIEWED_HEAD_9EE36837": true,
+        "EVIDENCE_HEAD_AA730476": true,
+        "MANIFEST_HEAD_23584224": true
+      },
+      "blobSha1Git": "0c302553a056611cd97a1220ed831be3a9b33c7c",
+      "bytes": 29986,
+      "sha256": "ad47c6b205192b345b7f1cc180e8e466dd91a382d6571727c29dbe9609b1f14b",
+      "worktreeBytes": 29986,
+      "worktreeSha256": "ad47c6b205192b345b7f1cc180e8e466dd91a382d6571727c29dbe9609b1f14b",
+      "MATCH": true
+    },
+    {
+      "path": "apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts",
+      "group": "PRODUCT_OR_TEST",
+      "boundCommit": "9ee36837",
+      "existsIn": {
+        "BASE_23604DCB": true,
+        "REVIEWED_HEAD_9EE36837": true,
+        "EVIDENCE_HEAD_AA730476": true,
+        "MANIFEST_HEAD_23584224": true
+      },
+      "blobSha1Git": "7fa88f5696ae9910859ad280b2124f896af15ef0",
+      "bytes": 22434,
+      "sha256": "a4b6da62172e2658197cf1dbc4dcb92b9023281654d84dc95ca9dd1a558536c2",
+      "worktreeBytes": 22434,
+      "worktreeSha256": "a4b6da62172e2658197cf1dbc4dcb92b9023281654d84dc95ca9dd1a558536c2",
+      "MATCH": true
+    },
+    {
+      "path": "apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts",
+      "group": "PRODUCT_OR_TEST",
+      "boundCommit": "9ee36837",
+      "existsIn": {
+        "BASE_23604DCB": true,
+        "REVIEWED_HEAD_9EE36837": true,
+        "EVIDENCE_HEAD_AA730476": true,
+        "MANIFEST_HEAD_23584224": true
+      },
+      "blobSha1Git": "9be3b740e1cf2bd351a9ead605aa87086f89816c",
+      "bytes": 36903,
+      "sha256": "e465b3e825bbce68c1da72b38bec56e6ef88970355eea45d774587251db40203",
+      "worktreeBytes": 36903,
+      "worktreeSha256": "e465b3e825bbce68c1da72b38bec56e6ef88970355eea45d774587251db40203",
+      "MATCH": true
+    },
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-vitest-raw.txt",
+      "group": "RAW_EVIDENCE",
+      "boundCommit": "aa730476",
+      "existsIn": {
+        "BASE_23604DCB": false,
+        "REVIEWED_HEAD_9EE36837": false,
+        "EVIDENCE_HEAD_AA730476": true,
+        "MANIFEST_HEAD_23584224": true
+      },
+      "blobSha1Git": "c7c61246e8d3e0d15389141076a028cca7db393c",
+      "bytes": 24489,
+      "sha256": "9d9802f8807e707cb69eab7dd04b211e24f36a26bedd0bebedb071fd26fdb68b",
+      "worktreeBytes": 24489,
+      "worktreeSha256": "9d9802f8807e707cb69eab7dd04b211e24f36a26bedd0bebedb071fd26fdb68b",
+      "MATCH": true
+    },
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-tsc-raw.txt",
+      "group": "RAW_EVIDENCE",
+      "boundCommit": "aa730476",
+      "existsIn": {
+        "BASE_23604DCB": false,
+        "REVIEWED_HEAD_9EE36837": false,
+        "EVIDENCE_HEAD_AA730476": true,
+        "MANIFEST_HEAD_23584224": true
+      },
+      "blobSha1Git": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "worktreeBytes": 0,
+      "worktreeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "MATCH": true
+    },
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-negative-control-vitest-raw.txt",
+      "group": "RAW_EVIDENCE",
+      "boundCommit": "aa730476",
+      "existsIn": {
+        "BASE_23604DCB": false,
+        "REVIEWED_HEAD_9EE36837": false,
+        "EVIDENCE_HEAD_AA730476": true,
+        "MANIFEST_HEAD_23584224": true
+      },
+      "blobSha1Git": "187bc3fd8416a95bf780bf09c51fdc69e8d13c12",
+      "bytes": 24524,
+      "sha256": "ee82763c1b4210b79e40d7f74f7f2fc94356516de7184baefd6366ef9f60297d",
+      "worktreeBytes": 24524,
+      "worktreeSha256": "ee82763c1b4210b79e40d7f74f7f2fc94356516de7184baefd6366ef9f60297d",
+      "MATCH": true
+    },
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-negative-control-tsc-raw.txt",
+      "group": "RAW_EVIDENCE",
+      "boundCommit": "aa730476",
+      "existsIn": {
+        "BASE_23604DCB": false,
+        "REVIEWED_HEAD_9EE36837": false,
+        "EVIDENCE_HEAD_AA730476": true,
+        "MANIFEST_HEAD_23584224": true
+      },
+      "blobSha1Git": "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "worktreeBytes": 0,
+      "worktreeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "MATCH": true
+    },
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-run-transcript.txt",
+      "group": "RAW_EVIDENCE",
+      "boundCommit": "aa730476",
+      "existsIn": {
+        "BASE_23604DCB": false,
+        "REVIEWED_HEAD_9EE36837": false,
+        "EVIDENCE_HEAD_AA730476": true,
+        "MANIFEST_HEAD_23584224": true
+      },
+      "blobSha1Git": "d23ae614c949d8403c28d661cf84e9ba3a543331",
+      "bytes": 6936,
+      "sha256": "9a9c1bc14fd394b1b063b9e7cd21a1f6c87acfa60c4a2d60019ed412bbb781c9",
+      "worktreeBytes": 6936,
+      "worktreeSha256": "9a9c1bc14fd394b1b063b9e7cd21a1f6c87acfa60c4a2d60019ed412bbb781c9",
+      "MATCH": true
+    },
+    {
+      "path": "tools/verification/self-repair/phase3a-u1-final-r8-negative-control-adapter.ts",
+      "group": "RAW_EVIDENCE",
+      "boundCommit": "aa730476",
+      "existsIn": {
+        "BASE_23604DCB": false,
+        "REVIEWED_HEAD_9EE36837": false,
+        "EVIDENCE_HEAD_AA730476": true,
+        "MANIFEST_HEAD_23584224": true
+      },
+      "blobSha1Git": "2d113a88fa416439f891ed5d878930bf00909001",
+      "bytes": 29999,
+      "sha256": "cbf661e79f6e1691de9aa4841022ba0d5ead275471f98df661a30ed79406a42d",
+      "worktreeBytes": 29999,
+      "worktreeSha256": "cbf661e79f6e1691de9aa4841022ba0d5ead275471f98df661a30ed79406a42d",
+      "MATCH": true
+    }
+  ],
+  "allMatch": true,
+  "productDiffBaseToReviewedEmpty": true,
+  "appsApiDiffReviewedToManifestEmpty": true,
+  "fsckExit": 0,
+  "note": "本包为只读核验与复审准备；不含产品代码改动；审计侧仍需要仓库读取权限或离线对象归档才能给出 INDEPENDENT_REPOSITORY_VERIFIED=YES。"
+}

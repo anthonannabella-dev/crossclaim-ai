@@ -1,0 +1,134 @@
+CHANGE 39 复审准备包 —— U1 FINAL-R8（只读核验 / 证据整理；未改产品代码）
+generatedAt = 2026-10-09T04:34:22.457Z
+repository = anthonannabella-dev/crossclaim-ai（私有；审计侧连接器读取失败，故提供本离线核验索引）
+branch = feat/si-rsi-internal-code-repair-v1
+workingHead = cfa061e7f0e413de36f55097e9f50c26ef5f28c9
+
+=== 1. 固定提交对象（git cat-file -p，逐字原始对象文本） ===
+--- BASE_23604DCB (23604dcb) ---
+tree ac24a0fa5a8723c1419e927c4afcc5493c88e50e
+parent d2972392e65ee953d54bf574e54c6ccf0e453c79
+author CrossClaim AI <dev@bidos.app> 1791517984 +0900
+committer CrossClaim AI <dev@bidos.app> 1791517984 +0900
+
+feat(self-repair): PHASE 3-A U1 FINAL-R6（CHANGE 32）并发事务隔离 —— createPrismaTrustedFactsReadPort 不再用实例级 activeTransaction 共享事务句柄，改用 AsyncLocalStorage 按调用链隔离：并发 resolve() 各自持有自己的只读事务（互不复用），同一调用链内的嵌套调用仍复用同一事务，异常路径随调用链自动失效且不回落裸 client；新增 U1-DB9 真实 PostgreSQL 并发回归（同一 readPort 实例、两租户强制交错：A 进入事务后 B 才启动），断言事务归属独立（handle 序号互异）、每调用 transaction_read_only=on、每调用写入被拒、无跨租户事实串扰（各自拿到本租户 authorizationId/version）、异常路径后新调用获得全新事务；负向对照：同一套测试在 CHANGE 32 之前的实现下 U1-DB9 失败（expected 1 not to be 1，句柄被串用）；端口级 53 + 真实 PG 9 = 62/62 PASS、api tsc 0
+resolved = 23604dcb18d960a4697a987249b398dc4bfe5567
+
+--- REVIEWED_HEAD_9EE36837 (9ee36837) ---
+tree d875d44477c709b0a7f92df01b34506fafadf59a
+parent 8ffada3296d30bc39cf98d16d28db3e3fc925182
+author CrossClaim AI <dev@bidos.app> 1791519293 +0900
+committer CrossClaim AI <dev@bidos.app> 1791519293 +0900
+
+test(self-repair): PHASE 3-A U1 FINAL-R7（CHANGE 34–36）—— CHANGE 34：U1-DB9 门闩改为确定性（enteredTransaction 标志、门闩超时即抛错失败、释放前断言 A/B 均已进入、记录 enteredAt/leftAt 并断言活动区间重叠、在同一重叠窗口内断言句柄序号互异）；CHANGE 35：新增 U1-DB12，四个写入探针（DELETE/CREATE TABLE/UPDATE/INSERT）分别在独立只读事务内捕获 PostgreSQL SQLSTATE，均为 25006 且 transaction_read_only=on；CHANGE 36：U1-DB10 以 $transaction 调用计数断言真实事务开启数为 1（嵌套不新开；pg_stat_database 计数仅作补充因刷新延迟），U1-DB11 用显式事务结束信号替代 setTimeout；定向测试 53 + 真实 PG 12 = 65/65 PASS、api tsc 0
+resolved = 9ee3683725ad694123092e5bafce9a32b75d3fd2
+
+--- EVIDENCE_HEAD_AA730476 (aa730476) ---
+tree deb8b3fb465953b1001b6bc91ef58161dc9e9938
+parent 18cadd9a054be58acd58be3e74e8dc3430329f46
+author CrossClaim AI <dev@bidos.app> 1791520191 +0900
+committer CrossClaim AI <dev@bidos.app> 1791520191 +0900
+
+evidence(self-repair): U1 FINAL-R8 CHANGE 38 原始输出落盘（正向 vitest 65/65 exit 0、tsc exit 0、负对照 2 failed/63 passed exit 1、运行记录 transcript、负对照实现 sha256 cbf661e7）
+
+仅证据文件，不改产品代码；本次运行前的产品/测试文件字节已在 REVIEWED_HEAD=9ee36837 上复算 MATCH=true
+resolved = aa7304764db30821d2c7c7d53d186f97f13decc5
+
+--- MANIFEST_HEAD_23584224 (23584224) ---
+tree 4df83be431617341483e595549455ca6d9bfb110
+parent aa7304764db30821d2c7c7d53d186f97f13decc5
+author CrossClaim AI <dev@bidos.app> 1791520217 +0900
+committer CrossClaim AI <dev@bidos.app> 1791520217 +0900
+
+evidence(self-repair): U1 FINAL-R8 CHANGE 38 绑定清单（产品/测试 3 文件 → REVIEWED_HEAD=9ee36837 全 MATCH=true；原始输出/负对照 6 文件 → EVIDENCE_HEAD=aa730476 全 MATCH=true；git diff 23604dcb 9ee36837 该产品文件 0 字节；并如实登记 r7 清单把 4 个证据文件误绑到 9ee36837 的缺陷）
+resolved = 23584224b3617befff28ecd12a3df1a815c9e06a
+
+=== 2. 九个文件的完整路径 / 提交归属 / 字节长度 / SHA-256（逐条，不使用概括写法） ===
+path=apps/api/src/services/self-repair/trusted-facts-adapter.ts
+  group=PRODUCT_OR_TEST  boundCommit=9ee36837  git_blob_sha1=0c302553a056611cd97a1220ed831be3a9b33c7c
+  existsIn={"BASE_23604DCB":true,"REVIEWED_HEAD_9EE36837":true,"EVIDENCE_HEAD_AA730476":true,"MANIFEST_HEAD_23584224":true}
+  bytes=29986  sha256=ad47c6b205192b345b7f1cc180e8e466dd91a382d6571727c29dbe9609b1f14b  MATCH=true
+
+path=apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter.test.ts
+  group=PRODUCT_OR_TEST  boundCommit=9ee36837  git_blob_sha1=7fa88f5696ae9910859ad280b2124f896af15ef0
+  existsIn={"BASE_23604DCB":true,"REVIEWED_HEAD_9EE36837":true,"EVIDENCE_HEAD_AA730476":true,"MANIFEST_HEAD_23584224":true}
+  bytes=22434  sha256=a4b6da62172e2658197cf1dbc4dcb92b9023281654d84dc95ca9dd1a558536c2  MATCH=true
+
+path=apps/api/src/__tests__/phase3a-u1-trusted-facts-adapter-db.test.ts
+  group=PRODUCT_OR_TEST  boundCommit=9ee36837  git_blob_sha1=9be3b740e1cf2bd351a9ead605aa87086f89816c
+  existsIn={"BASE_23604DCB":true,"REVIEWED_HEAD_9EE36837":true,"EVIDENCE_HEAD_AA730476":true,"MANIFEST_HEAD_23584224":true}
+  bytes=36903  sha256=e465b3e825bbce68c1da72b38bec56e6ef88970355eea45d774587251db40203  MATCH=true
+
+path=tools/verification/self-repair/phase3a-u1-final-r8-vitest-raw.txt
+  group=RAW_EVIDENCE  boundCommit=aa730476  git_blob_sha1=c7c61246e8d3e0d15389141076a028cca7db393c
+  existsIn={"BASE_23604DCB":false,"REVIEWED_HEAD_9EE36837":false,"EVIDENCE_HEAD_AA730476":true,"MANIFEST_HEAD_23584224":true}
+  bytes=24489  sha256=9d9802f8807e707cb69eab7dd04b211e24f36a26bedd0bebedb071fd26fdb68b  MATCH=true
+
+path=tools/verification/self-repair/phase3a-u1-final-r8-tsc-raw.txt
+  group=RAW_EVIDENCE  boundCommit=aa730476  git_blob_sha1=e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+  existsIn={"BASE_23604DCB":false,"REVIEWED_HEAD_9EE36837":false,"EVIDENCE_HEAD_AA730476":true,"MANIFEST_HEAD_23584224":true}
+  bytes=0  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  MATCH=true
+
+path=tools/verification/self-repair/phase3a-u1-final-r8-negative-control-vitest-raw.txt
+  group=RAW_EVIDENCE  boundCommit=aa730476  git_blob_sha1=187bc3fd8416a95bf780bf09c51fdc69e8d13c12
+  existsIn={"BASE_23604DCB":false,"REVIEWED_HEAD_9EE36837":false,"EVIDENCE_HEAD_AA730476":true,"MANIFEST_HEAD_23584224":true}
+  bytes=24524  sha256=ee82763c1b4210b79e40d7f74f7f2fc94356516de7184baefd6366ef9f60297d  MATCH=true
+
+path=tools/verification/self-repair/phase3a-u1-final-r8-negative-control-tsc-raw.txt
+  group=RAW_EVIDENCE  boundCommit=aa730476  git_blob_sha1=e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+  existsIn={"BASE_23604DCB":false,"REVIEWED_HEAD_9EE36837":false,"EVIDENCE_HEAD_AA730476":true,"MANIFEST_HEAD_23584224":true}
+  bytes=0  sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  MATCH=true
+
+path=tools/verification/self-repair/phase3a-u1-final-r8-run-transcript.txt
+  group=RAW_EVIDENCE  boundCommit=aa730476  git_blob_sha1=d23ae614c949d8403c28d661cf84e9ba3a543331
+  existsIn={"BASE_23604DCB":false,"REVIEWED_HEAD_9EE36837":false,"EVIDENCE_HEAD_AA730476":true,"MANIFEST_HEAD_23584224":true}
+  bytes=6936  sha256=9a9c1bc14fd394b1b063b9e7cd21a1f6c87acfa60c4a2d60019ed412bbb781c9  MATCH=true
+
+path=tools/verification/self-repair/phase3a-u1-final-r8-negative-control-adapter.ts
+  group=RAW_EVIDENCE  boundCommit=aa730476  git_blob_sha1=2d113a88fa416439f891ed5d878930bf00909001
+  existsIn={"BASE_23604DCB":false,"REVIEWED_HEAD_9EE36837":false,"EVIDENCE_HEAD_AA730476":true,"MANIFEST_HEAD_23584224":true}
+  bytes=29999  sha256=cbf661e79f6e1691de9aa4841022ba0d5ead275471f98df661a30ed79406a42d  MATCH=true
+
+=== 3. 差异核对 ===
+$ git diff --stat 23604dcb 9ee36837 -- apps/api/src/services/self-repair/trusted-facts-adapter.ts
+  exit=0  output=""  （空 => 产品文件字节未变）
+$ git diff --stat 9ee36837 23584224
+   AI-ARCHITECT-INBOX.md                              | 287 +++++++++
+   docs/releases/SI-RSI-INTERNAL-CODE-REPAIR-V1.md    | 125 ++++
+   .../phase3a-u1-final-r7-change37-head-binding.json |  39 ++
+   ...phase3a-u1-final-r7-negative-control-adapter.ts | 655 +++++++++++++++++++++
+   ...e3a-u1-final-r7-negative-control-vitest-raw.txt | 141 +++++
+   .../self-repair/phase3a-u1-final-r7-tsc-raw.txt    |   0
+   .../self-repair/phase3a-u1-final-r7-vitest-raw.txt | 105 ++++
+   .../phase3a-u1-final-r8-change38-head-binding.json | 185 ++++++
+   ...phase3a-u1-final-r8-negative-control-adapter.ts | 655 +++++++++++++++++++++
+   ...hase3a-u1-final-r8-negative-control-tsc-raw.txt |   0
+   ...e3a-u1-final-r8-negative-control-vitest-raw.txt | 141 +++++
+   .../phase3a-u1-final-r8-run-transcript.txt         |  58 ++
+   .../self-repair/phase3a-u1-final-r8-tsc-raw.txt    |   0
+   .../self-repair/phase3a-u1-final-r8-vitest-raw.txt | 105 ++++
+   14 files changed, 2496 insertions(+)
+$ git diff --name-only 9ee36837 23584224 -- apps/api
+  output=""  （空 => apps/api 无任何变化）
+
+=== 4. 仓库完整性（第三方可用同一命令复算） ===
+$ git fsck --no-progress --connectivity-only  => exit=0
+  dangling tree 1a00019a26da47f28c92e48f6a93709de2f1587d
+  dangling commit 8f6df0d3af7dfcb17d7d447b4778527b3902c61e
+  dangling commit 158195edecd1ed9f18f7989d4e867adcef2719bc
+$ git rev-list --count HEAD => 2297
+
+=== 5. 运行记录（引用已提交原始文件，命令/退出码对照） ===
+  forward vitest : exit_code=0  65 passed (65) / Test Files 2 passed (2)
+  forward tsc    : exit_code=0  原始输出 0 字节
+  negative ctrl  : exit_code=1  2 failed | 63 passed (65)（U1-DB9 / U1-DB11）
+  negative tsc   : exit_code=0  原始输出 0 字节
+  DATABASE_URL   : 127.0.0.1:55432/crossclaim_p3r2_iso（隔离库，非生产）
+  原始文件       : tools/verification/self-repair/phase3a-u1-final-r8-vitest-raw.txt / tools/verification/self-repair/phase3a-u1-final-r8-tsc-raw.txt / tools/verification/self-repair/phase3a-u1-final-r8-negative-control-vitest-raw.txt / tools/verification/self-repair/phase3a-u1-final-r8-negative-control-tsc-raw.txt / tools/verification/self-repair/phase3a-u1-final-r8-run-transcript.txt
+
+=== 6. 复算配方（任何持有本归档字节的第三方均可执行） ===
+  git blob SHA-1  : printf "blob %d\0" <bytes> | cat - <content> | sha1sum
+  SHA-256         : sha256sum <content>
+  等价 Node 片段  : crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")
+  Git 侧等价命令  : git rev-parse <commit>:<path>（= blob SHA-1）；git cat-file -s（= 字节长度）
+
